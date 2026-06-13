@@ -57,22 +57,56 @@ def test_impact_level(thumbs, comments, expected):
     assert github.impact_level(thumbs, comments) == expected
 
 
-# ── derive_severity ──────────────────────────────────────────────────────────
+# ── is_feature / priority ────────────────────────────────────────────────────
 
-def test_derive_severity_diamond_wins():
-    assert github.derive_severity(["issue-rating: 🦞 diamond lobster"], 0, 0) == "critical"
-
-
-def test_derive_severity_from_labels():
-    assert github.derive_severity(["regression"], 0, 0) == "high"
-    assert github.derive_severity(["priority: high"], 0, 0) == "high"
-    assert github.derive_severity(["crash"], 0, 0) == "high"
+def test_is_feature_by_label():
+    assert github.is_feature("anything", ["enhancement"]) is True
+    assert github.is_feature("x", ["P1", "bug"]) is False
 
 
-def test_derive_severity_from_reactions():
-    assert github.derive_severity(["bug"], 12, 0) == "high"
-    assert github.derive_severity(["bug"], 4, 0) == "medium"
-    assert github.derive_severity(["bug"], 0, 0) == "low"
+def test_is_feature_by_title():
+    assert github.is_feature("Feature Request: rename sessions", []) is True
+    assert github.is_feature("[Feature]: collapse panel", []) is True
+    assert github.is_feature("feat(cli): skills uninstall design proposal", []) is True
+    assert github.is_feature("[Bug]: Telegram reconnect drain re-enters", []) is False
+    assert github.is_feature("Regression: sidebar shown by default", []) is False
+
+
+def test_priority_of():
+    assert github.priority_of(["P1", "impact:security"]) == "high"
+    assert github.priority_of(["P2"]) == "medium"
+    assert github.priority_of(["P3"]) == "low"
+    assert github.priority_of(["bug"]) is None
+
+
+# ── derive_severity (priority + impact model) ────────────────────────────────
+
+def test_derive_severity_diamond_is_not_critical():
+    # diamond lobster is a quality rating, NOT a severity
+    assert github.derive_severity(["issue-rating: 🦞 diamond lobster"], 0, 0) == "low"
+
+
+def test_derive_severity_from_priority():
+    assert github.derive_severity(["P1"], 0, 0) == "high"
+    assert github.derive_severity(["P2"], 0, 0) == "medium"
+    assert github.derive_severity(["P3"], 0, 0) == "low"
+
+
+def test_derive_severity_breakage_label_bumps_to_critical():
+    assert github.derive_severity(["P1", "regression"], 0, 0) == "critical"
+    assert github.derive_severity(["P2", "crash"], 0, 0) == "high"
+
+
+def test_derive_severity_serious_impact_floors_at_high_not_critical():
+    # serious harm area alone shouldn't push a P1 to critical
+    assert github.derive_severity(["P1", "impact:auth-provider"], 0, 0) == "high"
+    assert github.derive_severity(["P2", "impact:message-loss"], 0, 0) == "high"
+
+
+def test_derive_severity_from_reactions_when_no_priority():
+    assert github.derive_severity(["impact:other"], 12, 0) == "high"
+    assert github.derive_severity(["impact:other"], 4, 0) == "medium"
+    assert github.derive_severity(["impact:other"], 0, 0) == "low"
 
 
 # ── categorize ───────────────────────────────────────────────────────────────
@@ -83,8 +117,12 @@ def test_categorize_diamond():
 
 def test_categorize_regression_when_post_release_and_relevant():
     assert github.categorize("2026-06-05", ["bug"], True, "low", "2026-06-03") == "regression"
-    assert github.categorize("2026-06-05", ["bug"], False, "high", "2026-06-03") == "regression"
     assert github.categorize("2026-06-05", ["regression"], False, "low", "2026-06-03") == "regression"
+
+
+def test_categorize_active_when_post_release_but_not_version_relevant():
+    # post-release + high impact but NOT version-relevant and no regression label → active
+    assert github.categorize("2026-06-05", ["bug"], False, "high", "2026-06-03") == "active"
 
 
 def test_categorize_active_when_pre_release_or_irrelevant():
@@ -118,9 +156,20 @@ def test_normalize_node_full():
     assert n["author"] == "alice"
     assert n["affects_version"] is True
     assert n["impact"] == "high"          # 15 thumbs
-    assert n["severity"] == "high"        # regression label
-    assert n["category"] == "regression"  # post-release + affects version
+    assert n["severity"] == "critical"    # 15👍→high, +regression label bump→critical
+    assert n["category"] == "regression"  # regression label
+    assert n["is_feature"] is False
+    assert n["priority"] is None          # no P-label
     assert n["source"] == "github_api"
+
+
+def test_normalize_node_priority_and_feature():
+    node = _node(labels={"nodes": [{"name": "P2"}, {"name": "enhancement"}]},
+                 title="[Feature]: add thing", thumbsUp={"totalCount": 0})
+    n = github.normalize_node(node, release_date="2026-06-03", version="2026.6.1")
+    assert n["priority"] == "medium"      # P2
+    assert n["is_feature"] is True        # enhancement label
+    assert n["severity"] == "medium"      # P2, no serious-impact bump
 
 
 def test_normalize_node_handles_missing_fields():
@@ -138,9 +187,20 @@ def test_rank_key_orders_critical_relevant_high_impact_first():
     b = {"severity": "critical", "affects_version": True, "reactions": 5, "comments": 2}
     c = {"severity": "high", "affects_version": True, "reactions": 30, "comments": 10}
     ordered = sorted([a, b, c], key=github.rank_key)
-    assert ordered[0] is b   # critical first
-    assert ordered[1] is c   # high before low
+    assert ordered[0] is b   # critical + version-relevant first
+    assert ordered[1] is c   # high + version-relevant
     assert ordered[2] is a
+
+
+def test_rank_key_version_relevance_lifts_high_above_offversion_critical():
+    # a high issue confirmed in THIS version outranks a critical about another version
+    off_version_critical = {"severity": "critical", "affects_version": False, "reactions": 9, "comments": 9}
+    version_high = {"severity": "high", "affects_version": True, "reactions": 1, "comments": 0}
+    ordered = sorted([off_version_critical, version_high], key=github.rank_key)
+    assert ordered[0] is version_high
+    # ...but a version-relevant LOW still cannot outrank a real critical
+    version_low = {"severity": "low", "affects_version": True, "reactions": 0, "comments": 0}
+    assert sorted([off_version_critical, version_low], key=github.rank_key)[0] is off_version_critical
 
 
 # ── API guards (no token) ────────────────────────────────────────────────────

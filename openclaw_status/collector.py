@@ -239,8 +239,9 @@ def _parse_labels(node: dict) -> list[str]:
     return [e["node"]["name"] for e in node.get("labels", {}).get("edges", [])]
 
 
-def _build_issue(node: dict, category: str, severity: str) -> dict:
-    labels = _parse_labels(node)
+def _build_issue(node: dict, labels: list) -> dict:
+    """Base issue dict from a Composio GraphQL node. severity/category/impact are
+    filled in by _scout_composio after body enrichment."""
     return {
         "number": node["number"],
         "title": sanitize(node.get("title", "")),
@@ -253,8 +254,10 @@ def _build_issue(node: dict, category: str, severity: str) -> dict:
         "created_at": node.get("createdAt", ""),
         "labels": labels,
         "platform": "general",
-        "severity": severity,
-        "category": category,
+        "priority": github.priority_of(labels),
+        "is_feature": False,
+        "severity": "low",
+        "category": "active",
         "source": "github_graphql",
     }
 
@@ -314,43 +317,44 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
 
 
 def _scout_composio(release_date: str = "", version: str = "") -> list[dict]:
-    """Fallback scout via Composio GraphQL (no reactions available, so impact is
-    inferred from comment volume only). Issues are still ranked by 👍 server-side."""
+    """Fallback scout via Composio GraphQL. No reaction data, so severity comes
+    from labels and impact from comment volume. Same query/filter logic as the
+    direct-API path (exclude features, skip only `stale`)."""
     repo = f"{config.REPO_OWNER}/{config.REPO_NAME}"
+    no_feat = "-label:enhancement"
     issues, seen = [], set()
 
-    def _add_nodes(nodes, category, severity):
+    def _add_nodes(nodes):
         for node in nodes:
             if node["number"] in seen:
                 continue
             labels = _parse_labels(node)
-            if any(tag in labels for tag in ("stale", "clawsweeper:no-new-fix-pr")):
+            if "stale" in labels or github.is_feature(node.get("title", ""), labels):
                 continue
-            issues.append(_build_issue(node, category, severity))
+            issues.append(_build_issue(node, labels))
             seen.add(node["number"])
 
     if release_date:
         _add_nodes(_gh_graphql(
-            f"repo:{repo} is:issue is:open created:>={release_date[:10]} sort:reactions-+1-desc", 20),
-            "regression", "high")
-    _add_nodes(_gh_graphql(
-        f'repo:{repo} is:issue is:open label:"{github.DIAMOND_LABEL}" sort:reactions-+1-desc', 15),
-        "diamond_lobster", "critical")
-    _add_nodes(_gh_graphql(
-        f"repo:{repo} is:issue is:open sort:reactions-+1-desc", 15),
-        "active", "high")
+            f"repo:{repo} is:issue is:open created:>={release_date[:10]} {no_feat} sort:reactions-+1-desc", 20))
+    _add_nodes(_gh_graphql(f"repo:{repo} is:issue is:open label:P1 {no_feat} sort:reactions-+1-desc", 15))
+    _add_nodes(_gh_graphql(f"repo:{repo} is:issue is:open {no_feat} sort:reactions-+1-desc", 15))
 
     # Enrich top 15 with body (Composio: one API call each)
     for item in issues[:15]:
         _enrich_body(item)
 
-    # Backfill the signal fields the API path provides, so downstream is uniform.
+    # Compute the signal fields the API path provides, so downstream is uniform.
     for item in issues:
         item.setdefault("reactions", 0)
         item.setdefault("total_reactions", 0)
         text = f"{item.get('title','')} {item.get('body','')}"
-        item["affects_version"] = github.version_relevant(text, version)
+        affects = github.version_relevant(text, version)
+        item["affects_version"] = affects
         item["impact"] = github.impact_level(0, item.get("comments", 0))
+        item["severity"] = github.derive_severity(item["labels"], 0, item.get("comments", 0))
+        item["category"] = github.categorize(item.get("created_at", ""), item["labels"],
+                                             affects, item["impact"], release_date)
     return issues
 
 
