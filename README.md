@@ -140,6 +140,9 @@ python3 run.py render-assessment   # public page            → web/index.html
 python3 run.py full                # collect → assess → render-assessment (concurrency-locked)
 ```
 
+A full run takes **~2–3 min** end-to-end (measured ~143 s), almost all of it the
+analyst/validator LLM reasoning; collect and render are seconds. Cost ~$0.02–0.05/run.
+
 To preview the page, open `web/index.html` in a browser.
 
 ### Tests
