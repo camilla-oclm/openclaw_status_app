@@ -37,8 +37,12 @@ REPO_PATH = f"{REPO_OWNER}-{REPO_NAME}"
 # reasoning param, and JSON behaviour, a clear quality step up, still ~$0.009/run).
 PRIMARY_MODEL = "deepseek/deepseek-v4-pro"
 PRIMARY_REASONING = {"effort": "high", "exclude": False}
-VALIDATOR_MODEL = "openrouter/owl-alpha"
-VALIDATOR_REASONING = None  # owl-alpha doesn't support reasoning
+# Independent reviewer — deliberately a *different* model from the analyst, so it
+# catches the primary's blind spots instead of rubber-stamping its own reasoning.
+# qwen3.7-plus reasons, so the validator call gets the wide token budget too
+# (see _step_validator) or its JSON would truncate like the analyst's did.
+VALIDATOR_MODEL = "qwen/qwen3.7-plus"
+VALIDATOR_REASONING = {"effort": "high", "exclude": False}
 
 # Fallback (used if the primary fails). A single cross-provider choice: qwen3.7-plus
 # is a different vendor entirely, so a deepseek outage doesn't take the run down.

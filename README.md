@@ -87,10 +87,12 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    assessment from the collected data. Only the top-N issues by rank are fed to the
    prompt (`config.MAX_ISSUES_IN_CONTEXT`) and the output budget is widened
    (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on busy releases.
-2. **Validator** (`openrouter/owl-alpha`, free) reviews it for missed issues / unsupported claims.
+2. **Validator** (`qwen/qwen3.7-plus`) — a *different* provider from the analyst, so it's
+   an independent second opinion, not the model checking its own work. Flags missed issues /
+   unsupported claims.
 3. **Refine** (analyst again) — only if the validator disagrees.
 
-If the analyst call fails, it falls back to `qwen/qwen3.7-plus` (a different provider,
+If the analyst call fails, it falls back to `qwen/qwen3.7-plus` as well (a different provider,
 so a single-vendor outage doesn't sink the run). All models are served via OpenRouter.
 
 The output is schema- and XSS-validated, appended to `data/history.json`, and cost/latency
