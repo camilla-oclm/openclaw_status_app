@@ -158,6 +158,10 @@ cp .env.example .env      # then fill in the two keys
 - **`GITHUB_TOKEN`** — for all GitHub reads. Least privilege is a **fine-grained PAT** with
   *Repository access → Public repositories (read-only)* and *Issues: Read-only* +
   *Metadata: Read-only* (or a classic token with **no scopes**). See `.env.example`.
+- **`ALERT_WEBHOOK_URL`** *(optional)* — a Slack or Discord incoming webhook. When set,
+  cost/budget/failure alerts are POSTed there (the payload key is auto-selected: Discord
+  gets `content`, everything else `text`). Leave blank for stdout-only alerts. **It's a
+  secret** (the URL embeds a token) — keep it in `.env`, never in git.
 
 > Note: GitHub's UI only exposes the per-permission tab once you pick a repository scope, so
 > selecting *All repositories* (read-only) is fine too — it grants no more than public read.
@@ -169,6 +173,7 @@ python3 run.py collect             # gather data            → data/raw-data.js
 python3 run.py assess              # LLM assessment         → data/assessment.json
 python3 run.py render-assessment   # public page            → web/index.html
 python3 run.py full                # collect → assess → render-assessment (concurrency-locked)
+python3 run.py notify-test ["msg"] # send a test alert to ALERT_WEBHOOK_URL (verify the webhook)
 ```
 
 A full run takes **~2–3 min** end-to-end (measured ~143 s), almost all of it the
@@ -216,13 +221,10 @@ openclaw_status_app/
 
 ## Next steps / TODO
 
-- **Automate it.** The pipeline is run by hand today. Add scheduling (hourly npm poll to
-  detect new releases + a full run every few hours). The pipeline lock already makes
-  concurrent runs safe.
-- **Real alerting.** Cost-threshold and failure notifications currently only print to
-  stdout — wire them to a channel you actually watch.
-- **Host it + live data.** The app writes `web/index.html` locally; serve it as a static
-  site, and switch the frontend from build-time data injection to a runtime
-  `fetch('latest.json')` so refreshing the data no longer means re-rendering the whole page.
-- **Route releases history more cheaply.** Release bodies are fetched per run; cache by ETag
-  to skip unchanged data.
+- **Deploy it.** AWS provisioning is fully scripted in [`deploy/`](deploy/) + [`plan.md`](plan.md)
+  (Lightsail VM + Route53 + Caddy auto-HTTPS, a systemd timer running `run.py full` every ~3h).
+  What's left is the operator's one-time AWS account + domain + box. See [`dropoff.md`](dropoff.md).
+- **Turn on alerting.** Cost/budget/failure alerts already POST to `ALERT_WEBHOOK_URL` when set
+  (and a hard budget gate stops runaway spend) — point it at a Slack/Discord webhook to go live.
+- **Live data without re-render.** The app injects data at build time; switching the frontend to
+  a runtime `fetch('latest.json')` would let data refresh without rebuilding the whole page.

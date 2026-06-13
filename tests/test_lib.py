@@ -169,12 +169,12 @@ def test_notify_noop_when_webhook_unset(monkeypatch):
     calls = []
     monkeypatch.setattr(lib.urllib.request, "urlopen",
                         lambda *a, **k: calls.append(a) or _Resp())
-    lib.notify("hello")
-    assert calls == []  # nothing sent
+    assert lib.notify("hello") is False  # nothing sent
+    assert calls == []
 
 
-def test_notify_posts_text_when_webhook_set(monkeypatch):
-    monkeypatch.setattr(config, "ALERT_WEBHOOK_URL", "https://hooks.example/abc")
+def test_notify_posts_text_key_for_slack(monkeypatch):
+    monkeypatch.setattr(config, "ALERT_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/X")
     captured = {}
 
     def fake_urlopen(req, timeout=None):
@@ -183,9 +183,22 @@ def test_notify_posts_text_when_webhook_set(monkeypatch):
         return _Resp()
 
     monkeypatch.setattr(lib.urllib.request, "urlopen", fake_urlopen)
-    lib.notify("the message")
-    assert captured["url"] == "https://hooks.example/abc"
-    assert captured["body"] == {"text": "the message"}
+    assert lib.notify("the message") is True
+    assert captured["url"] == "https://hooks.slack.com/services/T/B/X"
+    assert captured["body"] == {"text": "the message"}  # Slack/default → "text"
+
+
+def test_notify_uses_content_key_for_discord(monkeypatch):
+    monkeypatch.setattr(config, "ALERT_WEBHOOK_URL", "https://discord.com/api/webhooks/123/tok")
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["body"] = json.loads(req.data.decode())
+        return _Resp()
+
+    monkeypatch.setattr(lib.urllib.request, "urlopen", fake_urlopen)
+    assert lib.notify("hi") is True
+    assert captured["body"] == {"content": "hi"}  # Discord → "content"
 
 
 def test_notify_swallows_errors(monkeypatch):
@@ -195,7 +208,7 @@ def test_notify_swallows_errors(monkeypatch):
         raise OSError("network down")
 
     monkeypatch.setattr(lib.urllib.request, "urlopen", boom)
-    lib.notify("x")  # must not raise
+    assert lib.notify("x") is False  # must not raise, returns False
 
 
 # ── check_cost_thresholds ───────────────────────────────────────────────────
