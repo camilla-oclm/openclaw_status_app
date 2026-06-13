@@ -33,7 +33,7 @@ through three stages: **collect → assess → render**.
  assess  ──► data/assessment.json   (OpenRouter LLM: analyst → validator → refine)
         │            └─► data/history.json (past verdicts), data/usage.json (cost log)
         ▼
- render  ──► web/index.html         (public page)  +  data/findings.html (raw debug view)
+ render  ──► web/index.html         (public decision page)
 ```
 
 ### 1. Collect — `openclaw_status/collector.py`
@@ -83,10 +83,15 @@ issue is marked **fixed** only if the release/pre-release body explicitly closes
 
 A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 
-1. **Analyst** (`deepseek/deepseek-v4-flash`, high reasoning) produces a structured
-   assessment from the collected data.
-2. **Validator** (`openrouter/owl-alpha`) reviews it for missed issues / unsupported claims.
+1. **Analyst** (`deepseek/deepseek-v4-pro`, high reasoning) produces a structured
+   assessment from the collected data. Only the top-N issues by rank are fed to the
+   prompt (`config.MAX_ISSUES_IN_CONTEXT`) and the output budget is widened
+   (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on busy releases.
+2. **Validator** (`openrouter/owl-alpha`, free) reviews it for missed issues / unsupported claims.
 3. **Refine** (analyst again) — only if the validator disagrees.
+
+If the analyst call fails, it falls back to `qwen/qwen3.7-plus` (a different provider,
+so a single-vendor outage doesn't sink the run). All models are served via OpenRouter.
 
 The output is schema- and XSS-validated, appended to `data/history.json`, and cost/latency
 is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
@@ -101,7 +106,6 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   `textContent` (XSS-safe) and no inline handlers (CSP-clean). A deploy guard refuses to
   publish a low-confidence or invalid assessment, and a smoke test validates the HTML
   before it overwrites the previous page (which is backed up to `*.html.prev`).
-- **`data/findings.html`** — a raw, pre-LLM view of the collected data, for debugging.
 
 ---
 
@@ -129,9 +133,8 @@ cp .env.example .env      # then fill in the two keys
 ```bash
 python3 run.py collect             # gather data            → data/raw-data.json
 python3 run.py assess              # LLM assessment         → data/assessment.json
-python3 run.py render              # raw findings view      → data/findings.html
 python3 run.py render-assessment   # public page            → web/index.html
-python3 run.py full                # collect → assess → render (with a concurrency lock)
+python3 run.py full                # collect → assess → render-assessment (concurrency-locked)
 ```
 
 To preview the page, open `web/index.html` in a browser.
@@ -159,25 +162,20 @@ openclaw_status_app/
 │   ├── collector.py        stage 1 — gather data
 │   ├── github.py           GitHub API client + issue scouting/scoring
 │   ├── agent.py            stage 2 — LLM assessment pipeline
-│   ├── render.py           stage 3 — findings view + public page
+│   ├── render.py           stage 3 — public decision page
 │   ├── lib.py              shared utils (OpenRouter, sanitize, locks, usage, timer)
 │   └── config.py           paths, models, env
 ├── web/
 │   ├── template.html       production frontend template (data injected here)
 │   └── index.html          generated public page (gitignored)
 ├── tests/                  pytest suite
-└── data/                   pipeline outputs (raw-data.json + findings.html gitignored)
+└── data/                   pipeline outputs (gitignored)
 ```
 
 ---
 
 ## Next steps / TODO
 
-- **Fix the assessment step for large issue sets.** On a release with many open issues the
-  collected context grows (~70k chars) and the analyst's JSON output gets truncated at the
-  4k-token cap → *"Failed to parse JSON."* Raise `max_tokens` and/or cap the issues fed to
-  the prompt to the top-N by rank. Separately, the configured **fallback model IDs are
-  invalid on OpenRouter** (HTTP 400) — replace them with valid IDs or drop the fallback.
 - **Automate it.** The pipeline is run by hand today. Add scheduling (hourly npm poll to
   detect new releases + a full run every few hours). The pipeline lock already makes
   concurrent runs safe.
