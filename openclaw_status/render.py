@@ -141,13 +141,17 @@ def _esc(s) -> str:
 
 
 def _safe_url(url: str) -> str:
-    """Validate URL for safe use in href attributes. Blocks javascript: and data: schemes."""
+    """Validate URL for safe use in href attributes. Blocks javascript: and data: schemes.
+
+    The scheme is checked case-insensitively, but the original-case URL is
+    returned so case-sensitive paths (e.g. Reddit permalinks) aren't corrupted.
+    """
     if not url:
         return ""
-    url = url.strip().lower()
-    if url.startswith("javascript:") or url.startswith("data:") or url.startswith("vbscript:"):
+    stripped = url.strip()
+    if stripped.lower().startswith(("javascript:", "data:", "vbscript:")):
         return ""
-    return url
+    return stripped
 
 
 PLATFORM_COLORS = {
