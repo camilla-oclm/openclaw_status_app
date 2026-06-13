@@ -6,7 +6,6 @@ Usage:
   openclaw-status collect              Run data collection pipeline
   openclaw-status assess               Run LLM assessment pipeline
   openclaw-status assess --single      Single-call mode (skip validator)
-  openclaw-status render               Generate findings HTML from raw data
   openclaw-status render-assessment    Render the public assessment page
   openclaw-status full                 collect → assess → render-assessment
 """
@@ -28,15 +27,6 @@ def cmd_assess(args):
     result = run_assessment_pipeline(single_call=single)
     if not result["success"]:
         sys.exit(1)
-
-
-def cmd_render(args):
-    from .render import build_findings_page
-    html = build_findings_page()
-    out = getattr(args, "output", None) or str(config.FINDINGS_HTML)
-    with open(out, "w") as f:
-        f.write(html)
-    print(f"✅ Generated {out} ({len(html):,} bytes)")
 
 
 def cmd_render_assessment(args):
@@ -64,8 +54,7 @@ def cmd_full(args):
         print("\n[2/3] Running assessment...")
         cmd_assess(args)
 
-        print("\n[3/3] Rendering pages...")
-        cmd_render(args)
+        print("\n[3/3] Rendering page...")
         cmd_render_assessment(args)
 
         run_log.save()
@@ -82,9 +71,8 @@ def main():
     sub.add_parser("collect", help="Run data collection pipeline")
     assess_p = sub.add_parser("assess", help="Run LLM assessment pipeline")
     assess_p.add_argument("--single", action="store_true", help="Single-call mode (skip validator)")
-    sub.add_parser("render", help="Generate findings HTML from raw data")
     sub.add_parser("render-assessment", help="Render the public assessment page")
-    sub.add_parser("full", help="Full pipeline: collect → assess → render")
+    sub.add_parser("full", help="Full pipeline: collect → assess → render-assessment")
 
     args = parser.parse_args()
 
@@ -95,7 +83,6 @@ def main():
     commands = {
         "collect": cmd_collect,
         "assess": cmd_assess,
-        "render": cmd_render,
         "render-assessment": cmd_render_assessment,
         "full": cmd_full,
     }

@@ -1,39 +1,7 @@
-"""Tests for openclaw_status.render — escaping, URL safety, deploy guard, smoke test."""
+"""Tests for openclaw_status.render — deploy guard, markdown sanitize, smoke test, injection."""
 import pytest
 
 from openclaw_status import render
-
-
-# ── _esc ────────────────────────────────────────────────────────────────────
-
-def test_esc_escapes_angle_brackets():
-    assert render._esc("<b>") == "&lt;b&gt;"
-
-
-def test_esc_empty_and_none():
-    assert render._esc("") == ""
-    assert render._esc(None) == ""
-
-
-# ── _safe_url ───────────────────────────────────────────────────────────────
-
-def test_safe_url_blocks_javascript():
-    assert render._safe_url("javascript:alert(1)") == ""
-    assert render._safe_url("  JavaScript:alert(1)") == ""
-
-
-def test_safe_url_blocks_data_and_vbscript():
-    assert render._safe_url("data:text/html,<script>") == ""
-    assert render._safe_url("vbscript:msgbox") == ""
-
-
-def test_safe_url_allows_https_and_preserves_case():
-    url = "https://www.reddit.com/r/OpenClaw/comments/AbC123/Title"
-    assert render._safe_url(url) == url
-
-
-def test_safe_url_empty():
-    assert render._safe_url("") == ""
 
 
 # ── _can_deploy ─────────────────────────────────────────────────────────────

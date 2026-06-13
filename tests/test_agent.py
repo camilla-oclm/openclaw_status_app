@@ -153,6 +153,64 @@ def test_build_context_includes_version_and_issue():
     assert "crash on launch" in ctx
 
 
+def _raw_with_n_issues(n):
+    return {
+        "target_version": "2026.6.1",
+        "sources": {
+            "latest_release": {"tag": "v2026.6.1", "published_at": "2026-06-01T00:00:00Z"},
+            "latest_prerelease": None,
+            "github_issues": [
+                {"number": i, "title": f"issue number {i}", "category": "active",
+                 "severity": "high", "url": f"https://x/{i}"}
+                for i in range(1, n + 1)
+            ],
+            "clawsweeper": {},
+        },
+    }
+
+
+def test_build_context_caps_issues_to_top_n(monkeypatch):
+    # Feed more issues than the cap: only the top-N (by their pre-ranked order)
+    # reach the prompt, but the header still reports the true total.
+    monkeypatch.setattr(config, "MAX_ISSUES_IN_CONTEXT", 3)
+    ctx = agent.build_context(_raw_with_n_issues(5))
+    assert "5 total" in ctx
+    assert "Showing the top 3" in ctx
+    for n in (1, 2, 3):
+        assert f"### #{n} " in ctx
+    for n in (4, 5):
+        assert f"### #{n} " not in ctx
+
+
+def test_build_context_no_truncation_note_when_under_cap(monkeypatch):
+    monkeypatch.setattr(config, "MAX_ISSUES_IN_CONTEXT", 30)
+    ctx = agent.build_context(_raw_with_n_issues(4))
+    assert "Showing the top" not in ctx
+    for n in (1, 2, 3, 4):
+        assert f"### #{n} " in ctx
+
+
+# ── model config ────────────────────────────────────────────────────────────
+
+def test_fallback_models_have_valid_slug_shape():
+    # An OpenRouter slug is exactly provider/model (one slash). The old config
+    # shipped a double-prefixed "openrouter/deepseek/deepseek-v4-flash" that 400s.
+    assert config.FALLBACK_MODELS, "expected at least one fallback"
+    for fb in config.FALLBACK_MODELS:
+        assert set(fb) >= {"model", "reasoning"}
+        assert fb["model"].count("/") == 1, f"bad slug: {fb['model']}"
+
+
+def test_fallbacks_do_not_repeat_primary():
+    # No point falling back to the model that just failed.
+    assert config.PRIMARY_MODEL not in {fb["model"] for fb in config.FALLBACK_MODELS}
+
+
+def test_assessment_max_tokens_exceeds_default():
+    # The whole point is to clear the 4k openrouter_call default that truncated JSON.
+    assert config.ASSESSMENT_MAX_TOKENS > 4000
+
+
 # ── append_history ──────────────────────────────────────────────────────────
 
 def test_append_history_writes_entry(tmp_path, monkeypatch):

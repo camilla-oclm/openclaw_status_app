@@ -1,20 +1,17 @@
 # Secrets
 .env
 
-# Generated data artifacts
+# Generated data artifacts + runtime state (regenerated/accumulated by the
+# pipeline — kept out of source control so data churn doesn't pollute code diffs).
 data/raw-data.json
-data/findings.html
-data/releases-page.md
+data/assessment.json
+data/history.json
+data/usage.json
+data/run-log.json
 
 # Generated frontend output + rollback backups
 web/index.html
 web/*.html.prev
-
-# Large test fixtures / scratch
-test_output/
-
-# Archived previous source tree
-._archived_src/
 
 # Python
 __pycache__/
