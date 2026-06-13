@@ -1,0 +1,24 @@
+# Secrets
+.env
+
+# Generated data artifacts
+data/raw-data.json
+data/findings.html
+data/releases-page.md
+
+# Generated frontend output + rollback backups
+mockups/index.html
+mockups/*.html.prev
+
+# Large test fixtures / scratch
+test_output/
+
+# Archived previous source tree
+._archived_src/
+
+# Python
+__pycache__/
+*.pyc
+
+# Lock files
+data/.pipeline.lock

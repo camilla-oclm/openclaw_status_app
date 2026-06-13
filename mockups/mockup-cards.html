@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw Status — Card Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --card: #1a1a1f;
+    --card-hover: #1e1e24;
+    --border: #2a2a30;
+    --border-light: #333339;
+    --text: #f0f0f0;
+    --text-muted: #888;
+    --text-dim: #555;
+    --accent: #F35528;
+    --accent-glow: rgba(243, 85, 40, 0.15);
+    --accent-glow-strong: rgba(243, 85, 40, 0.3);
+    --green: #22c55e;
+    --green-bg: rgba(34, 197, 94, 0.1);
+    --red: #ef4444;
+    --red-bg: rgba(239, 68, 68, 0.1);
+    --amber: #f59e0b;
+    --amber-bg: rgba(245, 158, 11, 0.1);
+    --cyan: #06b6d4;
+    --cyan-bg: rgba(6, 182, 212, 0.1);
+    --purple: #a855f7;
+    --purple-bg: rgba(168, 85, 247, 0.1);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --glass-bg: rgba(26, 26, 31, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.06);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  /* Header */
+  .header {
+    padding: 32px 0 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-logo {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--accent), #ff7b4a);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .header-title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .header-title span { color: var(--accent); }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .header-meta .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .headline-banner {
+    margin-top: 16px;
+    padding: 14px 18px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+    border-left: 3px solid var(--accent);
+  }
+
+  .headline-banner .rec-icon {
+    margin-right: 6px;
+  }
+
+  /* Quick Pick Cards */
+  .quick-picks {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+
+  .quick-card {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    text-align: center;
+    transition: all 0.2s ease;
+    overflow: hidden;
+  }
+
+  .quick-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+    padding: 1px;
+    background: linear-gradient(135deg, transparent 30%, var(--accent-glow) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .quick-card:hover {
+    background: var(--card-hover);
+    transform: translateY(-2px);
+    border-color: var(--border-light);
+  }
+
+  .quick-card-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .quick-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .quick-card-value {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  .quick-card-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .qc-rec .quick-card-value { color: var(--amber); }
+  .qc-health .quick-card-value { color: var(--red); }
+  .qc-issues .quick-card-value { color: var(--red); }
+  .qc-fixes .quick-card-value { color: var(--green); }
+  .qc-conf .quick-card-value { color: var(--cyan); }
+
+  /* Filter Chips */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+
+  .chip:hover { border-color: var(--border-light); color: var(--text); }
+  .chip.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  .chip .count {
+    background: rgba(255,255,255,0.15);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .chip.active .count {
+    background: rgba(255,255,255,0.25);
+  }
+
+  /* Section Headers */
+  .section {
+    margin-bottom: 28px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .section-header h2 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .section-header .badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--accent-glow);
+    color: var(--accent);
+  }
+
+  /* Issues List */
+  .issues-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .issue-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+  }
+
+  .issue-card:hover {
+    border-color: var(--border-light);
+    background: var(--card-hover);
+  }
+
+  .issue-sev {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+  }
+
+  .sev-high { background: var(--red); box-shadow: 0 0 6px var(--red-bg); }
+  .sev-medium { background: var(--amber); }
+  .sev-low { background: var(--cyan); }
+
+  .issue-body { flex: 1; min-width: 0; }
+
+  .issue-title {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+
+  .issue-title a {
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .issue-title a:hover { color: var(--accent); }
+
+  .issue-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .issue-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .tag-regression { background: var(--red-bg); color: var(--red); }
+  .tag-diamond { background: var(--purple-bg); color: var(--purple); }
+  .tag-keep-open { background: var(--amber-bg); color: var(--amber); }
+  .tag-close { background: var(--green-bg); color: var(--green); }
+
+  .issue-number {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  .issue-fixed {
+    font-size: 11px;
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  /* Evidence Grid */
+  .evidence-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .evidence-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .evidence-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .evidence-for::before { background: linear-gradient(90deg, var(--green), transparent); }
+  .evidence-against::before { background: linear-gradient(90deg, var(--red), transparent); }
+  .evidence-neutral::before { background: linear-gradient(90deg, var(--cyan), transparent); }
+
+  .evidence-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .evidence-title {
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .evidence-count {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  .evidence-for .evidence-count { background: var(--green-bg); color: var(--green); }
+  .evidence-against .evidence-count { background: var(--red-bg); color: var(--red); }
+  .evidence-neutral .evidence-count { background: var(--cyan-bg); color: var(--cyan); }
+
+  .evidence-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .evidence-items li {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .evidence-items li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  .evidence-for .evidence-items li::before { background: var(--green); }
+  .evidence-against .evidence-items li::before { background: var(--red); }
+  .evidence-neutral .evidence-items li::before { background: var(--cyan); }
+
+  /* Changes Cards */
+  .changes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .change-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    overflow: hidden;
+  }
+
+  .change-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .change-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .change-card-count {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--accent-glow);
+    color: var(--accent);
+  }
+
+  .change-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .change-item {
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.02);
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--glass-border);
+  }
+
+  .change-item-title {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    margin-bottom: 4px;
+  }
+
+  .change-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .verified-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--green-bg);
+    color: var(--green);
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .change-value {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* Platform Impact */
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+  }
+
+  .platform-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 12px;
+    text-align: center;
+    transition: all 0.15s ease;
+  }
+
+  .platform-item:hover {
+    border-color: var(--border-light);
+  }
+
+  .platform-icon {
+    font-size: 24px;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .platform-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .platform-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin: 0 auto;
+    display: block;
+  }
+
+  .dot-low { background: var(--green); box-shadow: 0 0 8px var(--green-bg); }
+  .dot-high { background: var(--red); box-shadow: 0 0 8px var(--red-bg); }
+  .dot-medium { background: var(--amber); box-shadow: 0 0 8px var(--amber-bg); }
+
+  .platform-impact-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 4px;
+  }
+
+  .impact-low { color: var(--green); }
+  .impact-high { color: var(--red); }
+  .impact-medium { color: var(--amber); }
+
+  /* Version History Timeline */
+  .timeline {
+    position: relative;
+    padding-left: 20px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    background: var(--border);
+    border-radius: 1px;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding: 0 0 18px 16px;
+  }
+
+  .timeline-item:last-child { padding-bottom: 0; }
+
+  .timeline-dot {
+    position: absolute;
+    left: -20px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border-light);
+    border: 2px solid var(--bg);
+    z-index: 1;
+  }
+
+  .timeline-item:first-child .timeline-dot {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow-strong);
+  }
+
+  .timeline-version {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .timeline-tag {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .tag-latest { background: var(--accent-glow); color: var(--accent); }
+  .tag-stable { background: var(--green-bg); color: var(--green); }
+
+  .timeline-date {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 1px;
+    margin-bottom: 4px;
+  }
+
+  .timeline-highlights {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* Thesis Card */
+  .thesis-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .thesis-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--amber), transparent);
+  }
+
+  .thesis-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .thesis-text {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-muted);
+  }
+
+  /* Sentiment Card */
+  .sentiment-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 28px;
+    border-left: 3px solid var(--amber);
+  }
+
+  .sentiment-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--amber);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sentiment-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  /* Clawsweeper Card */
+  .clawsweeper-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 28px;
+  }
+
+  .cs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .cs-title {
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cs-total {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--purple-bg);
+    color: var(--purple);
+  }
+
+  .cs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cs-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: var(--radius-xs);
+    font-size: 12px;
+  }
+
+  .cs-item-num {
+    font-weight: 700;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    width: 48px;
+  }
+
+  .cs-item-title {
+    flex: 1;
+    color: var(--text-muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cs-item-priority {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .prio-p0 { background: var(--red-bg); color: var(--red); }
+  .prio-p1 { background: var(--amber-bg); color: var(--amber); }
+  .prio-p2 { background: var(--cyan-bg); color: var(--cyan); }
+
+  /* Stats Row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+
+  .stat-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .stat-value.accent { color: var(--accent); }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 20px 0;
+    margin-top: 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .footer a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .footer a:hover { text-decoration: underline; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .quick-picks { grid-template-columns: repeat(3, 1fr); }
+    .evidence-grid { grid-template-columns: 1fr; }
+    .changes-grid { grid-template-columns: 1fr; }
+    .platform-grid { grid-template-columns: repeat(3, 1fr); }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 600px) {
+    .quick-picks { grid-template-columns: repeat(2, 1fr); }
+    .platform-grid { grid-template-columns: repeat(3, 1fr); }
+    .header-meta { flex-wrap: wrap; }
+    .container { padding: 0 14px; }
+    .quick-card-value { font-size: 22px; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 400px) {
+    .quick-picks { grid-template-columns: 1fr 1fr; }
+    .platform-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="container" id="app"></div>
+
+<script>
+var DATA = {
+    "assessed_at": "2026-06-02T10:35:14.983280+00:00",
+    "version": "2026.5.28",
+    "recommendation": "🔄",
+    "headline": "v2026.5.28 ships valuable improvements but multiple critical regressions remain unfixed; wait for next stable release",
+    "confidence": "high",
+    "thesis": "OpenClaw v2026.5.28 (released 2026-05-30) includes a broad set of improvements: agent and Codex runtime recovery, safer channel delivery across Matrix, Slack, Discord, Telegram, and Microsoft Teams, expanded provider support (Claude Opus 4.8, Fal Krea, NVIDIA, MiniMax, GitHub Copilot), and CLI/auth hardening. However, the release also introduces or fails to fix at least 11 critical regressions that break core functionality for several channels. Notably, Feishu MEDIA/image upload fails when using SecretRef (#89338), Matrix per-room agent routing is silently ignored (#89216), qqbot outbound delivery fails after WebSocket reconnection (#88955), Microsoft Teams messages with attachments are misthreaded (#88836), Telegram DM exec approval is incorrectly required (#88773), and reasoning blocks are not delivered on Matrix (#81892). These issues are confirmed as regressions or diamond_lobster bugs with high severity. A pre-release (v2026.5.28-beta.2) containing fixes for some of these issues is already available, indicating that the next stable release will address them. Given the critical nature of these regressions and the proximity of a fix release, users should defer updating to v2026.5.28 and wait for the next stable version.",
+    "evidence": {
+        "for_updating": [
+            "Agent and Codex runtime recovery improvements: subagents keep cwd/workspace separation, hook context stays prompt-local, session locks release on timeout abort (#87218, #86875, #87409, #87399, #87375, #88129)",
+            "Channel delivery and session identity safety improvements across outbound plugin hooks, Matrix room ids, iMessage reactions/approvals, Slack final replies, Discord recovered tool warnings, runtime-config message actions, WhatsApp profile auth roots, Telegram polling, and Microsoft Teams service URL trust checks (#73706, #75670, #87366, #87451, #87334, #84535, #82492, #83304, #87160)",
+            "Expanded provider support: Claude Opus 4.8, Fal Krea image schemas, NVIDIA featured models, MiniMax streaming music responses, encrypted PDF extraction, voice model catalogs, GitHub Copilot agent runtime support, Codex Supervisor plugin path (#87845, #87890, #80775, #84764, #87751, #87794)",
+            "CLI, auth, doctor, and provider paths fail faster and recover more clearly: malformed numeric/version options rejected, workspace dotenv provider credentials ignored, heartbeat de... (changelog)"
+        ],
+        "against_updating": [
+            "Feishu MEDIA/image upload fails when appSecret uses SecretRef (Keychain) — critical regression, not fixed (#89338)",
+            "ContextEngine afterTurn declares isHeartbeat but does not forward it — critical regression, not fixed (#89302)",
+            "Matrix bindings for per-room agent routing are silently ignored — critical regression, not fixed (#89216)",
+            "qqbot WebSocket reconnection causes 'Outbound not configured for channel: qqbot' error — critical regression, not fixed (#88955)",
+            "Feishu streaming card: only the last character displayed after streaming completes — critical regression, not fixed (#88867)",
+            "msteams messages with attachments misthreaded — critical regression, not fixed (#88836)",
+            "Telegram DM exec requires approval despite allowlist + ask:off — critical regression, not fixed (#88773)",
+            "Reasoning not delivered on Matrix channel — diamond_lobster regression, not fixed (#81892)",
+            "Android node sends node.event before websocket connect handshake completes, causing notification events to be lost — diamond_lobster, not fixed (#79552)",
+            "Update from Dashboard skipped, works from CLI — diamond_lobster, not fixed (#87889)"
+        ],
+        "neutral": [
+            "Pre-release v2026.5.28-beta.2 exists with fixes pending for next stable release, indicating active work on these regressions",
+            "Some issues have clawsweeper decision=close (#88954, #88867) but remain open in the issue tracker",
+            "50 clawsweeper work candidates are being actively worked on, suggesting ongoing development"
+        ]
+    },
+    "known_issues": [
+        {"number": 89338, "title": "Feishu MEDIA/image upload fails when appSecret uses SecretRef (Keychain)", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 89302, "title": "ContextEngine afterTurn declares isHeartbeat but does not forward it", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 89216, "title": "Matrix bindings for per-room agent routing are silently ignored", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 88955, "title": "qqbot WebSocket reconnection causes 'Outbound not configured for channel: qqbot' error", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 88954, "title": "openclaw update --channel beta cmd couldn't get v2026.3.30 beta 4", "severity": "high", "category": "regression", "clawsweeper_decision": "close", "fixed_in": null},
+        {"number": 88867, "title": "Feishu streaming card: only the last character displayed after streaming completes", "severity": "high", "category": "regression", "clawsweeper_decision": "close", "fixed_in": null},
+        {"number": 88836, "title": "msteams messages with attachments misthreaded", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 88773, "title": "Telegram DM exec requires approval despite allowlist + ask:off", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 81892, "title": "Reasoning not delivered on Matrix channel", "severity": "high", "category": "diamond_lobster", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 79552, "title": "Android node sends node.event before websocket connect handshake completes", "severity": "high", "category": "diamond_lobster", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 87889, "title": "Update from Dashboard skipped, works from CLI", "severity": "high", "category": "diamond_lobster", "clawsweeper_decision": "keep_open", "fixed_in": null}
+    ],
+    "changes": {
+        "breaking": [],
+        "fixes": [
+            {"title": "Agent and Codex runtime recovery: subagents keep cwd/workspace separation, hook context stays prompt-local, session locks release on timeout abort (#87218, #86875, #87409, #87399, #87375, #88129)", "verified": true},
+            {"title": "Channel delivery and session identity safety: outbound plugin hooks, Matrix room ids, iMessage reactions/approvals, Slack final replies, Discord recovered tool warnings, runtime-config message actions, WhatsApp profile auth roots, Telegram polling, Microsoft Teams service URL trust checks (#73706, #75670, #87366, #87451, #87334, #84535, #82492, #83304, #87160)", "verified": true},
+            {"title": "Mobile and chat surfaces: iOS Pro UI, hosted push relay default, realtime Talk tab playback, Gateway chat transport, onboarding, Talk permissions, WebChat reconnect delivery, session picker behavior (#87367, #87531, #87682, #88096, #88105)", "verified": true},
+            {"title": "Browser, channel, and automation inputs stricter: Browser tool timeouts, viewport/tab indices, Gateway ports, cron retry handling, Discord component ids, schema array refs, Telegram callback pages, channel progress callbacks reject malformed values earlier (#82887)", "verified": true}
+        ],
+        "features": [
+            {"title": "Provider, media, and document coverage expands with Claude Opus 4.8, Fal Krea image schemas, NVIDIA featured models, MiniMax streaming music responses, encrypted PDF extraction, voice model catalogs, GitHub Copilot agent runtime support, Codex Supervisor plugin path (#87845, #87890, #80775, #84764, #87751, #87794)", "value": "New model and media capabilities"},
+            {"title": "CLI, auth, doctor, and provider paths fail faster and recover more clearly: malformed numeric/version options rejected, workspace dotenv provider credentials ignored, heartbeat de... (changelog)", "value": "Improved error handling and recovery"}
+        ]
+    },
+    "sentiment_summary": "Community sentiment appears negative due to multiple critical regressions reported immediately after release, particularly affecting Feishu, Matrix, qqbot, Microsoft Teams, and Telegram channels. Users are likely frustrated that these regressions were not caught before release, though the existence of a pre-release with fixes suggests active remediation.",
+    "platform_impact": {"windows": "low", "macos": "low", "linux": "low", "discord": "low", "slack": "low", "telegram": "high"},
+    "usage": {"tokens_in": 21163, "tokens_out": 7977, "cost_usd": 0.00329584, "latency_ms": 208945, "api_calls": 3},
+    "version_history": [
+        {"version": "2026.5.28", "date": "2026-05-30", "tag": "latest", "highlights": "Runtime recovery, expanded provider support, CLI hardening"},
+        {"version": "2026.5.27", "date": "2026-05-28", "tag": "stable", "highlights": "Channel delivery safety, mobile improvements"},
+        {"version": "2026.5.26", "date": "2026-05-25", "tag": "stable", "highlights": "Discord webhook fixes, Telegram polling stability"},
+        {"version": "2026.5.25", "date": "2026-05-22", "tag": "stable", "highlights": "Auth hardening, doctor improvements"},
+        {"version": "2026.5.24", "date": "2026-05-20", "tag": "stable", "highlights": "Matrix session recovery, Slack improvements"},
+        {"version": "2026.5.23", "date": "2026-05-18", "tag": "stable", "highlights": "Provider catalog expansion"}
+    ],
+    "clawsweeper": {
+        "total_candidates": 50,
+        "active_work": [
+            {"number": 89338, "title": "Feishu MEDIA/image upload fails when appSecret uses SecretRef", "priority": "P0"},
+            {"number": 89302, "title": "ContextEngine afterTurn declares isHeartbeat but does not forward it", "priority": "P0"},
+            {"number": 89216, "title": "Matrix bindings for per-room agent routing silently ignored", "priority": "P0"},
+            {"number": 88955, "title": "qqbot WebSocket reconnection causes delivery failure", "priority": "P1"},
+            {"number": 88836, "title": "msteams messages with attachments misthreaded", "priority": "P1"},
+            {"number": 88773, "title": "Telegram DM exec requires approval despite allowlist", "priority": "P1"},
+            {"number": 81892, "title": "Reasoning not delivered on Matrix channel", "priority": "P2"},
+            {"number": 79552, "title": "Android node event before WebSocket handshake", "priority": "P2"},
+            {"number": 87889, "title": "Update from Dashboard skipped, works from CLI", "priority": "P2"}
+        ],
+        "recently_closed": [
+            {"number": 88954, "title": "openclaw update --channel beta cmd couldn't get beta", "reason": "Resolved in beta channel"},
+            {"number": 88867, "title": "Feishu streaming card shows only last character", "reason": "Fixed in next release"}
+        ]
+    }
+};
+
+(function() {
+  var d = DATA;
+  var app = document.getElementById('app');
+  var html = '';
+
+  // --- Header ---
+  var assessedDate = new Date(d.assessed_at);
+  var dateStr = assessedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  var timeStr = assessedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  html += '<div class="header">';
+  html += '<div class="header-top">';
+  html += '<div class="header-brand">';
+  html += '<div class="header-logo">🐾</div>';
+  html += '<div class="header-title">Open<span>Claw</span> Status</div>';
+  html += '</div>';
+  html += '<div class="header-meta">';
+  html += '<span>v' + d.version + '</span>';
+  html += '<span class="dot"></span>';
+  html += '<span>' + dateStr + ' ' + timeStr + '</span>';
+  html += '<span class="dot"></span>';
+  html += '<span>Assessed ' + d.usage.api_calls + ' API calls</span>';
+  html += '</div>';
+  html += '</div>';
+  html += '<div class="headline-banner">';
+  html += '<span class="rec-icon">' + d.recommendation + '</span> ';
+  html += d.headline;
+  html += '</div>';
+  html += '</div>';
+
+  // --- Quick Pick Cards ---
+  var regressionCount = d.known_issues.filter(function(i) { return i.category === 'regression'; }).length;
+  var diamondCount = d.known_issues.filter(function(i) { return i.category === 'diamond_lobster'; }).length;
+  var fixesCount = d.changes.fixes.length;
+  var featuresCount = d.changes.features.length;
+
+  html += '<div class="quick-picks">';
+  html += '<div class="quick-card qc-rec">';
+  html += '<span class="quick-card-icon">🔄</span>';
+  html += '<div class="quick-card-label">Recommendation</div>';
+  html += '<div class="quick-card-value">WAIT</div>';
+  html += '<div class="quick-card-sub">Next stable release</div>';
+  html += '</div>';
+  html += '<div class="quick-card qc-health">';
+  html += '<span class="quick-card-icon">⚠️</span>';
+  html += '<div class="quick-card-label">Health Score</div>';
+  html += '<div class="quick-card-value">' + regressionCount + '/' + d.known_issues.length + '</div>';
+  html += '<div class="quick-card-sub">Critical regressions</div>';
+  html += '</div>';
+  html += '<div class="quick-card qc-issues">';
+  html += '<span class="quick-card-icon">🐛</span>';
+  html += '<div class="quick-card-label">Open Issues</div>';
+  html += '<div class="quick-card-value">' + d.known_issues.length + '</div>';
+  html += '<div class="quick-card-sub">Regression + Diamond Lobster</div>';
+  html += '</div>';
+  html += '<div class="quick-card qc-fixes">';
+  html += '<span class="quick-card-icon">✅</span>';
+  html += '<div class="quick-card-label">Fixes & Features</div>';
+  html += '<div class="quick-card-value">' + (fixesCount + featuresCount) + '</div>';
+  html += '<div class="quick-card-sub">' + fixesCount + ' fixes · ' + featuresCount + ' features</div>';
+  html += '</div>';
+  html += '<div class="quick-card qc-conf">';
+  html += '<span class="quick-card-icon">🎯</span>';
+  html += '<div class="quick-card-label">Confidence</div>';
+  html += '<div class="quick-card-value" style="text-transform:uppercase;font-size:20px;">' + d.confidence + '</div>';
+  html += '<div class="quick-card-sub">Assessment confidence</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // --- Thesis ---
+  html += '<div class="thesis-card">';
+  html += '<div class="thesis-label">📋 Analysis Thesis</div>';
+  html += '<div class="thesis-text">' + d.thesis + '</div>';
+  html += '</div>';
+
+  // --- Filter Chips ---
+  var categories = [
+    { label: 'All', count: d.known_issues.length },
+    { label: 'Regression', count: regressionCount },
+    { label: 'Diamond Lobster', count: diamondCount },
+    { label: 'Keep Open', count: d.known_issues.filter(function(i) { return i.clawsweeper_decision === 'keep_open'; }).length },
+    { label: 'Closed', count: d.known_issues.filter(function(i) { return i.clawsweeper_decision === 'close'; }).length }
+  ];
+
+  html += '<div class="section">';
+  html += '<div class="filter-bar">';
+  html += '<span class="filter-label">Filter</span>';
+  categories.forEach(function(cat, idx) {
+    html += '<span class="chip' + (idx === 0 ? ' active' : '') + '" data-filter="' + cat.label.toLowerCase().replace(/\s/g, '-') + '" onclick="filterIssues(this, \'' + cat.label.toLowerCase().replace(/\s/g, '-') + '\')">';
+    html += cat.label + ' <span class="count">' + cat.count + '</span>';
+    html += '</span>';
+  });
+  html += '</div>';
+  html += '</div>';
+
+  // --- Known Issues ---
+  html += '<div class="section">';
+  html += '<div class="section-header">';
+  html += '<h2>🐛 Known Issues</h2>';
+  html += '<span class="badge">' + d.known_issues.length + ' open</span>';
+  html += '</div>';
+  html += '<div class="issues-list" id="issues-list">';
+
+  d.known_issues.forEach(function(issue) {
+    var catClass = issue.category === 'diamond_lobster' ? 'tag-diamond' : 'tag-regression';
+    var catLabel = issue.category === 'diamond_lobster' ? 'Diamond Lobster' : 'Regression';
+    var decClass = issue.clawsweeper_decision === 'close' ? 'tag-close' : 'tag-keep-open';
+    var decLabel = issue.clawsweeper_decision === 'close' ? 'Closed' : 'Keep Open';
+
+    html += '<div class="issue-card" data-category="' + issue.category + '" data-decision="' + issue.clawsweeper_decision + '">';
+    html += '<div class="issue-sev sev-' + issue.severity + '"></div>';
+    html += '<div class="issue-body">';
+    html += '<div class="issue-title"><a href="https://github.com/openclaw/openclaw/issues/' + issue.number + '" target="_blank" rel="noopener">' + issue.title + '</a></div>';
+    html += '<div class="issue-meta">';
+    html += '<span class="issue-tag ' + catClass + '">' + catLabel + '</span>';
+    html += '<span class="issue-tag ' + decClass + '">' + decLabel + '</span>';
+    html += '<span class="issue-number">#' + issue.number + '</span>';
+    if (issue.fixed_in) {
+      html += '<span class="issue-fixed">Fixed in ' + issue.fixed_in + '</span>';
+    }
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+  });
+
+  html += '</div></div>';
+
+  // --- Evidence Section ---
+  html += '<div class="section">';
+  html += '<div class="section-header">';
+  html += '<h2>📊 Evidence</h2>';
+  html += '</div>';
+  html += '<div class="evidence-grid">';
+
+  // For
+  html += '<div class="evidence-card evidence-for">';
+  html += '<div class="evidence-header">';
+  html += '<div class="evidence-title">✅ For Updating</div>';
+  html += '<span class="evidence-count">' + d.evidence.for_updating.length + '</span>';
+  html += '</div>';
+  html += '<ul class="evidence-items">';
+  d.evidence.for_updating.forEach(function(item) {
+    html += '<li>' + item + '</li>';
+  });
+  html += '</ul></div>';
+
+  // Against
+  html += '<div class="evidence-card evidence-against">';
+  html += '<div class="evidence-header">';
+  html += '<div class="evidence-title">❌ Against Updating</div>';
+  html += '<span class="evidence-count">' + d.evidence.against_updating.length + '</span>';
+  html += '</div>';
+  html += '<ul class="evidence-items">';
+  d.evidence.against_updating.forEach(function(item) {
+    html += '<li>' + item + '</li>';
+  });
+  html += '</ul></div>';
+
+  html += '</div></div>';
+
+  // Neutral (full width)
+  html += '<div class="section">';
+  html += '<div class="evidence-card evidence-neutral" style="margin-top:0">';
+  html += '<div class="evidence-header">';
+  html += '<div class="evidence-title">ℹ️ Neutral</div>';
+  html += '<span class="evidence-count">' + d.evidence.neutral.length + '</span>';
+  html += '</div>';
+  html += '<ul class="evidence-items">';
+  d.evidence.neutral.forEach(function(item) {
+    html += '<li>' + item + '</li>';
+  });
+  html += '</ul></div></div>';
+
+  // --- Changes ---
+  html += '<div class="section">';
+  html += '<div class="section-header">';
+  html += '<h2>📝 Changes in v' + d.version + '</h2>';
+  html += '</div>';
+  html += '<div class="changes-grid">';
+
+  // Fixes
+  html += '<div class="change-card">';
+  html += '<div class="change-card-header">';
+  html += '<div class="change-card-title">🔧 Fixes</div>';
+  html += '<span class="change-card-count">' + d.changes.fixes.length + '</span>';
+  html += '</div>';
+  html += '<div class="change-items">';
+  d.changes.fixes.forEach(function(fix) {
+    html += '<div class="change-item">';
+    html += '<div class="change-item-title">' + fix.title + '</div>';
+    html += '<div class="change-item-meta">';
+    if (fix.verified) html += '<span class="verified-badge">✓ Verified</span>';
+    html += '</div></div>';
+  });
+  html += '</div></div>';
+
+  // Features
+  html += '<div class="change-card">';
+  html += '<div class="change-card-header">';
+  html += '<div class="change-card-title">🚀 New Features</div>';
+  html += '<span class="change-card-count">' + d.changes.features.length + '</span>';
+  html += '</div>';
+  html += '<div class="change-items">';
+  d.changes.features.forEach(function(feat) {
+    html += '<div class="change-item">';
+    html += '<div class="change-item-title">' + feat.title + '</div>';
+    html += '<div class="change-item-meta">';
+    html += '<span class="change-value">' + feat.value + '</span>';
+    html += '</div></div>';
+  });
+  html += '</div></div>';
+
+  html += '</div></div>';
+
+  // --- Platform Impact ---
+  var platformIcons = {
+    windows: '🪟', macos: '🍎', linux: '🐧', discord: '💬', slack: '💼', telegram: '✈️'
+  };
+
+  html += '<div class="section">';
+  html += '<div class="section-header">';
+  html += '<h2>🌐 Platform Impact</h2>';
+  html += '</div>';
+  html += '<div class="platform-grid">';
+
+  Object.keys(d.platform_impact).forEach(function(platform) {
+    var impact = d.platform_impact[platform];
+    var dotClass = 'dot-' + impact;
+    var impactClass = 'impact-' + impact;
+
+    html += '<div class="platform-item">';
+    html += '<span class="platform-icon">' + (platformIcons[platform] || '📦') + '</span>';
+    html += '<div class="platform-name">' + platform.charAt(0).toUpperCase() + platform.slice(1) + '</div>';
+    html += '<span class="platform-dot ' + dotClass + '"></span>';
+    html += '<div class="platform-impact-label ' + impactClass + '">' + impact.toUpperCase() + '</div>';
+    html += '</div>';
+  });
+
+  html += '</div></div>';
+
+  // --- Sentiment ---
+  html += '<div class="sentiment-card">';
+  html += '<div class="sentiment-label">💭 Community Sentiment</div>';
+  html += '<div class="sentiment-text">' + d.sentiment_summary + '</div>';
+  html += '</div>';
+
+  // --- Clawsweeper ---
+  html += '<div class="clawsweeper-card">';
+  html += '<div class="cs-header">';
+  html += '<div class="cs-title">🦞 Clawsweeper Active Work</div>';
+  html += '<span class="cs-total">' + d.clawsweeper.total_candidates + ' candidates</span>';
+  html += '</div>';
+  html += '<div class="cs-list">';
+
+  d.clawsweeper.active_work.forEach(function(item) {
+    var prioClass = 'prio-' + item.priority.toLowerCase();
+    html += '<div class="cs-item">';
+    html += '<span class="cs-item-num">#' + item.number + '</span>';
+    html += '<span class="cs-item-title">' + item.title + '</span>';
+    html += '<span class="cs-item-priority ' + prioClass + '">' + item.priority + '</span>';
+    html += '</div>';
+  });
+
+  html += '</div></div>';
+
+  // --- Version History ---
+  html += '<div class="section">';
+  html += '<div class="section-header">';
+  html += '<h2>📜 Version History</h2>';
+  html += '</div>';
+  html += '<div class="timeline">';
+
+  d.version_history.forEach(function(v) {
+    var tagClass = v.tag === 'latest' ? 'tag-latest' : 'tag-stable';
+    html += '<div class="timeline-item">';
+    html += '<div class="timeline-dot"></div>';
+    html += '<div class="timeline-version">v' + v.version + ' <span class="timeline-tag ' + tagClass + '">' + v.tag + '</span></div>';
+    html += '<div class="timeline-date">' + v.date + '</div>';
+    html += '<div class="timeline-highlights">' + v.highlights + '</div>';
+    html += '</div>';
+  });
+
+  html += '</div></div>';
+
+  // --- Stats Row ---
+  html += '<div class="stats-row">';
+  html += '<div class="stat-item">';
+  html += '<div class="stat-label">Tokens In</div>';
+  html += '<div class="stat-value">' + d.usage.tokens_in.toLocaleString() + '</div>';
+  html += '</div>';
+  html += '<div class="stat-item">';
+  html += '<div class="stat-label">Tokens Out</div>';
+  html += '<div class="stat-value">' + d.usage.tokens_out.toLocaleString() + '</div>';
+  html += '</div>';
+  html += '<div class="stat-item">';
+  html += '<div class="stat-label">Cost</div>';
+  html += '<div class="stat-value accent">$' + d.usage.cost_usd.toFixed(4) + '</div>';
+  html += '</div>';
+  html += '<div class="stat-item">';
+  html += '<div class="stat-label">Latency</div>';
+  html += '<div class="stat-value">' + (d.usage.latency_ms / 1000).toFixed(1) + 's</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // --- Footer ---
+  html += '<div class="footer">';
+  html += 'OpenClaw Status Dashboard · Card Layout Mockup · Generated from v' + d.version + ' assessment data<br>';
+  html += '<a href="#">GitHub</a> · <a href="#">Documentation</a> · <a href="#">Report Issue</a>';
+  html += '</div>';
+
+  app.innerHTML = html;
+})();
+
+// Filter functionality
+function filterIssues(chip, filter) {
+  // Update active chip
+  document.querySelectorAll('.chip').forEach(function(c) { c.classList.remove('active'); });
+  chip.classList.add('active');
+
+  var cards = document.querySelectorAll('.issue-card');
+  cards.forEach(function(card) {
+    var cat = card.getAttribute('data-category');
+    var dec = card.getAttribute('data-decision');
+    var show = false;
+
+    if (filter === 'all') {
+      show = true;
+    } else if (filter === 'regression') {
+      show = cat === 'regression';
+    } else if (filter === 'diamond-lobster') {
+      show = cat === 'diamond_lobster';
+    } else if (filter === 'keep-open') {
+      show = dec === 'keep_open';
+    } else if (filter === 'closed') {
+      show = dec === 'close';
+    }
+
+    card.style.display = show ? 'flex' : 'none';
+  });
+}
+</script>
+
+</body>
+</html>

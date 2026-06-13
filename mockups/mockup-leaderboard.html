@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw Status — Release Assessment</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #09090b;
+    --card: #18181b;
+    --card-hover: #1e1e22;
+    --border: #27272a;
+    --text: #fafafa;
+    --muted: #a1a1aa;
+    --accent: #F35528;
+    --accent-glow: rgba(243, 85, 40, 0.15);
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #a855f7;
+    --blue: #3b82f6;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  code, .mono {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Header */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(9, 9, 11, 0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+  }
+  .header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-logo {
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-logo .lobster { font-size: 24px; }
+  .header-nav {
+    display: flex;
+    gap: 4px;
+  }
+  .header-nav a {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    transition: color 0.15s, background 0.15s;
+  }
+  .header-nav a:hover, .header-nav a.active {
+    color: var(--text);
+    background: rgba(255,255,255,0.06);
+    text-decoration: none;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .badge-version {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .badge-latest {
+    background: rgba(34,197,94,0.15);
+    color: var(--green);
+    border-color: rgba(34,197,94,0.3);
+  }
+  .badge-high {
+    background: rgba(239,68,68,0.15);
+    color: var(--red);
+    border-color: rgba(239,68,68,0.3);
+  }
+  .badge-medium {
+    background: rgba(245,158,11,0.15);
+    color: var(--amber);
+    border-color: rgba(245,158,11,0.3);
+  }
+  .badge-low {
+    background: rgba(34,197,94,0.15);
+    color: var(--green);
+    border-color: rgba(34,197,94,0.3);
+  }
+  .badge-regression {
+    background: rgba(239,68,68,0.12);
+    color: var(--red);
+    border-color: rgba(239,68,68,0.25);
+  }
+  .badge-diamond_lobster {
+    background: rgba(168,85,247,0.12);
+    color: var(--purple);
+    border-color: rgba(168,85,247,0.25);
+  }
+  .badge-keep_open {
+    background: rgba(245,158,11,0.12);
+    color: var(--amber);
+    border-color: rgba(245,158,11,0.25);
+  }
+  .badge-close {
+    background: rgba(34,197,94,0.12);
+    color: var(--green);
+    border-color: rgba(34,197,94,0.25);
+  }
+  .badge-p0 {
+    background: rgba(239,68,68,0.18);
+    color: var(--red);
+    border-color: rgba(239,68,68,0.35);
+    font-weight: 700;
+  }
+  .badge-p1 {
+    background: rgba(245,158,11,0.18);
+    color: var(--amber);
+    border-color: rgba(245,158,11,0.35);
+    font-weight: 700;
+  }
+  .badge-p2 {
+    background: rgba(59,130,246,0.18);
+    color: var(--blue);
+    border-color: rgba(59,130,246,0.35);
+    font-weight: 700;
+  }
+  .badge-pulse {
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  /* Container */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 24px 48px;
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, rgba(243,85,40,0.12) 0%, rgba(243,85,40,0.03) 50%, rgba(168,85,247,0.06) 100%);
+    border: 1px solid rgba(243,85,40,0.2);
+    border-radius: 16px;
+    padding: 32px 36px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -40%;
+    right: -10%;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(243,85,40,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .hero-emoji {
+    font-size: 48px;
+    line-height: 1;
+  }
+  .hero-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .hero-meta h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .hero-meta .sub {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .hero-headline {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--muted);
+    max-width: 800px;
+  }
+  .hero-headline strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card.accent-glow {
+    border-color: rgba(243,85,40,0.25);
+  }
+  .stat-card.accent-glow::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+  .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.amber { color: var(--amber); }
+
+  /* Progress bar */
+  .progress-bar-wrap {
+    margin-top: 10px;
+  }
+  .progress-bar-track {
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.6s ease;
+  }
+  .progress-bar-fill.red { background: linear-gradient(90deg, var(--red), #dc2626); }
+  .progress-bar-fill.amber { background: linear-gradient(90deg, var(--amber), #d97706); }
+  .progress-bar-fill.green { background: linear-gradient(90deg, var(--green), #16a34a); }
+  .progress-bar-fill.accent { background: linear-gradient(90deg, var(--accent), #e04a1f); }
+
+  /* Section titles */
+  .section-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.01em;
+  }
+  .section-title .icon {
+    font-size: 18px;
+  }
+
+  /* Leaderboard table */
+  .leaderboard {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+  .leaderboard-header {
+    display: grid;
+    grid-template-columns: 52px 1fr 100px 120px 120px;
+    gap: 0;
+    padding: 12px 20px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .leaderboard-row {
+    display: grid;
+    grid-template-columns: 52px 1fr 100px 120px 120px;
+    gap: 0;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    align-items: center;
+    transition: background 0.12s;
+  }
+  .leaderboard-row:last-child { border-bottom: none; }
+  .leaderboard-row:hover { background: rgba(255,255,255,0.02); }
+  .rank-num {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--muted);
+    font-family: "SF Mono", monospace;
+  }
+  .rank-num.top3 { color: var(--accent); }
+  .issue-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--text);
+    padding-right: 16px;
+  }
+  .issue-title .issue-num {
+    font-family: "SF Mono", monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-right: 6px;
+  }
+
+  /* Filter chips */
+  .filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .chip:hover {
+    border-color: rgba(255,255,255,0.15);
+    color: var(--text);
+  }
+  .chip.active {
+    background: rgba(243,85,40,0.15);
+    border-color: rgba(243,85,40,0.35);
+    color: var(--accent);
+  }
+  .chip .chip-count {
+    font-size: 10px;
+    font-weight: 700;
+    background: rgba(255,255,255,0.08);
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+  .chip.active .chip-count {
+    background: rgba(243,85,40,0.2);
+  }
+
+  /* Two-column evidence grid */
+  .evidence-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .evidence-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .evidence-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+  .evidence-card.for::before { background: linear-gradient(90deg, var(--green), transparent); }
+  .evidence-card.against::before { background: linear-gradient(90deg, var(--red), transparent); }
+  .evidence-card.neutral::before { background: linear-gradient(90deg, var(--amber), transparent); }
+  .evidence-card h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .evidence-list {
+    list-style: none;
+  }
+  .evidence-list li {
+    font-size: 13px;
+    color: var(--muted);
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    line-height: 1.55;
+  }
+  .evidence-list li:last-child { border-bottom: none; }
+
+  /* Changes tabs */
+  .changes-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+  .changes-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .changes-tab {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .changes-tab:hover { color: var(--text); }
+  .changes-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .changes-content {
+    padding: 20px 24px;
+  }
+  .change-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .change-item:last-child { border-bottom: none; }
+  .change-icon {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    margin-top: 1px;
+  }
+  .change-icon.fix {
+    background: rgba(34,197,94,0.15);
+    color: var(--green);
+  }
+  .change-icon.feature {
+    background: rgba(59,130,246,0.15);
+    color: var(--blue);
+  }
+  .change-icon.breaking {
+    background: rgba(239,68,68,0.15);
+    color: var(--red);
+  }
+  .verified-check {
+    color: var(--green);
+    font-size: 11px;
+    margin-left: 6px;
+  }
+
+  /* Platform impact grid */
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .platform-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .platform-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .platform-dot.green { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+  .platform-dot.amber { background: var(--amber); box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+  .platform-dot.red { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,0.4); }
+  .platform-info { display: flex; flex-direction: column; gap: 2px; }
+  .platform-name { font-size: 13px; font-weight: 600; }
+  .platform-level { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+
+  /* Version history */
+  .version-timeline {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 28px;
+  }
+  .version-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .version-item:last-child { border-bottom: none; }
+  .version-dot-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 4px;
+  }
+  .version-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  .version-dot.latest { background: var(--accent); box-shadow: 0 0 8px rgba(243,85,40,0.4); }
+  .version-line {
+    width: 1px;
+    flex-grow: 1;
+    background: var(--border);
+    margin-top: 4px;
+  }
+  .version-info { flex: 1; }
+  .version-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 3px;
+    flex-wrap: wrap;
+  }
+  .version-number {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: "SF Mono", monospace;
+  }
+  .version-date {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: "SF Mono", monospace;
+  }
+  .version-highlights {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* Clawsweeper active work */
+  .clawsweeper-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+  .clawsweeper-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255,255,255,0.02);
+  }
+  .clawsweeper-header h3 {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .clawsweeper-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    padding: 12px 22px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    align-items: center;
+    font-size: 13px;
+  }
+  .clawsweeper-item:last-child { border-bottom: none; }
+  .cw-num {
+    font-family: "SF Mono", monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* Sentiment */
+  .sentiment-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 28px;
+  }
+  .sentiment-card h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sentiment-text {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 20px 24px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 20px;
+  }
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .footer-usage {
+    font-family: "SF Mono", monospace;
+    font-size: 11px;
+    color: rgba(161,161,170,0.6);
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header-nav { display: none; }
+    .hero { padding: 24px 20px; }
+    .hero-emoji { font-size: 36px; }
+    .hero-meta h1 { font-size: 18px; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .evidence-grid { grid-template-columns: 1fr; }
+    .leaderboard-header,
+    .leaderboard-row {
+      grid-template-columns: 40px 1fr 80px;
+    }
+    .leaderboard-header > :nth-child(4),
+    .leaderboard-header > :nth-child(5),
+    .leaderboard-row > :nth-child(4),
+    .leaderboard-row > :nth-child(5) {
+      display: none;
+    }
+    .platform-grid { grid-template-columns: 1fr 1fr; }
+    .footer-inner { flex-direction: column; }
+    .container { padding: 16px 16px 32px; }
+  }
+  @media (max-width: 480px) {
+    .stats-row { grid-template-columns: 1fr; }
+    .platform-grid { grid-template-columns: 1fr; }
+    .filter-chips { gap: 6px; }
+    .chip { padding: 5px 10px; font-size: 11.5px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-left">
+      <div class="header-logo">
+        <span class="lobster">🦞</span>
+        <span>OpenClaw Status</span>
+      </div>
+      <nav class="header-nav">
+        <a href="#" class="active">Assessment</a>
+        <a href="#">Issues</a>
+        <a href="#">History</a>
+      </nav>
+    </div>
+    <div class="header-right">
+      <span class="badge badge-version" id="headerVersion"></span>
+      <span class="badge" id="headerUpdated"></span>
+    </div>
+  </div>
+</header>
+
+<!-- Main Content -->
+<div class="container" id="app"></div>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="footer-inner">
+    <span>OpenClaw Status · Release Assessment Dashboard</span>
+    <span class="footer-usage" id="footerUsage"></span>
+  </div>
+</footer>
+
+<script>
+var DATA = {
+    "assessed_at": "2026-06-02T10:35:14.983280+00:00",
+    "version": "2026.5.28",
+    "recommendation": "🔄",
+    "headline": "v2026.5.28 ships valuable improvements but multiple critical regressions remain unfixed; wait for next stable release",
+    "confidence": "high",
+    "thesis": "OpenClaw v2026.5.28 (released 2026-05-30) includes a broad set of improvements: agent and Codex runtime recovery, safer channel delivery across Matrix, Slack, Discord, Telegram, and Microsoft Teams, expanded provider support (Claude Opus 4.8, Fal Krea, NVIDIA, MiniMax, GitHub Copilot), and CLI/auth hardening. However, the release also introduces or fails to fix at least 11 critical regressions that break core functionality for several channels. Notably, Feishu MEDIA/image upload fails when using SecretRef (#89338), Matrix per-room agent routing is silently ignored (#89216), qqbot outbound delivery fails after WebSocket reconnection (#88955), Microsoft Teams messages with attachments are misthreaded (#88836), Telegram DM exec approval is incorrectly required (#88773), and reasoning blocks are not delivered on Matrix (#81892). These issues are confirmed as regressions or diamond_lobster bugs with high severity. A pre-release (v2026.5.28-beta.2) containing fixes for some of these issues is already available, indicating that the next stable release will address them. Given the critical nature of these regressions and the proximity of a fix release, users should defer updating to v2026.5.28 and wait for the next stable version.",
+    "evidence": {
+        "for_updating": [
+            "Agent and Codex runtime recovery improvements: subagents keep cwd/workspace separation, hook context stays prompt-local, session locks release on timeout abort (#87218, #86875, #87409, #87399, #87375, #88129)",
+            "Channel delivery and session identity safety improvements across outbound plugin hooks, Matrix room ids, iMessage reactions/approvals, Slack final replies, Discord recovered tool warnings, runtime-config message actions, WhatsApp profile auth roots, Telegram polling, and Microsoft Teams service URL trust checks (#73706, #75670, #87366, #87451, #87334, #84535, #82492, #83304, #87160)",
+            "Expanded provider support: Claude Opus 4.8, Fal Krea image schemas, NVIDIA featured models, MiniMax streaming music responses, encrypted PDF extraction, voice model catalogs, GitHub Copilot agent runtime support, Codex Supervisor plugin path (#87845, #87890, #80775, #84764, #87751, #87794)",
+            "CLI, auth, doctor, and provider paths fail faster and recover more clearly: malformed numeric/version options rejected, workspace dotenv provider credentials ignored, heartbeat de... (changelog)"
+        ],
+        "against_updating": [
+            "Feishu MEDIA/image upload fails when appSecret uses SecretRef (Keychain) — critical regression, not fixed (#89338)",
+            "ContextEngine afterTurn declares isHeartbeat but does not forward it — critical regression, not fixed (#89302)",
+            "Matrix bindings for per-room agent routing are silently ignored — critical regression, not fixed (#89216)",
+            "qqbot WebSocket reconnection causes 'Outbound not configured for channel: qqbot' error — critical regression, not fixed (#88955)",
+            "Feishu streaming card: only the last character displayed after streaming completes — critical regression, not fixed (#88867)",
+            "msteams messages with attachments misthreaded — critical regression, not fixed (#88836)",
+            "Telegram DM exec requires approval despite allowlist + ask:off — critical regression, not fixed (#88773)",
+            "Reasoning not delivered on Matrix channel — diamond_lobster regression, not fixed (#81892)",
+            "Android node sends node.event before websocket connect handshake completes, causing notification events to be lost — diamond_lobster, not fixed (#79552)",
+            "Update from Dashboard skipped, works from CLI — diamond_lobster, not fixed (#87889)"
+        ],
+        "neutral": [
+            "Pre-release v2026.5.28-beta.2 exists with fixes pending for next stable release, indicating active work on these regressions",
+            "Some issues have clawsweeper decision=close (#88954, #88867) but remain open in the issue tracker",
+            "50 clawsweeper work candidates are being actively worked on, suggesting ongoing development"
+        ]
+    },
+    "known_issues": [
+        {"number": 89338, "title": "Feishu MEDIA/image upload fails when appSecret uses SecretRef (Keychain)", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 89302, "title": "ContextEngine afterTurn declares isHeartbeat but does not forward it", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 89216, "title": "Matrix bindings for per-room agent routing are silently ignored", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 88955, "title": "qqbot WebSocket reconnection causes 'Outbound not configured for channel: qqbot' error", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 88954, "title": "openclaw update --channel beta cmd couldn't get v2026.3.30 beta 4", "severity": "high", "category": "regression", "clawsweeper_decision": "close", "fixed_in": null},
+        {"number": 88867, "title": "Feishu streaming card: only the last character displayed after streaming completes", "severity": "high", "category": "regression", "clawsweeper_decision": "close", "fixed_in": null},
+        {"number": 88836, "title": "msteams messages with attachments misthreaded", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 88773, "title": "Telegram DM exec requires approval despite allowlist + ask:off", "severity": "high", "category": "regression", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 81892, "title": "Reasoning not delivered on Matrix channel", "severity": "high", "category": "diamond_lobster", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 79552, "title": "Android node sends node.event before websocket connect handshake completes", "severity": "high", "category": "diamond_lobster", "clawsweeper_decision": "keep_open", "fixed_in": null},
+        {"number": 87889, "title": "Update from Dashboard skipped, works from CLI", "severity": "high", "category": "diamond_lobster", "clawsweeper_decision": "keep_open", "fixed_in": null}
+    ],
+    "changes": {
+        "breaking": [],
+        "fixes": [
+            {"title": "Agent and Codex runtime recovery: subagents keep cwd/workspace separation, hook context stays prompt-local, session locks release on timeout abort (#87218, #86875, #87409, #87399, #87375, #88129)", "verified": true},
+            {"title": "Channel delivery and session identity safety: outbound plugin hooks, Matrix room ids, iMessage reactions/approvals, Slack final replies, Discord recovered tool warnings, runtime-config message actions, WhatsApp profile auth roots, Telegram polling, Microsoft Teams service URL trust checks (#73706, #75670, #87366, #87451, #87334, #84535, #82492, #83304, #87160)", "verified": true},
+            {"title": "Mobile and chat surfaces: iOS Pro UI, hosted push relay default, realtime Talk tab playback, Gateway chat transport, onboarding, Talk permissions, WebChat reconnect delivery, session picker behavior (#87367, #87531, #87682, #88096, #88105)", "verified": true},
+            {"title": "Browser, channel, and automation inputs stricter: Browser tool timeouts, viewport/tab indices, Gateway ports, cron retry handling, Discord component ids, schema array refs, Telegram callback pages, channel progress callbacks reject malformed values earlier (#82887)", "verified": true}
+        ],
+        "features": [
+            {"title": "Provider, media, and document coverage expands with Claude Opus 4.8, Fal Krea image schemas, NVIDIA featured models, MiniMax streaming music responses, encrypted PDF extraction, voice model catalogs, GitHub Copilot agent runtime support, Codex Supervisor plugin path (#87845, #87890, #80775, #84764, #87751, #87794)", "value": "New model and media capabilities"},
+            {"title": "CLI, auth, doctor, and provider paths fail faster and recover more clearly: malformed numeric/version options rejected, workspace dotenv provider credentials ignored, heartbeat de... (changelog)", "value": "Improved error handling and recovery"}
+        ]
+    },
+    "sentiment_summary": "Community sentiment appears negative due to multiple critical regressions reported immediately after release, particularly affecting Feishu, Matrix, qqbot, Microsoft Teams, and Telegram channels. Users are likely frustrated that these regressions were not caught before release, though the existence of a pre-release with fixes suggests active remediation.",
+    "platform_impact": {"windows": "low", "macos": "low", "linux": "low", "discord": "low", "slack": "low", "telegram": "high"},
+    "usage": {"tokens_in": 21163, "tokens_out": 7977, "cost_usd": 0.00329584, "latency_ms": 208945, "api_calls": 3},
+    "version_history": [
+        {"version": "2026.5.28", "date": "2026-05-30", "tag": "latest", "highlights": "Runtime recovery, expanded provider support, CLI hardening"},
+        {"version": "2026.5.27", "date": "2026-05-28", "tag": "stable", "highlights": "Channel delivery safety, mobile improvements"},
+        {"version": "2026.5.26", "date": "2026-05-25", "tag": "stable", "highlights": "Discord webhook fixes, Telegram polling stability"},
+        {"version": "2026.5.25", "date": "2026-05-22", "tag": "stable", "highlights": "Auth hardening, doctor improvements"},
+        {"version": "2026.5.24", "date": "2026-05-20", "tag": "stable", "highlights": "Matrix session recovery, Slack improvements"},
+        {"version": "2026.5.23", "date": "2026-05-18", "tag": "stable", "highlights": "Provider catalog expansion"}
+    ],
+    "clawsweeper": {
+        "total_candidates": 50,
+        "active_work": [
+            {"number": 89338, "title": "Feishu MEDIA/image upload fails when appSecret uses SecretRef", "priority": "P0"},
+            {"number": 89302, "title": "ContextEngine afterTurn declares isHeartbeat but does not forward it", "priority": "P0"},
+            {"number": 89216, "title": "Matrix bindings for per-room agent routing silently ignored", "priority": "P0"},
+            {"number": 88955, "title": "qqbot WebSocket reconnection causes delivery failure", "priority": "P1"},
+            {"number": 88836, "title": "msteams messages with attachments misthreaded", "priority": "P1"},
+            {"number": 88773, "title": "Telegram DM exec requires approval despite allowlist", "priority": "P1"},
+            {"number": 81892, "title": "Reasoning not delivered on Matrix channel", "priority": "P2"},
+            {"number": 79552, "title": "Android node event before WebSocket handshake", "priority": "P2"},
+            {"number": 87889, "title": "Update from Dashboard skipped, works from CLI", "priority": "P2"}
+        ],
+        "recently_closed": [
+            {"number": 88954, "title": "openclaw update --channel beta cmd couldn't get beta", "reason": "Resolved in beta channel"},
+            {"number": 88867, "title": "Feishu streaming card shows only last character", "reason": "Fixed in next release"}
+        ]
+    }
+};
+
+(function() {
+  var d = DATA;
+  var app = document.getElementById('app');
+
+  function badgeClass(text) {
+    if (!text) return '';
+    return 'badge-' + text.replace(/[^a-z0-9_]/g, '_');
+  }
+
+  function formatTime(iso) {
+    var dt = new Date(iso);
+    var now = new Date();
+    var diff = now - dt;
+    var hours = Math.floor(diff / 3600000);
+    if (hours < 1) return 'just now';
+    if (hours < 24) return hours + 'h ago';
+    var days = Math.floor(hours / 24);
+    return days + 'd ago';
+  }
+
+  function severityIcon(sev) {
+    if (sev === 'high') return '🔴';
+    if (sev === 'medium') return '🟡';
+    return '🟢';
+  }
+
+  function platformIcon(name) {
+    var icons = { windows: '🪟', macos: '🍎', linux: '🐧', discord: '💬', slack: '💼', telegram: '✈️' };
+    return icons[name] || '📦';
+  }
+
+  // Calculate health score: 100 - (open_issues * 8), clamped 0-100
+  var openIssues = d.known_issues.filter(function(i) { return i.clawsweeper_decision === 'keep_open'; }).length;
+  var healthScore = Math.max(0, Math.min(100, 100 - openIssues * 8));
+  var fixesVerified = d.changes.fixes.filter(function(f) { return f.verified; }).length;
+
+  // Category counts
+  var categories = { all: d.known_issues.length };
+  d.known_issues.forEach(function(i) {
+    categories[i.category] = (categories[i.category] || 0) + 1;
+  });
+
+  // Build HTML
+  var html = '';
+
+  // Hero
+  html += '<div class="hero">';
+  html += '<div class="hero-top">';
+  html += '<span class="hero-emoji">' + d.recommendation + '</span>';
+  html += '<div class="hero-meta">';
+  html += '<h1>Release Assessment — v' + d.version + '</h1>';
+  html += '<span class="sub">Confidence: <strong style="color:var(--accent)">' + d.confidence + '</strong> · Assessed ' + formatTime(d.assessed_at) + '</span>';
+  html += '</div>';
+  html += '</div>';
+  html += '<p class="hero-headline">' + d.headline.split(';').map(function(part, i) {
+    if (i === 0) return '<strong>' + part.trim() + '</strong>';
+    return part.trim();
+  }).join('; ') + '</p>';
+  html += '</div>';
+
+  // Stats row
+  html += '<div class="stats-row">';
+
+  // Health Score
+  var scoreColor = healthScore >= 70 ? 'green' : healthScore >= 40 ? 'amber' : 'red';
+  var barColor = healthScore >= 70 ? 'green' : healthScore >= 40 ? 'amber' : 'red';
+  html += '<div class="stat-card accent-glow">';
+  html += '<div class="stat-label">Health Score</div>';
+  html += '<div class="stat-value ' + scoreColor + '">' + healthScore + '%</div>';
+  html += '<div class="progress-bar-wrap">';
+  html += '<div class="progress-bar-track"><div class="progress-bar-fill ' + barColor + '" style="width:' + healthScore + '%"></div></div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Open Issues
+  html += '<div class="stat-card">';
+  html += '<div class="stat-label">Open Issues</div>';
+  html += '<div class="stat-value red">' + openIssues + '</div>';
+  html += '<div class="progress-bar-wrap">';
+  html += '<div class="progress-bar-track"><div class="progress-bar-fill red" style="width:' + Math.min(100, openIssues * 9) + '%"></div></div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Fixes Verified
+  html += '<div class="stat-card">';
+  html += '<div class="stat-label">Verified Fixes</div>';
+  html += '<div class="stat-value green">' + fixesVerified + '/' + d.changes.fixes.length + '</div>';
+  html += '<div class="progress-bar-wrap">';
+  html += '<div class="progress-bar-track"><div class="progress-bar-fill green" style="width:' + (fixesVerified / Math.max(1, d.changes.fixes.length) * 100) + '%"></div></div>';
+  html += '</div>';
+  html += '</div>';
+
+  // Clawsweeper
+  html += '<div class="stat-card">';
+  html += '<div class="stat-label">Clawsweeper Candidates</div>';
+  html += '<div class="stat-value amber">' + d.clawsweeper.total_candidates + '</div>';
+  html += '<div class="progress-bar-wrap">';
+  html += '<div class="progress-bar-track"><div class="progress-bar-fill amber" style="width:' + Math.min(100, d.clawsweeper.active_work.length / d.clawsweeper.total_candidates * 100) + '%"></div></div>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>';
+
+  // Filter chips
+  html += '<div class="filter-chips">';
+  Object.keys(categories).forEach(function(cat) {
+    var label = cat === 'all' ? 'All Issues' : cat === 'regression' ? 'Regressions' : cat === 'diamond_lobster' ? 'Diamond 🦞' : cat;
+    var activeClass = cat === 'all' ? ' active' : '';
+    html += '<div class="chip' + activeClass + '" data-filter="' + cat + '" onclick="filterIssues(this, \'' + cat + '\')">';
+    html += label + ' <span class="chip-count">' + categories[cat] + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Known Issues Leaderboard
+  html += '<div class="section-title"><span class="icon">🏆</span> Known Issues — Ranked by Severity</div>';
+  html += '<div class="leaderboard">';
+  html += '<div class="leaderboard-header">';
+  html += '<span>#</span><span>Issue</span><span>Severity</span><span>Category</span><span>Clawsweeper</span>';
+  html += '</div>';
+  d.known_issues.forEach(function(issue, idx) {
+    html += '<div class="leaderboard-row" data-category="' + issue.category + '">';
+    html += '<span class="rank-num' + (idx < 3 ? ' top3' : '') + '">' + (idx + 1) + '</span>';
+    html += '<span class="issue-title"><span class="issue-num">#' + issue.number + '</span>' + issue.title + '</span>';
+    html += '<span><span class="badge badge-' + issue.severity + '">' + severityIcon(issue.severity) + ' ' + issue.severity + '</span></span>';
+    html += '<span><span class="badge ' + badgeClass(issue.category) + '">' + (issue.category === 'diamond_lobster' ? '🦞 diamond_lobster' : issue.category) + '</span></span>';
+    html += '<span><span class="badge ' + badgeClass(issue.clawsweeper_decision) + '">' + issue.clawsweeper_decision.replace('_', ' ') + '</span></span>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Evidence section
+  html += '<div class="section-title"><span class="icon">⚖️</span> Evidence</div>';
+  html += '<div class="evidence-grid">';
+
+  // For
+  html += '<div class="evidence-card for">';
+  html += '<h3><span style="color:var(--green)">✓</span> For Updating</h3>';
+  html += '<ul class="evidence-list">';
+  d.evidence.for_updating.forEach(function(item) {
+    html += '<li>' + item + '</li>';
+  });
+  html += '</ul></div>';
+
+  // Against
+  html += '<div class="evidence-card against">';
+  html += '<h3><span style="color:var(--red)">✗</span> Against Updating</h3>';
+  html += '<ul class="evidence-list">';
+  d.evidence.against_updating.forEach(function(item) {
+    html += '<li>' + item + '</li>';
+  });
+  html += '</ul></div>';
+
+  html += '</div>';
+
+  // Neutral evidence
+  html += '<div class="evidence-card neutral" style="margin-bottom:28px;">';
+  html += '<h3><span style="color:var(--amber)">~</span> Neutral Context</h3>';
+  html += '<ul class="evidence-list">';
+  d.evidence.neutral.forEach(function(item) {
+    html += '<li>' + item + '</li>';
+  });
+  html += '</ul></div>';
+
+  // Changes card with tabs
+  html += '<div class="section-title"><span class="icon">📦</span> Changes in v' + d.version + '</div>';
+  html += '<div class="changes-card">';
+  html += '<div class="changes-tabs">';
+  html += '<div class="changes-tab active" onclick="showTab(this, \'fixes\')">Fixes (' + d.changes.fixes.length + ')</div>';
+  html += '<div class="changes-tab" onclick="showTab(this, \'features\')">Features (' + d.changes.features.length + ')</div>';
+  html += '<div class="changes-tab" onclick="showTab(this, \'breaking\')">Breaking (' + d.changes.breaking.length + ')</div>';
+  html += '</div>';
+
+  // Fixes content
+  html += '<div class="changes-content" id="tab-fixes">';
+  d.changes.fixes.forEach(function(item) {
+    html += '<div class="change-item">';
+    html += '<div class="change-icon fix">✓</div>';
+    html += '<div>' + item.title + (item.verified ? ' <span class="verified-check">✓ Verified</span>' : '') + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Features content
+  html += '<div class="changes-content" id="tab-features" style="display:none">';
+  d.changes.features.forEach(function(item) {
+    html += '<div class="change-item">';
+    html += '<div class="change-icon feature">★</div>';
+    html += '<div><strong>' + item.value + '</strong><br>' + item.title + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Breaking content
+  html += '<div class="changes-content" id="tab-breaking" style="display:none">';
+  if (d.changes.breaking.length === 0) {
+    html += '<div class="change-item"><div class="change-icon fix">✓</div><div>No breaking changes in this release.</div></div>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+
+  // Clawsweeper Active Work
+  html += '<div class="section-title"><span class="icon">🧹</span> Clawsweeper — Active Work</div>';
+  html += '<div class="clawsweeper-card">';
+  html += '<div class="clawsweeper-header">';
+  html += '<h3>🛠 Active Candidates</h3>';
+  html += '<span class="badge">' + d.clawsweeper.active_work.length + ' of ' + d.clawsweeper.total_candidates + ' tracked</span>';
+  html += '</div>';
+  d.clawsweeper.active_work.forEach(function(item) {
+    html += '<div class="clawsweeper-item">';
+    html += '<span class="cw-num">#' + item.number + '</span>';
+    html += '<span>' + item.title + '</span>';
+    html += '<span class="badge badge-' + item.priority.toLowerCase() + '">' + item.priority + '</span>';
+    html += '</div>';
+  });
+  // Recently closed
+  html += '<div class="clawsweeper-header" style="border-bottom:none; border-top:1px solid var(--border);">';
+  html += '<h3>✓ Recently Closed</h3>';
+  html += '</div>';
+  d.clawsweeper.recently_closed.forEach(function(item) {
+    html += '<div class="clawsweeper-item">';
+    html += '<span class="cw-num">#' + item.number + '</span>';
+    html += '<span style="color:var(--muted); text-decoration:line-through;">' + item.title + '</span>';
+    html += '<span class="badge badge-close">' + item.reason + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Platform Impact
+  html += '<div class="section-title"><span class="icon">📊</span> Platform Impact</div>';
+  html += '<div class="platform-grid">';
+  Object.keys(d.platform_impact).forEach(function(plat) {
+    var level = d.platform_impact[plat];
+    var dotClass = level === 'high' ? 'red' : level === 'medium' ? 'amber' : 'green';
+    html += '<div class="platform-card">';
+    html += '<div class="platform-dot ' + dotClass + '"></div>';
+    html += '<div class="platform-info">';
+    html += '<span class="platform-name">' + platformIcon(plat) + ' ' + plat + '</span>';
+    html += '<span class="platform-level">' + level + ' impact</span>';
+    html += '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Sentiment
+  html += '<div class="section-title"><span class="icon">💭</span> Community Sentiment</div>';
+  html += '<div class="sentiment-card">';
+  html += '<h3><span class="badge badge-high">⚠️ Negative</span></h3>';
+  html += '<p class="sentiment-text">' + d.sentiment_summary + '</p>';
+  html += '</div>';
+
+  // Version History Timeline
+  html += '<div class="section-title"><span class="icon">📜</span> Version History</div>';
+  html += '<div class="version-timeline">';
+  d.version_history.forEach(function(v) {
+    html += '<div class="version-item">';
+    html += '<div class="version-dot-col">';
+    html += '<div class="version-dot' + (v.tag === 'latest' ? ' latest' : '') + '"></div>';
+    if (v !== d.version_history[d.version_history.length - 1]) {
+      html += '<div class="version-line"></div>';
+    }
+    html += '</div>';
+    html += '<div class="version-info">';
+    html += '<div class="version-header">';
+    html += '<span class="version-number">v' + v.version + '</span>';
+    html += '<span class="version-date">' + v.date + '</span>';
+    html += '<span class="badge ' + (v.tag === 'latest' ? 'badge-latest' : '') + '">' + v.tag + '</span>';
+    html += '</div>';
+    html += '<div class="version-highlights">' + v.highlights + '</div>';
+    html += '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Thesis / Full assessment
+  html += '<div class="section-title"><span class="icon">📝</span> Full Assessment</div>';
+  html += '<div class="sentiment-card">';
+  html += '<p class="sentiment-text" style="font-size:13px;">' + d.thesis + '</p>';
+  html += '</div>';
+
+  app.innerHTML = html;
+
+  // Header badges
+  document.getElementById('headerVersion').textContent = 'v' + d.version;
+  document.getElementById('headerUpdated').textContent = 'Updated ' + formatTime(d.assessed_at);
+  document.getElementById('footerUsage').textContent =
+    d.usage.tokens_in + ' in · ' + d.usage.tokens_out + ' out · $' + d.usage.cost_usd.toFixed(4) + ' · ' + (d.usage.latency_ms / 1000).toFixed(1) + 's · ' + d.usage.api_calls + ' API calls';
+
+  // Tab switching
+  window.showTab = function(el, tab) {
+    document.querySelectorAll('.changes-tab').forEach(function(t) { t.classList.remove('active'); });
+    el.classList.add('active');
+    ['fixes', 'features', 'breaking'].forEach(function(t) {
+      var panel = document.getElementById('tab-' + t);
+      if (panel) panel.style.display = t === tab ? '' : 'none';
+    });
+  };
+
+  // Category filtering
+  window.filterIssues = function(el, cat) {
+    document.querySelectorAll('.chip').forEach(function(c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    document.querySelectorAll('.leaderboard-row').forEach(function(row) {
+      if (cat === 'all' || row.getAttribute('data-category') === cat) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    // Re-rank visible rows
+    var visible = document.querySelectorAll('.leaderboard-row:not([style*="display: none"])');
+    visible.forEach(function(row, i) {
+      row.querySelector('.rank-num').textContent = i + 1;
+      row.querySelector('.rank-num').className = 'rank-num' + (i < 3 ? ' top3' : '');
+    });
+  };
+})();
+</script>
+
+</body>
+</html>
