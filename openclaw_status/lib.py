@@ -294,15 +294,22 @@ INJECTION_PATTERNS = [
     # Chinese / Japanese / Korean (CJK)
     r"(?i)忽略(之前|以上|前面)(的)?(所有)?(指令|指示|说明)",
     r"(?i)あなたは(今|これから)",
-    # Unicode zero-width chars (strip them entirely)
-    r"[\u200b\u200c\u200d\ufeff\u00ad]",
     # HTML entity obfuscation
     r"&lt;|&gt;|&amp;|&#\d+;|&#x[0-9a-fA-F]+;",
 ]
 
+# Invisible / obfuscation characters. Removed ENTIRELY (not marked) and BEFORE
+# instruction matching, so they can't be spliced into keywords like
+# "ig\u200bnore previous instructions" to defeat the patterns above.
+OBFUSCATION_PATTERNS = [
+    r"[\u200b\u200c\u200d\ufeff\u00ad]",  # zero-width chars + soft hyphen
+]
+
 
 def _strip_injection_patterns(text: str) -> str:
-    """Remove known injection patterns from text."""
+    """Remove obfuscation chars, then mark known injection patterns as [STRIPPED]."""
+    for pattern in OBFUSCATION_PATTERNS:
+        text = re.sub(pattern, "", text)
     for pattern in INJECTION_PATTERNS:
         text = re.sub(pattern, "[STRIPPED]", text)
     return text
