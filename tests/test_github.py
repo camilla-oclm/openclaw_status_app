@@ -1,7 +1,52 @@
-"""Tests for openclaw_status.github — scouting logic (pure functions)."""
+"""Tests for openclaw_status.github — scouting logic (pure functions) + ETag cache."""
+import json
+import urllib.error
+
 import pytest
 
 from openclaw_status import github, config
+
+
+# ── ETag caching in gh_rest ─────────────────────────────────────────────────
+
+class _FakeResp:
+    def __init__(self, body, etag=None):
+        self._body = json.dumps(body).encode()
+        self.headers = {"ETag": etag} if etag else {}
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_gh_rest_caches_etag_then_serves_304(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(config, "ETAG_CACHE_FILE", tmp_path / "etag-cache.json")
+    calls = {"n": 0}
+
+    def fake_urlopen(req, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _FakeResp({"v": 1}, etag='"abc"')  # first fetch: 200 + ETag
+        raise urllib.error.HTTPError(req.full_url, 304, "Not Modified", {}, None)
+
+    monkeypatch.setattr(github.urllib.request, "urlopen", fake_urlopen)
+
+    assert github.gh_rest("/repos/o/r/releases/latest") == {"v": 1}
+    assert config.ETAG_CACHE_FILE.exists()
+    # Second call → server says 304 Not Modified → served from cache, same data.
+    assert github.gh_rest("/repos/o/r/releases/latest") == {"v": 1}
+    assert calls["n"] == 2
+
+
+def test_gh_rest_returns_none_without_token(monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_TOKEN", None)
+    assert github.gh_rest("/anything") is None
 
 
 # ── extract_closing_refs ─────────────────────────────────────────────────────

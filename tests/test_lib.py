@@ -1,5 +1,6 @@
 """Tests for openclaw_status.lib — JSON extraction, sanitization, locks, timers."""
 import json
+import os
 
 import pytest
 
@@ -29,6 +30,35 @@ def test_extract_json_failure_returns_error_dict():
     out = lib.extract_json("there is no json here at all")
     assert "error" in out
     assert out["error"] == "Failed to parse JSON"
+
+
+def test_extract_json_brace_inside_string_value():
+    # A '}' inside a string value must not close the object early (string-aware scan).
+    out = lib.extract_json('reasoning... {"a": "}{ braces }", "b": 2} trailing')
+    assert out == {"a": "}{ braces }", "b": 2}
+
+
+def test_extract_json_escaped_quote_in_string():
+    out = lib.extract_json(r'note {"a": "she said \"hi\" }", "b": 1} end')
+    assert out == {"a": 'she said "hi" }', "b": 1}
+
+
+# ── save_json (atomic) ──────────────────────────────────────────────────────
+
+def test_save_json_roundtrips_and_leaves_no_temp(tmp_path):
+    target = tmp_path / "state.json"
+    lib.save_json(target, {"x": [1, 2, 3], "y": "café"})
+    assert lib.load_json(target) == {"x": [1, 2, 3], "y": "café"}
+    # The atomic write must not leave its temp file behind.
+    assert [p.name for p in tmp_path.iterdir()] == ["state.json"]
+
+
+def test_save_json_overwrites_atomically(tmp_path):
+    target = tmp_path / "state.json"
+    lib.save_json(target, {"v": 1})
+    lib.save_json(target, {"v": 2})
+    assert lib.load_json(target) == {"v": 2}
+    assert sum(1 for _ in tmp_path.iterdir()) == 1
 
 
 # ── sanitize ────────────────────────────────────────────────────────────────
@@ -106,12 +136,66 @@ def test_pipeline_lock_acquire_and_release(tmp_path):
     lock = tmp_path / ".pipeline.lock"
     assert lib.acquire_pipeline_lock(lock) is True
     assert lock.exists()
+    assert lock.read_text().strip() == str(os.getpid())  # PID recorded
     lib.release_pipeline_lock(lock)
     assert not lock.exists()
 
 
+def test_pipeline_lock_blocks_second_acquire(tmp_path):
+    # flock is the source of truth: while one holder is live, a second acquire fails
+    # (and the held lock file must keep the holder's PID, not get truncated to empty).
+    lock = tmp_path / ".pipeline.lock"
+    assert lib.acquire_pipeline_lock(lock) is True
+    try:
+        assert lib.acquire_pipeline_lock(lock) is False
+        assert lock.read_text().strip() != ""  # PID not wiped by the failed attempt
+    finally:
+        lib.release_pipeline_lock(lock)
+
+
 def _write(path, obj):
     path.write_text(json.dumps(obj))
+
+
+# ── notify (alert webhook) ──────────────────────────────────────────────────
+
+class _Resp:
+    def close(self):
+        pass
+
+
+def test_notify_noop_when_webhook_unset(monkeypatch):
+    monkeypatch.setattr(config, "ALERT_WEBHOOK_URL", None)
+    calls = []
+    monkeypatch.setattr(lib.urllib.request, "urlopen",
+                        lambda *a, **k: calls.append(a) or _Resp())
+    lib.notify("hello")
+    assert calls == []  # nothing sent
+
+
+def test_notify_posts_text_when_webhook_set(monkeypatch):
+    monkeypatch.setattr(config, "ALERT_WEBHOOK_URL", "https://hooks.example/abc")
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["body"] = json.loads(req.data.decode())
+        return _Resp()
+
+    monkeypatch.setattr(lib.urllib.request, "urlopen", fake_urlopen)
+    lib.notify("the message")
+    assert captured["url"] == "https://hooks.example/abc"
+    assert captured["body"] == {"text": "the message"}
+
+
+def test_notify_swallows_errors(monkeypatch):
+    monkeypatch.setattr(config, "ALERT_WEBHOOK_URL", "https://hooks.example/abc")
+
+    def boom(*a, **k):
+        raise OSError("network down")
+
+    monkeypatch.setattr(lib.urllib.request, "urlopen", boom)
+    lib.notify("x")  # must not raise
 
 
 # ── check_cost_thresholds ───────────────────────────────────────────────────

@@ -12,9 +12,10 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 
 from openclaw_status import config
-from openclaw_status.lib import _retry, sanitize
+from openclaw_status.lib import _retry, sanitize, load_json, save_json
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -91,24 +92,60 @@ def search_issues(query_string: str, limit: int = 25, timeout: int = 30) -> list
     return [n for n in nodes if n]  # drop nulls (non-Issue search hits)
 
 
+def _load_etag_cache() -> dict:
+    if config.ETAG_CACHE_FILE.exists():
+        try:
+            return load_json(config.ETAG_CACHE_FILE)
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_etag_cache(cache: dict) -> None:
+    # Bound the cache so it can't grow unbounded across many release tags.
+    if len(cache) > 200:
+        cache = dict(list(cache.items())[-200:])
+    try:
+        save_json(config.ETAG_CACHE_FILE, cache)
+    except Exception:
+        pass
+
+
 def gh_rest(path: str, timeout: int = 30):
     """GET a GitHub REST API path (e.g. '/repos/o/r/releases'). Returns parsed
-    JSON, or None on error / when no token is set."""
+    JSON, or None on error / when no token is set.
+
+    Uses ETag conditional requests: the previous ETag is sent as If-None-Match, and
+    a 304 (Not Modified) is served from the on-disk cache — no re-download, and the
+    request doesn't count against the GitHub rate limit."""
     if not config.GITHUB_TOKEN:
         return None
 
+    cache = _load_etag_cache()
+    cached = cache.get(path)
+
     def _call():
-        req = urllib.request.Request(
-            config.GITHUB_API_URL + path,
-            headers={
-                "Authorization": f"Bearer {config.GITHUB_TOKEN}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "openclaw-status",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
+        headers = {
+            "Authorization": f"Bearer {config.GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "openclaw-status",
+        }
+        if cached and cached.get("etag"):
+            headers["If-None-Match"] = cached["etag"]
+        req = urllib.request.Request(config.GITHUB_API_URL + path, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = json.loads(resp.read())
+                etag = resp.headers.get("ETag")
+            if etag:
+                cache[path] = {"etag": etag, "data": body}
+                _save_etag_cache(cache)
+            return body
+        except urllib.error.HTTPError as e:
+            if e.code == 304 and cached:
+                return cached["data"]  # Not Modified — serve from cache
+            raise
 
     try:
         result, _ = _retry(_call)
@@ -125,7 +162,8 @@ def gh_rest(path: str, timeout: int = 30):
 def fetch_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 20) -> str:
     """Fetch a raw file from a GitHub repo (raw.githubusercontent.com). Sends the
     token if present (helps rate limits / private). Returns text, or '' on error."""
-    url = f"{config.GITHUB_RAW_URL}/{owner}/{repo}/{ref}/{path}"
+    url = (f"{config.GITHUB_RAW_URL}/{quote(owner, safe='')}/{quote(repo, safe='')}"
+           f"/{quote(ref, safe='')}/{quote(path, safe='/')}")
     headers = {"User-Agent": "openclaw-status"}
     if config.GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {config.GITHUB_TOKEN}"
@@ -167,7 +205,7 @@ def latest_release() -> dict | None:
 
 def release_by_tag(tag: str) -> dict | None:
     return _norm_release(
-        gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/tags/{tag}"))
+        gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/tags/{quote(tag, safe='')}"))
 
 
 def list_releases(limit: int = 30) -> list[dict]:
