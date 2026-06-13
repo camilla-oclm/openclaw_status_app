@@ -169,7 +169,7 @@ The validator is a **reviewer, not a duplicate analyst** - it checks the primary
 - [x] Pipeline logging (agrees/disagrees, refined Y/N, per-step usage)
 
 ### Phase 3 — Static Frontend ✅
-- [x] **Production design: `mockups/mockup-status.html`** — a decision-first dashboard (hero verdict → stats → thesis → evidence → known issues → changes → platform impact → sentiment → triage → history). `mockup-leaderboard.html` / `mockup-cards.html` are legacy fallbacks. (A terminal mockup was explored but lost.)
+- [x] **Production design: `web/template.html`** — a decision-first dashboard (hero verdict → stats → thesis → evidence → known issues → changes → platform impact → sentiment → triage → history). Rendered to `web/index.html`.
 - [x] Self-contained HTML, zero dependencies
 - [x] Dark mode + light mode support (toggle persisted to localStorage, respects `prefers-color-scheme`)
 - [x] Mobile responsive (CSS grid auto-fit, clamp sizing)
@@ -225,27 +225,29 @@ The validator is a **reviewer, not a duplicate analyst** - it checks the primary
 ## File Structure
 
 ```
-projects/openclaw-status/
+openclaw_status_app/
 ├── PLAN.md              ← this file
 ├── REQUIREMENTS.md      ← architecture & security
 ├── .env                 ← API keys (gitignored)
-├── .env.example         ← template
 ├── .gitignore
-├── mockups/
-│   ├── mockup-status.html      ← live production template (data injected here)
-│   ├── mockup-leaderboard.html ← legacy fallback
-│   └── mockup-cards.html        ← legacy fallback
-│   └── index.html              ← generated output (gitignored)
-├── src/
-│   ├── collector.py     ✅ data collection pipeline
-│   ├── agent.py         ✅ LLM assessment agent
-│   ├── gen_findings.py  ✅ PRE-LLM findings viewer
-│   ├── build_mockup.py  ✅ injects real pipeline data into mockup HTML
-│   └── test_models.py   ✅ model comparison tool
+├── run.py               ← entry point
+├── pytest.ini
+├── openclaw_status/     ← the package
+│   ├── cli.py           ← unified CLI (collect / assess / render / render-assessment / full)
+│   ├── collector.py     ← data collection pipeline
+│   ├── agent.py         ← LLM assessment pipeline (primary → validator → refine)
+│   ├── render.py        ← findings view + public assessment page
+│   ├── lib.py           ← shared utils (sanitize, OpenRouter, locks, usage, timer)
+│   └── config.py        ← paths, models, .env
+├── web/
+│   ├── template.html    ← production frontend template (data injected here)
+│   └── index.html       ← generated public page (gitignored)
+├── tests/               ← pytest suite
 └── data/
-    ├── raw-data.json    ← collector output
+    ├── raw-data.json    ← collector output (gitignored)
     ├── assessment.json  ← agent output
-    ├── model-comparison.json
+    ├── history.json     ← past verdicts
+    ├── findings.html    ← raw findings view (gitignored)
     └── usage.json       ← cost tracking
 ```
 

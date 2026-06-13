@@ -1,20 +1,20 @@
 """
 Renderer: generates static HTML from collected + assessed data.
-Merges gen_findings.py + build_mockup.py into one module.
+
+- build_findings_page(): a raw, pre-LLM data view (data/findings.html)
+- render_assessment_page(): the public assessment page (web/index.html)
 """
 
 import json
 import os
 import re
-import sys
 import shutil
 import tempfile
 import html as html_mod
-from datetime import datetime, timezone
 from pathlib import Path
 
 from openclaw_status import config
-from openclaw_status.lib import load_json, save_json, sanitize_for_html, now_iso
+from openclaw_status.lib import load_json
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -626,25 +626,8 @@ function colIndex(table) {{ return table === 'issues' ? 2 : 1; }}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Assessment page (injected mockup)
+#  Public assessment page
 # ═══════════════════════════════════════════════════════════════════════════
-
-def _find_mockup_source() -> str | None:
-    """Return the first existing template from MOCKUP_CANDIDATES.
-
-    Warns loudly if the preferred (first) candidate is missing and we have to
-    fall back to a later one, so template drift is visible instead of silent.
-    """
-    for idx, name in enumerate(config.MOCKUP_CANDIDATES):
-        path = config.MOCKUP_DIR / name
-        if path.exists():
-            if idx > 0:
-                missing = ", ".join(config.MOCKUP_CANDIDATES[:idx])
-                print(f"  ⚠️ Preferred template(s) missing ({missing}); "
-                      f"falling back to {name}", file=sys.stderr)
-            return str(path)
-    return None
-
 
 def _deep_sanitize_markdown(obj):
     """Remove escaped markdown backslashes that break JSON."""
@@ -658,7 +641,7 @@ def _deep_sanitize_markdown(obj):
 
 
 def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
-    """Merge assessment.json + raw-data.json into the flat DATA dict mockups expect."""
+    """Merge assessment.json + raw-data.json into the flat DATA dict the template expects."""
     a = assessment_raw.get("assessment", {})
     sources = raw.get("sources", {})
     cw = sources.get("clawsweeper", {})
@@ -753,23 +736,20 @@ def _inject_data(html: str, data: dict) -> str:
     return html
 
 
-def inject_assessment_into_mockup(assessment_raw: dict = None, raw: dict = None, output_path: str = None) -> str:
-    """Build the full assessment page by injecting pipeline data into mockup HTML.
+def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output_path: str = None) -> str:
+    """Build the public assessment page by injecting pipeline data into the template.
 
     Implements:
     - Rollback: backs up existing page before overwriting
     - Deploy guard: refuses to overwrite if confidence is low or validation errors exist
     - Smoke test: validates generated HTML before writing
-
-    Uses json.dumps for safe injection — no regex replacement that could corrupt
-    special characters in LLM output (thesis, headlines, etc.).
     """
     if assessment_raw is None:
         assessment_raw = load_json(config.ASSESSMENT_FILE)
     if raw is None:
         raw = load_json(config.RAW_DATA_FILE)
 
-    out = output_path or str(config.MOCKUP_DIR / "index.html")
+    out = output_path or str(config.OUTPUT_HTML)
 
     # ── Deploy Guard: check if assessment is safe to deploy ──
     can_deploy, deploy_reasons = _can_deploy(assessment_raw)
@@ -782,35 +762,23 @@ def inject_assessment_into_mockup(assessment_raw: dict = None, raw: dict = None,
             assessment_raw["deploy_blocked_reasons"] = deploy_reasons
         return ""
 
-    mockup_path = _find_mockup_source()
-    if not mockup_path:
-        print("❌ No mockup HTML found in mockups/ directory.")
-        print("   Expected one of: " + ", ".join(config.MOCKUP_CANDIDATES))
+    if not config.TEMPLATE_FILE.exists():
+        print(f"❌ Template not found: {config.TEMPLATE_FILE}")
         return ""
 
     # ── Rollback: backup existing page ──
     _backup_existing(out)
 
-    with open(mockup_path) as f:
+    with open(config.TEMPLATE_FILE) as f:
         html = f.read()
 
     data = _build_assessment_data(assessment_raw, raw)
-
     html = _inject_data(html, data)
-
-    # Update version strings (simple literal replacement, safe)
     version = data.get("version", "")
-    if version:
-        html = html.replace("STATUS v0.0.0", f"STATUS v{version}")
-        # Also handle version in any other literal spots
-        old_versions = re.findall(r"STATUS v[\d.]+", html)
-        for ov in old_versions:
-            if f"STATUS v{version}" not in ov:
-                html = html.replace(ov, f"STATUS v{version}")
 
     # ── Smoke Test: validate before writing ──
     # Write to a temp location first, test, then finalize
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".html", dir=str(config.MOCKUP_DIR))
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".html", dir=str(config.WEB_DIR))
     try:
         with os.fdopen(tmp_fd, "w") as f:
             f.write(html)

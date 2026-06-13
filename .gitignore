@@ -7,8 +7,8 @@ data/findings.html
 data/releases-page.md
 
 # Generated frontend output + rollback backups
-mockups/index.html
-mockups/*.html.prev
+web/index.html
+web/*.html.prev
 
 # Large test fixtures / scratch
 test_output/
@@ -19,6 +19,10 @@ test_output/
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Local Claude Code settings
+.claude/settings.local.json
 
 # Lock files
 data/.pipeline.lock

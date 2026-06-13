@@ -102,46 +102,16 @@ def test_pipeline_timer_not_exceeded():
 
 # ── Pipeline lock ───────────────────────────────────────────────────────────
 
-def test_pipeline_lock_acquire_check_release(tmp_path):
+def test_pipeline_lock_acquire_and_release(tmp_path):
     lock = tmp_path / ".pipeline.lock"
     assert lib.acquire_pipeline_lock(lock) is True
     assert lock.exists()
-    assert lib.check_pipeline_locked(lock) is True
     lib.release_pipeline_lock(lock)
     assert not lock.exists()
-    assert lib.check_pipeline_locked(lock) is False
 
-
-# ── check_data_staleness ────────────────────────────────────────────────────
 
 def _write(path, obj):
     path.write_text(json.dumps(obj))
-
-
-def test_staleness_true_when_identical(tmp_path):
-    prev = tmp_path / "assessment.json"
-    _write(prev, {"version": "1.0", "assessment": {"known_issues": [{"number": 1}, {"number": 2}]}})
-    raw = {"target_version": "1.0", "sources": {"github_issues": [{"number": 1}, {"number": 2}]}}
-    assert lib.check_data_staleness(raw, prev) is True
-
-
-def test_staleness_false_on_version_change(tmp_path):
-    prev = tmp_path / "assessment.json"
-    _write(prev, {"version": "1.0", "assessment": {"known_issues": [{"number": 1}]}})
-    raw = {"target_version": "1.1", "sources": {"github_issues": [{"number": 1}]}}
-    assert lib.check_data_staleness(raw, prev) is False
-
-
-def test_staleness_false_on_issue_change(tmp_path):
-    prev = tmp_path / "assessment.json"
-    _write(prev, {"version": "1.0", "assessment": {"known_issues": [{"number": 1}, {"number": 2}]}})
-    raw = {"target_version": "1.0", "sources": {"github_issues": [{"number": 1}, {"number": 9}]}}
-    assert lib.check_data_staleness(raw, prev) is False
-
-
-def test_staleness_false_when_no_prev(tmp_path):
-    missing = tmp_path / "nope.json"
-    assert lib.check_data_staleness({"target_version": "1.0"}, missing) is False
 
 
 # ── Firecrawl markdown helper ───────────────────────────────────────────────

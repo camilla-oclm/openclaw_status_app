@@ -3,14 +3,12 @@ Shared utilities: sanitization, Composio runner, OpenRouter API, file I/O.
 """
 
 import fcntl
-import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import time
-import threading
 import uuid
 import urllib.error
 import urllib.request
@@ -564,26 +562,6 @@ def release_pipeline_lock(lock_path: Path = None):
         pass
 
 
-def check_pipeline_locked(lock_path: Path = None) -> bool:
-    """Check if a pipeline lock is currently held by a live process.
-
-    Returns:
-        True if locked by a live process, False otherwise.
-    """
-    if lock_path is None:
-        lock_path = config.DATA_DIR / ".pipeline.lock"
-
-    if not lock_path.exists():
-        return False
-    try:
-        with open(lock_path, "r") as f:
-            pid = int(f.read().strip())
-        os.kill(pid, 0)
-        return True
-    except (ValueError, ProcessLookupError, FileNotFoundError):
-        return False
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 #  Run Log / Audit Trail
 # ═══════════════════════════════════════════════════════════════════════════
@@ -659,58 +637,6 @@ class RunLog:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Staleness Check
-# ═══════════════════════════════════════════════════════════════════════════
-
-def check_data_staleness(raw: dict, assessment_path: Path = None) -> bool:
-    """Check if raw data is identical to what was assessed in the previous run.
-
-    Compares key fields: target_version, issue count, issue numbers.
-
-    Args:
-        raw: newly collected raw data dict
-        assessment_path: path to previous assessment.json
-
-    Returns:
-        True if data is unchanged (stale), False if changed.
-    """
-    if assessment_path is None:
-        assessment_path = config.ASSESSMENT_FILE
-
-    if not assessment_path.exists():
-        return False
-
-    try:
-        prev = load_json(assessment_path)
-    except Exception:
-        return False
-
-    prev_version = prev.get("version", "")
-    new_version = raw.get("target_version", "")
-
-    # Compare version
-    if prev_version != new_version:
-        return False
-
-    # Compare issue count and numbers
-    new_issues = raw.get("sources", {}).get("github_issues", [])
-    prev_assessment = prev.get("assessment", {})
-    prev_issues = prev_assessment.get("known_issues", [])
-
-    new_nums = sorted(i.get("number") for i in new_issues if isinstance(i, dict))
-    prev_nums = sorted(i.get("number") for i in prev_issues if isinstance(i, dict))
-
-    if new_nums != prev_nums:
-        return False
-
-    # Compare issue counts
-    if len(new_issues) != len(prev_issues):
-        return False
-
-    return True
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 #  Pipeline Timer (Backpressure / Timeout)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -753,49 +679,3 @@ class PipelineTimer:
             self.exceeded = True
             print(f"  ⏰ Pipeline timeout exceeded ({self.timeout:.0f}s)", file=sys.stderr)
         return self.exceeded
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  Idempotent S3 Upload (placeholder for Phase 4)
-# ═══════════════════════════════════════════════════════════════════════════
-
-def smart_s3_upload(local_path: str, bucket: str, key: str, skip_if_unchanged: bool = True) -> dict:
-    """Upload a file to S3, skipping if the content is unchanged.
-
-    When fully implemented:
-      1. Compute MD5 of local file
-      2. HEAD the S3 object and compare ETag
-      3. Skip upload if hashes match
-      4. Upload with content-type auto-detection
-
-    Args:
-        local_path: path to local file
-        bucket: S3 bucket name
-        key: S3 object key
-        skip_if_unchanged: if True, compare hashes before uploading
-
-    Returns:
-        dict with keys: uploaded (bool), skipped (bool), reason (str)
-    """
-    # TODO: Phase 4 — implement with boto3
-    # Implementation plan:
-    #   import boto3
-    #   s3 = boto3.client('s3')
-    #   with open(local_path, 'rb') as f:
-    #       local_hash = hashlib.md5(f.read()).hexdigest()
-    #   if skip_if_unchanged:
-    #       try:
-    #           head = s3.head_object(Bucket=bucket, Key=key)
-    #           etag = head['ETag'].strip('"')
-    #           if etag == local_hash:
-    #               return {'uploaded': False, 'skipped': True, 'reason': 'content unchanged'}
-    #       except s3.exceptions.ClientError:
-    #           pass  # Object doesn't exist yet
-    #   content_type = 'text/html' if local_path.endswith('.html') else 'application/json'
-    #   s3.upload_file(local_path, bucket, key, ExtraArgs={'ContentType': content_type})
-    #   return {'uploaded': True, 'skipped': False, 'reason': 'uploaded'}
-    return {
-        "uploaded": False,
-        "skipped": False,
-        "reason": "S3 upload not yet implemented (Phase 4 placeholder)",
-    }
