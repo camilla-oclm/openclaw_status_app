@@ -29,6 +29,7 @@ RULES:
 6. Consider ALL platforms — a Windows-only issue still matters for Windows users
 7. Clawsweeper decisions are expert automated analysis — weight them highly
 8. If a fix exists in the pre-release, say "wait for next release" not "skip"
+9. **Weight issues by impact and relevance.** A high-severity issue flagged "AFFECTS THIS VERSION" with many 👍 reactions / comments is a strong signal — these are what should drive the recommendation. A widely-felt regression that affects this version pushes toward ⏸️/⚠️/🔄; do not let it be outweighed by low-impact noise. Mention reaction counts when they're high.
 9. **Extract changes from the changelog.** The release body contains structured sections: "### Highlights", "### Changes", "### Fixes". Parse these into the `changes` field:
    - `changes.breaking`: items from "### Changes" section (or items tagged as breaking)
    - `changes.fixes`: items from "### Fixes" section, set `verified: true`
@@ -190,9 +191,14 @@ def build_context(raw: dict) -> str:
             f"This contains fixes pending for the next stable release."
         )
 
-    # Issues
+    # Issues — ordered by the collector as severity → version-relevance → impact
     if issues:
-        parts.append(f"\n## Open Issues ({len(issues)} total)")
+        relevant = sum(1 for i in issues if i.get("affects_version"))
+        parts.append(
+            f"\n## Open Issues ({len(issues)} total, {relevant} reference this version)\n"
+            f"Ordered by severity, version-relevance, then community impact (👍 + comments). "
+            f"'AFFECTS THIS VERSION' = the report mentions {version} or its series."
+        )
         for i in issues:
             cs_data = i.get("clawsweeper", {})
             cs_info = ""
@@ -201,12 +207,18 @@ def build_context(raw: dict) -> str:
                     f" | Clawsweeper: decision={cs_data.get('decision', '?')}, "
                     f"fixed_release={cs_data.get('fixed_release', 'none')}"
                 )
+            flags = []
+            if i.get("affects_version"):
+                flags.append("AFFECTS THIS VERSION")
+            if i.get("fixed_in"):
+                flags.append(f"fixed_in={','.join(i['fixed_in'])}")
+            flag_str = (" | " + " | ".join(flags)) if flags else ""
             parts.append(f"\n### #{i['number']} [{i.get('category', '?')}] {i['title']}")
             parts.append(f"URL: {i.get('url', '')}")
             parts.append(
-                f"Created: {i.get('created_at', '?')[:10]} | "
-                f"Comments: {i.get('comments', 0)} | "
-                f"Severity: {i.get('severity', '?')}{cs_info}"
+                f"Severity: {i.get('severity', '?')} | impact: {i.get('impact', '?')} | "
+                f"👍 {i.get('reactions', 0)} | Comments: {i.get('comments', 0)} | "
+                f"Created: {i.get('created_at', '?')[:10]}{flag_str}{cs_info}"
             )
             if i.get("labels"):
                 parts.append(f"Labels: {', '.join(i['labels'][:6])}")

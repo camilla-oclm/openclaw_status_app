@@ -670,6 +670,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
                 (raw_i.get("clawsweeper") or {}).get("decision", "unknown"),
             ),
             "fixed_in": issue.get("fixed_in", raw_i.get("fixed_in")),
+            "reactions": raw_i.get("reactions", 0),
+            "impact": raw_i.get("impact"),
+            "affects_version": raw_i.get("affects_version", False),
         })
 
     lr = sources.get("latest_release", {})

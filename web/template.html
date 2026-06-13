@@ -314,7 +314,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "high",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 41,
+      "impact": "high",
+      "affects_version": true
     },
     {
       "number": 91001,
@@ -322,7 +325,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "high",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 27,
+      "impact": "high",
+      "affects_version": true
     },
     {
       "number": 90982,
@@ -330,7 +336,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "high",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 22,
+      "impact": "high",
+      "affects_version": true
     },
     {
       "number": 90890,
@@ -338,7 +347,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "medium",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 16,
+      "impact": "high",
+      "affects_version": true
     },
     {
       "number": 90814,
@@ -346,7 +358,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "high",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 12,
+      "impact": "high",
+      "affects_version": true
     },
     {
       "number": 90756,
@@ -354,7 +369,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "high",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 9,
+      "impact": "medium",
+      "affects_version": true
     },
     {
       "number": 90704,
@@ -362,7 +380,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "high",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 6,
+      "impact": "medium",
+      "affects_version": true
     },
     {
       "number": 90630,
@@ -370,7 +391,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "medium",
       "category": "regression",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 4,
+      "impact": "medium",
+      "affects_version": true
     },
     {
       "number": 64103,
@@ -378,7 +402,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "medium",
       "category": "diamond_lobster",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 13,
+      "impact": "high",
+      "affects_version": false
     },
     {
       "number": 60339,
@@ -386,7 +413,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       "severity": "high",
       "category": "diamond_lobster",
       "clawsweeper_decision": "keep_open",
-      "fixed_in": null
+      "fixed_in": null,
+      "reactions": 13,
+      "impact": "high",
+      "affects_version": false
     }
   ],
   "changes": {
@@ -839,6 +869,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var sev = String(i.severity||"medium");
     var cat = CAT[i.category] || {icon:"📋",label:cap(i.category||"issue"),cls:""};
     var tags = [ el("span",{"class":"tag "+cat.cls},[cat.icon+" "+cat.label]) ];
+    if (i.affects_version){
+      tags.push(el("span",{"class":"tag t-bad"}, "⊘ affects this version"));
+    }
     var dec = i.clawsweeper_decision;
     if (dec && dec!=="unknown"){
       tags.push(el("span",{"class":"tag "+(dec==="keep_open"?"t-warn":"t-good")}, (dec==="keep_open"?"⊙ keep open":"✓ "+dec)));
@@ -847,6 +880,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       tags.push(el("span",{"class":"tag t-good"}, "✓ fixed in "+i.fixed_in));
     } else if (i.category==="regression"){
       tags.push(el("span",{"class":"tag t-bad"}, "● unfixed"));
+    }
+    if (i.reactions){
+      tags.push(el("span",{"class":"tag"}, "👍 "+i.reactions));
     }
     tags.push(el("span",{"class":"tag"}, sev+" severity"));
     return el("div",{"class":"issue sev-"+sev, "data-cat":i.category||"other"},[

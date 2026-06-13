@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 
-from openclaw_status import config
+from openclaw_status import config, github
 from openclaw_status.lib import (
     composio, sanitize, parse_firecrawl_markdown, save_json, now_iso,
     version_from_release, parallel_fetch,
@@ -268,18 +268,56 @@ def _enrich_body(item: dict):
 
 
 def fetch_github_issues(release_body: str = "", prerelease_body: str = "", release_date: str = "",
-                        status: "SourceStatus | None" = None) -> list[dict]:
-    """Fetch GitHub issues. Returns list of issues, or empty list on failure.
+                        version: str = "", status: "SourceStatus | None" = None) -> list[dict]:
+    """Scout the repo for issues impacting the assessed version.
 
-    If a SourceStatus instance is passed, the result is recorded on it so the
-    collector's saved source_status reflects this source.
+    Prefers the direct GitHub API (token) — which ranks candidates by community
+    impact (👍) and flags version relevance — and falls back to Composio when no
+    token is set or the API is unavailable. If a SourceStatus is passed, the
+    result is recorded on it.
     """
     import time as _time
     t0 = _time.time()
-    print("🐛 Fetching GitHub issues...")
+    print("🐛 Scouting GitHub issues...")
 
-    issues = []
-    seen = set()
+    issues = None
+    if github.has_token():
+        print("  Using direct GitHub API (token)")
+        issues = github.scout_issues(release_date, version)
+        if issues is None:
+            print("  ⚠ GitHub API unavailable — falling back to Composio", file=sys.stderr)
+    if issues is None:
+        print("  Using Composio")
+        issues = _scout_composio(release_date, version)
+
+    # Cross-reference fixes: an issue is "fixed" only if the release/pre-release
+    # body explicitly closes it (fixes/closes/resolves #N) — not any bare #N,
+    # which is usually a PR number.
+    print("  🔗 Cross-referencing fixes...")
+    stable_fixed = github.extract_closing_refs(release_body)
+    prerelease_fixed = github.extract_closing_refs(prerelease_body)
+    for item in issues:
+        num_str = str(item["number"])
+        item["fixed_in"] = []
+        if num_str in stable_fixed:
+            item["fixed_in"].append("stable")
+        if num_str in prerelease_fixed:
+            item["fixed_in"].append("prerelease")
+
+    elapsed = _time.time() - t0
+    n_relevant = sum(1 for i in issues if i.get("affects_version"))
+    print(f"  Found {len(issues)} issues ({n_relevant} reference this version)")
+    if status is not None:
+        status.record("github_issues", "ok" if issues else "empty",
+                      f"{len(issues)} issues ({n_relevant} version-relevant)", elapsed)
+    return issues
+
+
+def _scout_composio(release_date: str = "", version: str = "") -> list[dict]:
+    """Fallback scout via Composio GraphQL (no reactions available, so impact is
+    inferred from comment volume only). Issues are still ranked by 👍 server-side."""
+    repo = f"{config.REPO_OWNER}/{config.REPO_NAME}"
+    issues, seen = [], set()
 
     def _add_nodes(nodes, category, severity):
         for node in nodes:
@@ -290,62 +328,29 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
                 continue
             issues.append(_build_issue(node, category, severity))
             seen.add(node["number"])
-        return len(issues)
 
-    # Regressions: bugs opened after stable release
     if release_date:
-        print(f"  🔍 Regressions (bugs after {release_date[:10]}...")
-        _add_nodes(
-            _gh_graphql(
-                f"repo:{config.REPO_OWNER}/{config.REPO_NAME} is:issue is:open label:bug "
-                f"created:>{release_date[:10]} sort:created-desc", 20
-            ),
-            "regression", "critical",
-        )
+        _add_nodes(_gh_graphql(
+            f"repo:{repo} is:issue is:open created:>={release_date[:10]} sort:reactions-+1-desc", 20),
+            "regression", "high")
+    _add_nodes(_gh_graphql(
+        f'repo:{repo} is:issue is:open label:"{github.DIAMOND_LABEL}" sort:reactions-+1-desc', 15),
+        "diamond_lobster", "critical")
+    _add_nodes(_gh_graphql(
+        f"repo:{repo} is:issue is:open sort:reactions-+1-desc", 15),
+        "active", "high")
 
-    # Diamond lobster: highest severity
-    print("  🔍 Diamond lobster bugs...")
-    _add_nodes(
-        _gh_graphql(
-            f'repo:{config.REPO_OWNER}/{config.REPO_NAME} is:issue is:open '
-            f'label:"issue-rating: 🦞 diamond lobster" label:bug sort:updated-desc', 15
-        ),
-        "diamond_lobster", "critical",
-    )
-
-    # Active bugs: recently updated with discussion
-    print("  🔍 Active bugs (recently updated)...")
-    _add_nodes(
-        _gh_graphql(
-            f"repo:{config.REPO_OWNER}/{config.REPO_NAME} is:issue is:open label:bug sort:updated-desc", 15
-        ),
-        "active", "high",
-    )
-
-    # Enrich top 15 with body
-    print(f"  📝 Enriching {len(issues)} issues with body...")
+    # Enrich top 15 with body (Composio: one API call each)
     for item in issues[:15]:
         _enrich_body(item)
 
-    # Cross-reference fixes against release/prerelease PR bodies
-    print("  🔗 Cross-referencing fixes...")
-    def _extract_prs(body):
-        return set(re.findall(r"#(\d+)", body)) if body else set()
-
-    stable_prs = _extract_prs(release_body)
-    prerelease_prs = _extract_prs(prerelease_body)
-
+    # Backfill the signal fields the API path provides, so downstream is uniform.
     for item in issues:
-        num_str = str(item["number"])
-        item["fixed_in"] = []
-        if num_str in stable_prs:
-            item["fixed_in"].append("stable")
-        if num_str in prerelease_prs:
-            item["fixed_in"].append("prerelease")
-
-    elapsed = _time.time() - t0
-    if status is not None:
-        status.record("github_issues", "ok" if issues else "empty", f"{len(issues)} issues", elapsed)
+        item.setdefault("reactions", 0)
+        item.setdefault("total_reactions", 0)
+        text = f"{item.get('title','')} {item.get('body','')}"
+        item["affects_version"] = github.version_relevant(text, version)
+        item["impact"] = github.impact_level(0, item.get("comments", 0))
     return issues
 
 
@@ -548,6 +553,7 @@ def collect(output_path=None) -> dict:
             release_body=release.get("body", "") if release else "",
             prerelease_body=prerelease.get("body", "") if prerelease else "",
             release_date=release.get("published_at", "") if release else "",
+            version=version,
             status=source_status,
         )
 
