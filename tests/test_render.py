@@ -112,3 +112,44 @@ def test_smoke_fails_on_unbalanced_tags(tmp_path):
 def test_smoke_missing_file(tmp_path):
     result = render.smoke_test_html(str(tmp_path / "nope.html"))
     assert result["pass"] is False
+
+
+# ── _inject_data ────────────────────────────────────────────────────────────
+
+def _parse_injected_json(html):
+    import re, json
+    m = re.search(r'<script id="assessment-data" type="application/json">(.*?)</script>',
+                  html, re.DOTALL)
+    body = m.group(1).replace("<\\/", "</")  # undo the </ escaping, like a browser
+    return json.loads(body)
+
+
+def test_inject_json_script_contract():
+    tpl = '<html><body><script id="assessment-data" type="application/json">\n{}\n</script></body></html>'
+    out = render._inject_data(tpl, {"version": "2026.6.1", "recommendation": "✅"})
+    data = _parse_injected_json(out)
+    assert data["version"] == "2026.6.1"
+    assert data["recommendation"] == "✅"
+
+
+def test_inject_escapes_script_close_in_data():
+    tpl = '<script id="assessment-data" type="application/json">{}</script>'
+    out = render._inject_data(tpl, {"thesis": "evil </script><script>alert(1)</script>"})
+    # The raw injected text must not contain an unescaped </script> from the data
+    body = out.split('application/json">', 1)[1].rsplit("</script>", 1)[0]
+    assert "</script>" not in body
+    # ...but it round-trips back to the original string
+    assert _parse_injected_json(out)["thesis"] == "evil </script><script>alert(1)</script>"
+
+
+def test_inject_legacy_var_data_contract():
+    tpl = "<script>var DATA = {};\nrender();</script>"
+    out = render._inject_data(tpl, {"version": "9.9.9"})
+    assert '"version": "9.9.9"' in out
+    assert "var DATA = {" in out
+    assert "render();" in out  # surrounding code preserved
+
+
+def test_inject_no_marker_returns_unchanged():
+    tpl = "<html><body>no data slot here</body></html>"
+    assert render._inject_data(tpl, {"version": "1.0"}) == tpl

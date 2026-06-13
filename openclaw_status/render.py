@@ -62,11 +62,20 @@ def smoke_test_html(html_path: str, expected_version: str = "") -> dict:
     else:
         checks.append({"name": "version_present", "passed": True, "detail": "No version to check"})
 
-    # (c) Check for unclosed key tags
+    # Exclude the injected data zone from structural checks — it legitimately
+    # contains arbitrary LLM text that must not be parsed as markup. Supports both
+    # the JSON <script> contract and the legacy `var DATA = {...};` contract.
+    data_zone = re.compile(
+        r'<script id="assessment-data"[^>]*>.*?</script>|var DATA = \{.*?\};',
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    structural = data_zone.sub("", content)
+
+    # (c) Check for unclosed key tags (on structural content, data zone removed)
     tag_issues = []
     for tag in ("html", "head", "body", "table", "div", "script", "style"):
-        opens = len(re.findall(f"<{tag}[\\s>]", content, re.IGNORECASE))
-        closes = len(re.findall(f"</{tag}>", content, re.IGNORECASE))
+        opens = len(re.findall(f"<{tag}[\\s>]", structural, re.IGNORECASE))
+        closes = len(re.findall(f"</{tag}>", structural, re.IGNORECASE))
         if opens != closes:
             tag_issues.append(f"<{tag}>: {opens} open, {closes} close")
     if tag_issues:
@@ -74,14 +83,9 @@ def smoke_test_html(html_path: str, expected_version: str = "") -> dict:
     else:
         checks.append({"name": "tag_balance", "passed": True, "detail": "All key tags balanced"})
 
-    # (d) Check for unescaped </script> outside data injection zone
-    # Find the DATA injection zone and exclude it
-    injection_match = re.search(r"var DATA = \{.*?\};", content, flags=re.DOTALL)
-    outside_content = content
-    if injection_match:
-        outside_content = content[:injection_match.start()] + content[injection_match.end():]
+    # (d) Check for unescaped </script> outside scripts and the data zone
     # Remove all <script>...</script> blocks to find stray </script>
-    stripped = re.sub(r"<script[^>]*>.*?</script>", "", outside_content, flags=re.DOTALL | re.IGNORECASE)
+    stripped = re.sub(r"<script[^>]*>.*?</script>", "", structural, flags=re.DOTALL | re.IGNORECASE)
     stray_scripts = re.findall(r"</script>", stripped, re.IGNORECASE)
     if stray_scripts:
         checks.append({"name": "stray_script_close", "passed": False,
@@ -718,6 +722,37 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     return _deep_sanitize_markdown(data)
 
 
+def _inject_data(html: str, data: dict) -> str:
+    """Inject the assessment data dict into the template.
+
+    Preferred contract: a `<script id="assessment-data" type="application/json">`
+    block whose body is replaced with the JSON. `</` is escaped to `<\\/` so no
+    string value can break out of the <script> tag (standard safe-embed trick).
+
+    Falls back to the legacy `var DATA = {...};` contract for older templates.
+    A replacement *function* is used so backslashes in the JSON are never treated
+    as regex backreferences.
+    """
+    safe_json = json.dumps(data, indent=2, ensure_ascii=False).replace("</", "<\\/")
+
+    sd_pattern = re.compile(
+        r'(<script id="assessment-data" type="application/json">)(.*?)(</script>)',
+        flags=re.DOTALL,
+    )
+    if sd_pattern.search(html):
+        return sd_pattern.sub(lambda m: m.group(1) + "\n" + safe_json + "\n" + m.group(3), html, count=1)
+
+    # Legacy templates: var DATA = {...};
+    legacy = re.compile(r"var DATA = \{.*?\};", flags=re.DOTALL)
+    m = legacy.search(html)
+    if m:
+        legacy_json = json.dumps(data, indent=4, ensure_ascii=True)
+        return html[:m.start()] + f"var DATA = {legacy_json};" + html[m.end():]
+
+    print("⚠️ Could not find a data injection point in template — data not injected")
+    return html
+
+
 def inject_assessment_into_mockup(assessment_raw: dict = None, raw: dict = None, output_path: str = None) -> str:
     """Build the full assessment page by injecting pipeline data into mockup HTML.
 
@@ -761,17 +796,7 @@ def inject_assessment_into_mockup(assessment_raw: dict = None, raw: dict = None,
 
     data = _build_assessment_data(assessment_raw, raw)
 
-    # SAFETY: Use json.dumps with proper escaping for injection.
-    # This avoids re.subn which corrupts \n, \t, \u in LLM text.
-    data_json = json.dumps(data, indent=4, ensure_ascii=True)
-
-    # Inject data block — find the exact pattern and replace
-    pattern = r"var DATA = \{.*?\};"
-    match = re.search(pattern, html, flags=re.DOTALL)
-    if match:
-        html = html[:match.start()] + f"var DATA = {data_json};" + html[match.end():]
-    else:
-        print("⚠️ Could not find 'var DATA = {...};' in mockup HTML — data not injected")
+    html = _inject_data(html, data)
 
     # Update version strings (simple literal replacement, safe)
     version = data.get("version", "")

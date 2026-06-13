@@ -168,22 +168,21 @@ The validator is a **reviewer, not a duplicate analyst** - it checks the primary
 - [x] Refinement prompt (incorporates validator critique)
 - [x] Pipeline logging (agrees/disagrees, refined Y/N, per-step usage)
 
-### Phase 3 — Static Frontend 🔄
-- [x] Design template: **leaderboard** is the live production template (`mockups/mockup-leaderboard.html`), `mockup-cards.html` is the fallback. (A terminal/CLI mockup was explored but the file was lost; config no longer references it — see `config.MOCKUP_CANDIDATES`.)
+### Phase 3 — Static Frontend ✅
+- [x] **Production design: `mockups/mockup-status.html`** — a decision-first dashboard (hero verdict → stats → thesis → evidence → known issues → changes → platform impact → sentiment → triage → history). `mockup-leaderboard.html` / `mockup-cards.html` are legacy fallbacks. (A terminal mockup was explored but lost.)
 - [x] Self-contained HTML, zero dependencies
-- [x] Dark mode + light mode support
-- [x] Mobile responsive
-- [x] XSS safe (textContent only)
-- [x] Assessment data rendering (thesis, evidence, issues, platform impact)
-- [x] Raw findings data (npm, clawsweeper work/closed, release history with highlights)
+- [x] Dark mode + light mode support (toggle persisted to localStorage, respects `prefers-color-scheme`)
+- [x] Mobile responsive (CSS grid auto-fit, clamp sizing)
+- [x] XSS safe — all data rendered via `textContent`/DOM builders, `href`s scheme-checked
+- [x] Assessment data rendering (verdict, thesis, evidence, issues w/ severity sort + filters, changes tabs, platform heatmap, sentiment, history timeline)
+- [x] Raw findings data (npm, clawsweeper work/closed in collapsible triage section)
 - [x] Auto-linking issue numbers to GitHub
-- [x] Collapsible sections
-- [x] Typewriter thesis reveal
-- [x] "What is this" intro for new visitors
-- [ ] Refine visual design
-- [ ] Error states (fetch fails, stale data)
-- [ ] CSP headers
-- [ ] Production-ready (load from JSON, not embedded data)
+- [x] Collapsible sections (`<details>`, no JS needed)
+- [x] Refined visual design (verified via headless render, dark + light)
+- [x] Error states (JSON parse failure → friendly message; stale-data freshness pill goes amber/red by age)
+- [x] CSP-clean: no inline event handlers, no inline styles on data, no external resources (`script-src 'self'` compatible). **CSP response *headers* are set at deploy (Phase 4).**
+- [x] Robust data injection: `<script type="application/json">` contract with `</` escaping (replaces the fragile `var DATA` regex; legacy contract still supported)
+- [ ] Production-ready: switch from build-time JSON injection to **runtime `fetch('latest.json')`** (Phase 4 — so data updates don't require re-uploading the HTML)
 
 ### Phase 4 — AWS Deployment 🔲
 - [ ] S3 bucket (static hosting + JSON data)
@@ -233,8 +232,10 @@ projects/openclaw-status/
 ├── .env.example         ← template
 ├── .gitignore
 ├── mockups/
-│   ├── mockup-leaderboard.html ← live production template (data injected here)
-│   └── mockup-cards.html        ← fallback template
+│   ├── mockup-status.html      ← live production template (data injected here)
+│   ├── mockup-leaderboard.html ← legacy fallback
+│   └── mockup-cards.html        ← legacy fallback
+│   └── index.html              ← generated output (gitignored)
 ├── src/
 │   ├── collector.py     ✅ data collection pipeline
 │   ├── agent.py         ✅ LLM assessment agent
