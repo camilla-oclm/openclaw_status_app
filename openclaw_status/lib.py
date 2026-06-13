@@ -331,21 +331,27 @@ DAILY_COST_LIMIT = 2.0    # USD
 MONTHLY_COST_LIMIT = 30.0  # USD
 
 
-def notify(text: str) -> None:
-    """Best-effort push of an alert to config.ALERT_WEBHOOK_URL (Slack/Discord-style
-    {"text": ...} JSON). No-op if unset; never raises — an alert must not crash a run."""
+def notify(text: str) -> bool:
+    """Best-effort push of an alert to config.ALERT_WEBHOOK_URL. No-op if unset;
+    never raises — an alert must not crash a run. Returns True only if delivered.
+
+    Discord incoming webhooks expect {"content": ...}; Slack (and most others)
+    expect {"text": ...}. We pick the key the target understands from the URL."""
     url = config.ALERT_WEBHOOK_URL
     if not url:
-        return
+        return False
+    key = "content" if "discord.com/api/webhooks" in url or "discordapp.com/api/webhooks" in url else "text"
     try:
-        data = json.dumps({"text": text}).encode()
+        data = json.dumps({key: text}).encode()
         req = urllib.request.Request(
             url, data=data,
             headers={"Content-Type": "application/json", "User-Agent": "openclaw-status"},
         )
         urllib.request.urlopen(req, timeout=10).close()
+        return True
     except Exception as e:
         print(f"  ⚠ Alert webhook failed: {e}", file=sys.stderr)
+        return False
 
 
 def check_cost_thresholds():

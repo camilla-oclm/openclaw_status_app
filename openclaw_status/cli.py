@@ -8,6 +8,7 @@ Usage:
   openclaw-status assess --single      Single-call mode (skip validator)
   openclaw-status render-assessment    Render the public assessment page
   openclaw-status full                 collect → assess → render-assessment
+  openclaw-status notify-test [msg]    Send a test alert to ALERT_WEBHOOK_URL
 """
 
 import sys
@@ -60,6 +61,22 @@ def _populate_run_log(run_log):
         pass
 
 
+def cmd_notify_test(args):
+    """Fire a one-off alert so you can confirm ALERT_WEBHOOK_URL reaches your channel."""
+    from .lib import notify
+    if not config.ALERT_WEBHOOK_URL:
+        print("❌ ALERT_WEBHOOK_URL is not set in .env — add your webhook URL there first.")
+        sys.exit(1)
+    msg = getattr(args, "message", None) or \
+        "✅ OpenClaw Status: test alert — your webhook is wired up correctly."
+    print("→ POSTing a test alert to the configured webhook…")
+    if notify(msg):
+        print("✓ Delivered (HTTP OK). Check your channel for the message.")
+    else:
+        print("❌ Send failed — re-check the URL (see the warning above).")
+        sys.exit(1)
+
+
 def cmd_full(args):
     print("\n" + "=" * 60)
     print("OpenClaw Status — Full Pipeline")
@@ -100,6 +117,8 @@ def main():
     assess_p.add_argument("--single", action="store_true", help="Single-call mode (skip validator)")
     sub.add_parser("render-assessment", help="Render the public assessment page")
     sub.add_parser("full", help="Full pipeline: collect → assess → render-assessment")
+    nt = sub.add_parser("notify-test", help="Send a test alert to ALERT_WEBHOOK_URL")
+    nt.add_argument("message", nargs="?", help="Optional custom message to send")
 
     args = parser.parse_args()
 
@@ -112,6 +131,7 @@ def main():
         "assess": cmd_assess,
         "render-assessment": cmd_render_assessment,
         "full": cmd_full,
+        "notify-test": cmd_notify_test,
     }
 
     if args.command in commands:
