@@ -14,6 +14,32 @@ renders a single decision page with a clear verdict:
 | ⏸️ Skip this version | The open issues outweigh the benefits |
 | 🔄 Wait for next release | Fixes are already lined up in a pre-release |
 
+The verdict isn't a vibe — it's the end of an evidence pipeline that scouts real post-release
+bug reports, scores them against the repo's own severity labels, and has **two different LLM
+providers** argue it out before anything ships.
+
+### Highlights
+
+- **Independent multi-model review.** The analyst and validator are *different* providers
+  (DeepSeek + Qwen), with a third (MiniMax) as fallback — so no model rubber-stamps its own
+  reasoning, and a single-vendor outage can't sink a run.
+- **Evidence-ranked issue scouting.** Three GitHub searches (all sorted by 👍) are scored from
+  the repo's real `P0…P4` / breakage / harm-area labels and ranked by severity *blended with
+  whether the bug affects the assessed version* — a confirmed regression outranks a critical
+  about some other release.
+- **Safe-by-construction frontend.** A zero-dependency static page that builds its DOM with
+  `textContent` (XSS-safe) and no inline handlers (CSP-clean) — even though every field is
+  untrusted LLM text.
+- **Ships only trustworthy pages.** A deploy guard refuses low-confidence or invalid
+  assessments, an HTML smoke test runs *before* the old page is overwritten, and each outgoing
+  page is archived to a browsable per-version snapshot.
+- **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (~$0.02–0.05/run).
+- **Hermetic test suite.** ~100 network-free tests gate CI on every push.
+
+**Live demo:** deployment is fully scripted for AWS (Lightsail + Route53 + Caddy auto-HTTPS,
+self-updating every few hours) — see [`plan.md`](plan.md). Not yet live; run it locally with the
+steps below.
+
 ---
 
 ## How it works
@@ -108,13 +134,18 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   is a zero-dependency, dark/light, mobile-responsive page that builds its DOM with
   `textContent` (XSS-safe) and no inline handlers (CSP-clean). A deploy guard refuses to
   publish a low-confidence or invalid assessment, and a smoke test validates the HTML
-  before it overwrites the previous page (which is backed up to `*.html.prev`).
+  before it overwrites the previous page.
+- **Browsable history.** Instead of discarding the outgoing page, each render snapshots it to
+  `web/archive/<version>.html` (named from the version it was built for) and the "Past verdicts"
+  timeline links every entry that has a snapshot. Retention is capped (`config.ARCHIVE_KEEP`,
+  default 30); if a page's version can't be read, it falls back to a single `*.html.prev`
+  rollback copy. Caddy already serves `web/`, so the archive is reachable with no extra config.
 
 ---
 
 ## Setup
 
-Requires **Python 3.10+** and `curl`.
+Requires **Python 3.10+** (no other system tools — all HTTP uses the standard library).
 
 ```bash
 pip install -r requirements.txt
@@ -173,7 +204,10 @@ openclaw_status_app/
 │   └── config.py           paths, models, env
 ├── web/
 │   ├── template.html       production frontend template (data injected here)
-│   └── index.html          generated public page (gitignored)
+│   ├── index.html          generated public page (gitignored)
+│   └── archive/            per-version page snapshots (gitignored)
+├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile
+├── plan.md                 deploy runbook (Lightsail + Route53 + Caddy)
 ├── tests/                  pytest suite
 └── data/                   pipeline outputs (gitignored)
 ```
@@ -192,8 +226,3 @@ openclaw_status_app/
   `fetch('latest.json')` so refreshing the data no longer means re-rendering the whole page.
 - **Route releases history more cheaply.** Release bodies are fetched per run; cache by ETag
   to skip unchanged data.
-- **Browsable previous runs.** Recycle the render rollback backup: instead of one
-  `web/index.html.prev`, archive each outgoing page to `web/archive/<version>.html` on render,
-  and make the history section's entries link to those snapshots (`data/history.json` already
-  lists them). Caddy serves `web/`, so the archive is reachable with no extra config; cap
-  retention (e.g. keep the last 30).

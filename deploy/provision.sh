@@ -48,9 +48,20 @@ if [ ! -f "$APP_DIR/.env" ]; then
   echo "!! Created $APP_DIR/.env — set OPENROUTER_API_KEY + GITHUB_TOKEN before the first run."
 fi
 
-# --- ownership (app world-readable so Caddy can serve web/; .env locked) ----
+# --- ownership + serve permissions -----------------------------------------
+# Caddy runs as its own user, so it can only read web/ via the *world* bits. A
+# non-default umask on the operator's clone could strip those (→ 403s on first
+# load), so force web/ world-readable+traversable and the app root traversable,
+# independent of how the repo was cloned. .env is locked last so it stays 600.
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+chmod -R a+rX "$APP_DIR/web"   # files world-readable, dirs world-traversable
+chmod o+x "$APP_DIR"           # let Caddy traverse the app root into web/
 chmod 600 "$APP_DIR/.env"
+
+# --- git: allow any user (operator/agent/timer) to run git in the repo ------
+# .git is owned by APP_USER, so a pull run as root or the operator would trip
+# git's "dubious ownership" guard. --system whitelists the repo for every user.
+git config --system --add safe.directory "$APP_DIR"
 
 # --- systemd timer ---------------------------------------------------------
 install -m644 "$APP_DIR/deploy/openclaw-status.service" /etc/systemd/system/

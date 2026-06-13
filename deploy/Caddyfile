@@ -8,6 +8,7 @@ __DOMAIN__ {
 	root * /opt/openclaw_status_app/web
 	file_server
 	encode gzip
-	# index.html is the only page; fall back to it for any path.
+	# Real files (index.html, archive/<version>.html) are served directly;
+	# any unknown path falls back to the main page.
 	try_files {path} /index.html
 }
