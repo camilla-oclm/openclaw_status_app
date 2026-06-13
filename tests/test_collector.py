@@ -45,6 +45,8 @@ def test_fetch_github_issues_records_on_passed_status(monkeypatch):
     Previously it recorded into a dead module-level global while collect()
     saved a shadowing local, so 'github_issues' never appeared in the output.
     """
+    # force the (hermetic) Composio fallback path — no live API
+    monkeypatch.setattr(collector.github, "has_token", lambda: False)
     monkeypatch.setattr(collector, "_gh_graphql", lambda *a, **k: [])
     status = SourceStatus()
     issues = collector.fetch_github_issues(status=status)
@@ -54,6 +56,7 @@ def test_fetch_github_issues_records_on_passed_status(monkeypatch):
 
 
 def test_fetch_github_issues_no_status_does_not_crash(monkeypatch):
+    monkeypatch.setattr(collector.github, "has_token", lambda: False)
     monkeypatch.setattr(collector, "_gh_graphql", lambda *a, **k: [])
     # status defaults to None — must not raise
     assert collector.fetch_github_issues() == []

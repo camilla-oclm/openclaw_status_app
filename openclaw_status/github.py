@@ -101,17 +101,43 @@ def search_issues(query_string: str, limit: int = 25, timeout: int = 30) -> list
 # (These reference ISSUES — unlike bare "#123" which is usually a PR number.)
 _CLOSING_RE = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", re.I)
 
-# Label substrings that denote a high-severity issue regardless of reactions.
-_HIGH_SEV_LABELS = (
-    "regression", "crash", "data-loss", "data loss", "dataloss",
-    "severity: high", "severity: critical", "priority: high", "priority: critical",
-    "p0", "p1", "s1", "blocker",
+# OpenClaw severity model (learned from the real repo's labels):
+#   • Maintainer priority labels P0..P4 are the primary severity signal.
+#   • "impact:*" labels mark the kind of harm; the serious ones bump severity.
+#   • "issue-rating: 🦞 diamond lobster" is a quality/notability RATING (also put on
+#     feature requests) — it is NOT a severity, so it no longer forces "critical".
+_SEV = ["low", "medium", "high", "critical"]
+_PRIORITY = {"p0": 3, "p1": 2, "p2": 1, "p3": 0, "p4": 0}
+_SERIOUS_IMPACT = (
+    "impact:security", "impact:data", "impact:message-loss",
+    "impact:session-state", "impact:auth-provider",
 )
+_BUG_KEYWORDS = ("regression", "crash", "data-loss", "data loss", "dataloss")
+
+# Feature/proposal markers — these are NOT issues impacting the version, so the
+# scout drops them (a wished-for feature is no reason to skip an update).
+_FEATURE_LABELS = ("enhancement", "feature", "feature request", "proposal")
+_FEATURE_TITLE = ("[feature]", "feature request", "feat(", "[rfc]", "design proposal", "proposal:")
 
 
 def extract_closing_refs(body: str) -> set:
     """Issue numbers a release/PR body says it fixes (fixes/closes/resolves #N)."""
     return set(_CLOSING_RE.findall(body or ""))
+
+
+def is_feature(title: str, labels) -> bool:
+    """True if the issue is a feature request / proposal rather than a defect."""
+    low = [str(l).lower() for l in (labels or [])]
+    if any(f in low for f in _FEATURE_LABELS):
+        return True
+    t = (title or "").lower()
+    return any(k in t for k in _FEATURE_TITLE)
+
+
+def priority_of(labels) -> str | None:
+    """Maintainer priority label (P0..P4) mapped to severity, or None if absent."""
+    ranks = [_PRIORITY[str(l).lower()] for l in (labels or []) if str(l).lower() in _PRIORITY]
+    return _SEV[max(ranks)] if ranks else None
 
 
 def is_diamond(labels) -> bool:
@@ -144,29 +170,42 @@ def impact_level(thumbs_up: int, comments: int) -> str:
     return "low"
 
 
-def derive_severity(labels, thumbs_up: int, comments: int) -> str:
-    """Severity from maintainer labels first, then community-impact signals."""
-    if is_diamond(labels):
-        return "critical"
+def derive_severity(labels, thumbs_up: int = 0, comments: int = 0) -> str:
+    """Severity from the maintainer priority label (P0..P4) when present, else
+    community impact, bumped one level for serious harm (security / data /
+    message-loss / session-state) or a regression/crash label."""
     low = [str(l).lower() for l in (labels or [])]
-    if any(any(k in l for k in _HIGH_SEV_LABELS) for l in low):
-        return "high"
     thumbs_up, comments = int(thumbs_up or 0), int(comments or 0)
-    if thumbs_up >= 10 or comments >= 25:
-        return "high"
-    if thumbs_up >= 3 or comments >= 8:
-        return "medium"
-    return "low"
+
+    ranks = [_PRIORITY[l] for l in low if l in _PRIORITY]
+    if ranks:
+        base = max(ranks)
+    elif thumbs_up >= 10 or comments >= 25:
+        base = 2
+    elif thumbs_up >= 3 or comments >= 8:
+        base = 1
+    else:
+        base = 0
+
+    # Breakage labels (regression/crash/data-loss) bump one level toward critical.
+    # A serious harm area (security/data/message-loss/…) only floors at "high"
+    # — it shouldn't, on its own, turn every high-priority bug into critical.
+    if any(k in l for l in low for k in _BUG_KEYWORDS):
+        base = min(base + 1, 3)
+    elif any(any(s in l for s in _SERIOUS_IMPACT) for l in low):
+        base = max(base, 2)
+    return _SEV[base]
 
 
 def categorize(created_at: str, labels, affects_version: bool, impact: str, release_date: str) -> str:
-    """diamond_lobster (severity label) > regression (post-release & relevant) > active."""
-    if is_diamond(labels):
-        return "diamond_lobster"
+    """regression (post-release & affects this version, or labelled regression)
+    > diamond_lobster (top-rated tracked issue) > active."""
     low = [str(l).lower() for l in (labels or [])]
     after_release = bool(release_date) and (created_at or "")[:10] >= release_date[:10]
-    if after_release and (affects_version or "regression" in low or impact == "high"):
+    if "regression" in low or (after_release and affects_version):
         return "regression"
+    if is_diamond(labels):
+        return "diamond_lobster"
     return "active"
 
 
@@ -197,6 +236,8 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
         "labels": labels,
         "author": (node.get("author") or {}).get("login", ""),
         "platform": "general",
+        "priority": priority_of(labels),
+        "is_feature": is_feature(title, labels),
         "affects_version": affects,
         "impact": impact,
         "severity": derive_severity(labels, thumbs, comments),
@@ -205,36 +246,43 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
     }
 
 
-_SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+_SEV_WEIGHT = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
 
 def rank_key(issue: dict):
-    """Sort key: severity, then version relevance, then community impact."""
-    return (
-        _SEV_RANK.get(issue.get("severity"), 9),
-        not issue.get("affects_version"),
-        -(int(issue.get("reactions") or 0) * 2 + int(issue.get("comments") or 0)),
-    )
+    """Sort key (ascending) blending severity and version relevance, tie-broken by
+    community impact. Affecting THIS version is worth a strong boost: a version-
+    relevant high ranks above a critical that's about some other version, but a
+    version-relevant low still can't outrank a genuine critical."""
+    score = _SEV_WEIGHT.get(issue.get("severity"), 0) * 2 + (3 if issue.get("affects_version") else 0)
+    impact = int(issue.get("reactions") or 0) * 2 + int(issue.get("comments") or 0)
+    return (-score, -impact)
 
 
 def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> list | None:
     """Scout the repo's issues via the direct API, ranked by impact.
 
-    Runs three searches (all sorted by 👍 so the most-felt issues come first):
+    Runs three searches (all sorted by 👍 so the most-felt issues come first, and
+    all excluding `enhancement` so feature requests don't drown out defects):
       1. opened since the release  — candidate regressions (NOT gated on label:bug,
          so freshly-filed un-triaged breakage is still caught)
-      2. the diamond-lobster severity label
+      2. maintainer-flagged top priority (label:P1)
       3. most-reacted open issues overall (ongoing majors of any age)
+
+    Feature requests / proposals are dropped (a wished-for feature is no reason to
+    skip an update). Only `stale` issues are skipped — NOT `clawsweeper:no-new-fix-pr`,
+    which marks issues that have no fix yet (exactly the ones we care about).
 
     Returns ranked, de-duplicated issue dicts, or None if the API is unavailable
     (so the caller can fall back to Composio).
     """
     repo = f"repo:{config.REPO_OWNER}/{config.REPO_NAME}"
+    no_feat = "-label:enhancement"
     queries = []
     if release_date:
-        queries.append(f"{repo} is:issue is:open created:>={release_date[:10]} sort:reactions-+1-desc")
-    queries.append(f'{repo} is:issue is:open label:"{DIAMOND_LABEL}" sort:reactions-+1-desc')
-    queries.append(f"{repo} is:issue is:open sort:reactions-+1-desc")
+        queries.append(f"{repo} is:issue is:open created:>={release_date[:10]} {no_feat} sort:reactions-+1-desc")
+    queries.append(f"{repo} is:issue is:open label:P1 {no_feat} sort:reactions-+1-desc")
+    queries.append(f"{repo} is:issue is:open {no_feat} sort:reactions-+1-desc")
 
     seen, issues, any_ok = set(), [], False
     for q in queries:
@@ -247,7 +295,9 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> 
             if num is None or num in seen:
                 continue
             labels = [l.get("name", "") for l in (node.get("labels") or {}).get("nodes", [])]
-            if any(t in labels for t in ("stale", "clawsweeper:no-new-fix-pr")):
+            if "stale" in labels:
+                continue
+            if is_feature(node.get("title", ""), labels):
                 continue
             seen.add(num)
             issues.append(normalize_node(node, release_date, version))
