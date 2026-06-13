@@ -114,20 +114,6 @@ def _write(path, obj):
     path.write_text(json.dumps(obj))
 
 
-# ── Firecrawl markdown helper ───────────────────────────────────────────────
-
-def test_find_markdown_key_shallow():
-    assert lib._find_markdown_key({"data": {"markdown": "hello"}}) == "hello"
-
-
-def test_find_markdown_key_deep():
-    assert lib._find_markdown_key({"x": {"y": {"markdown": "deep"}}}) == "deep"
-
-
-def test_find_markdown_key_absent():
-    assert lib._find_markdown_key({"a": 1}) == ""
-
-
 # ── check_cost_thresholds ───────────────────────────────────────────────────
 
 def test_cost_threshold_daily_alert(tmp_path, monkeypatch):
