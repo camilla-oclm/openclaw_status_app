@@ -86,7 +86,9 @@ Public website showing the latest stable OpenClaw release with an LLM-generated 
 
 **Sources:**
 - GitHub Releases API (`openclaw/openclaw`) - changelog, release date, version
-- GitHub Issues via Composio GraphQL - categorized (regression, diamond_lobster, active)
+- GitHub Issues via the direct GitHub API (token-preferred) — scouted and ranked by
+  community impact (👍 reactions + comments) and version relevance; categorized
+  (regression, diamond_lobster, active). Falls back to Composio GraphQL when no token.
 - ClawSweeper-state - work candidates, recently closed, per-issue records (decision, fixed_release)
 - ClawSweeper records - detailed metadata from `state` branch per issue
 - Composio `REDDIT_SEARCH_ACROSS_SUBREDDITS` - community sentiment
@@ -98,8 +100,8 @@ Public website showing the latest stable OpenClaw release with an LLM-generated 
 - npm poll: hourly (triggers full pipeline on version change)
 
 **Auth:**
-- GitHub: Composio handles it (authenticated GraphQL)
-- Composio: existing CLI auth on this machine
+- GitHub: `GITHUB_TOKEN` in `.env` (direct API, public read-only); falls back to Composio if unset
+- Composio: existing CLI auth on this machine (Reddit, Firecrawl, GitHub fallback)
 - Firecrawl: Composio handles it
 - npm: public, no auth
 

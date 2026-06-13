@@ -16,7 +16,7 @@
 | Domain | `openclawstatus.io` (Fede to register) | 2026-05-29 |
 | AWS | New account, S3 + CloudFront only | 2026-05-29 |
 | Agent location | This machine (not Lambda) | 2026-05-29 |
-| GitHub auth | Composio CLI handles it | 2026-05-29 |
+| GitHub auth | `GITHUB_TOKEN` direct API (impact + reaction data), Composio fallback | 2026-06-13 |
 | Release detection | Hourly npm registry poll | 2026-05-29 |
 | Frontend | Pure HTML/CSS/JS, zero dependencies | 2026-05-29 |
 | Monitoring | OpenRouter usage tracking built-in | 2026-05-29 |
@@ -63,7 +63,7 @@ This Machine (cron triggered)
 | Source | Tool | Auth | What It Provides |
 |--------|------|------|-----------------|
 | GitHub Releases | Composio + Firecrawl | Composio | Changelog, fix details, PR links |
-| GitHub Issues | Composio GraphQL | Composio | Issue bodies, labels, comments |
+| GitHub Issues | **Direct GitHub API** (token) → Composio fallback | `GITHUB_TOKEN` | Issues ranked by impact (👍/comments) + version relevance; body, labels, reactions |
 | Clawsweeper-state | Firecrawl + curl | Public | Work candidates, closed issues, per-issue records |
 | Reddit | Composio | Composio | Community sentiment |
 | npm Registry | curl | Public | Latest published version |

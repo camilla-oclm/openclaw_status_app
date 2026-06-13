@@ -18,6 +18,12 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not OPENROUTER_API_KEY:
     print("⚠ WARNING: OPENROUTER_API_KEY not set. LLM calls will fail.", file=sys.stderr)
 
+# Optional GitHub token. When set, GitHub issues/releases are read via the direct
+# GitHub API (richer data — reactions, body — in one query, and more robust).
+# When absent, the collector falls back to Composio. Needs only public read:
+# fine-grained PAT with Issues:Read + Metadata:Read, or a classic token with no scopes.
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
 # ── Repository ──────────────────────────────────────────────────────────────
 REPO_OWNER = "openclaw"
 REPO_NAME = "openclaw"
@@ -49,8 +55,9 @@ RUN_LOG_FILE = DATA_DIR / "run-log.json"
 COMPOSIO_PATH = os.path.expanduser("~/.composio")
 COMPOSIO_ENV = {**os.environ, "PATH": f"{COMPOSIO_PATH}:{os.environ.get('PATH', '')}"}
 
-# ── API endpoint ────────────────────────────────────────────────────────────
+# ── API endpoints ───────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
 # ── Frontend ────────────────────────────────────────────────────────────────
 # The renderer injects pipeline data into TEMPLATE_FILE via the
