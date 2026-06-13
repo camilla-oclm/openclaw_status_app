@@ -169,7 +169,7 @@ The validator is a **reviewer, not a duplicate analyst** - it checks the primary
 - [x] Pipeline logging (agrees/disagrees, refined Y/N, per-step usage)
 
 ### Phase 3 — Static Frontend 🔄
-- [x] Design mockup: terminal/CLI aesthetic (chosen from 4 options)
+- [x] Design template: **leaderboard** is the live production template (`mockups/mockup-leaderboard.html`), `mockup-cards.html` is the fallback. (A terminal/CLI mockup was explored but the file was lost; config no longer references it — see `config.MOCKUP_CANDIDATES`.)
 - [x] Self-contained HTML, zero dependencies
 - [x] Dark mode + light mode support
 - [x] Mobile responsive
@@ -233,7 +233,8 @@ projects/openclaw-status/
 ├── .env.example         ← template
 ├── .gitignore
 ├── mockups/
-│   └── mockup-terminal.html    ← chosen design (terminal/CLI)
+│   ├── mockup-leaderboard.html ← live production template (data injected here)
+│   └── mockup-cards.html        ← fallback template
 ├── src/
 │   ├── collector.py     ✅ data collection pipeline
 │   ├── agent.py         ✅ LLM assessment agent

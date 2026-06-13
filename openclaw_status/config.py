@@ -53,5 +53,9 @@ COMPOSIO_ENV = {**os.environ, "PATH": f"{COMPOSIO_PATH}:{os.environ.get('PATH', 
 # ── API endpoint ────────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ── Mockup sources (preferred first) ────────────────────────────────────────
-MOCKUP_CANDIDATES = ["mockup-terminal.html", "mockup-leaderboard.html", "mockup-cards.html"]
+# ── Frontend template sources (preferred first) ─────────────────────────────
+# The renderer injects pipeline data into the FIRST template that exists.
+# NOTE: a "terminal" design was referenced in PLAN.md but the file was lost;
+# leaderboard is the live production template. Keep this list in sync with the
+# files that actually exist in mockups/ — render.py warns loudly on fallback.
+MOCKUP_CANDIDATES = ["mockup-leaderboard.html", "mockup-cards.html"]

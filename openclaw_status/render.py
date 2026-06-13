@@ -622,9 +622,18 @@ function colIndex(table) {{ return table === 'issues' ? 2 : 1; }}
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _find_mockup_source() -> str | None:
-    for name in config.MOCKUP_CANDIDATES:
+    """Return the first existing template from MOCKUP_CANDIDATES.
+
+    Warns loudly if the preferred (first) candidate is missing and we have to
+    fall back to a later one, so template drift is visible instead of silent.
+    """
+    for idx, name in enumerate(config.MOCKUP_CANDIDATES):
         path = config.MOCKUP_DIR / name
         if path.exists():
+            if idx > 0:
+                missing = ", ".join(config.MOCKUP_CANDIDATES[:idx])
+                print(f"  ⚠️ Preferred template(s) missing ({missing}); "
+                      f"falling back to {name}", file=sys.stderr)
             return str(path)
     return None
 

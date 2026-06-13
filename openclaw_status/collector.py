@@ -42,9 +42,6 @@ class SourceStatus:
         return any(r["status"] == "failed" for r in self.results.values())
 
 
-source_status = SourceStatus()
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 #  GitHub: Releases
 # ═══════════════════════════════════════════════════════════════════════════
@@ -271,8 +268,13 @@ def _enrich_body(item: dict):
     return item
 
 
-def fetch_github_issues(release_body: str = "", prerelease_body: str = "", release_date: str = "") -> list[dict]:
-    """Fetch GitHub issues. Returns list of issues, or empty list on failure."""
+def fetch_github_issues(release_body: str = "", prerelease_body: str = "", release_date: str = "",
+                        status: "SourceStatus | None" = None) -> list[dict]:
+    """Fetch GitHub issues. Returns list of issues, or empty list on failure.
+
+    If a SourceStatus instance is passed, the result is recorded on it so the
+    collector's saved source_status reflects this source.
+    """
     import time as _time
     t0 = _time.time()
     print("🐛 Fetching GitHub issues...")
@@ -343,7 +345,8 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
             item["fixed_in"].append("prerelease")
 
     elapsed = _time.time() - t0
-    source_status.record("github_issues", "ok" if issues else "empty", f"{len(issues)} issues", elapsed)
+    if status is not None:
+        status.record("github_issues", "ok" if issues else "empty", f"{len(issues)} issues", elapsed)
     return issues
 
 
@@ -351,7 +354,8 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
 #  Clawsweeper per-issue records
 # ═══════════════════════════════════════════════════════════════════════════
 
-def fetch_clawsweeper_records(issue_numbers: list[int]) -> dict:
+def fetch_clawsweeper_records(issue_numbers: list[int],
+                              status: "SourceStatus | None" = None) -> dict:
     """Fetch clawsweeper records in parallel. Returns {number: metadata} dict."""
     import time as _time
     t0 = _time.time()
@@ -382,8 +386,9 @@ def fetch_clawsweeper_records(issue_numbers: list[int]) -> dict:
     records = {num: meta for num, meta in raw_results.items() if meta}
 
     elapsed = _time.time() - t0
-    source_status.record("clawsweeper_records", "ok" if records else "empty",
-                         f"{len(records)}/{len(issue_numbers)} records", elapsed)
+    if status is not None:
+        status.record("clawsweeper_records", "ok" if records else "empty",
+                      f"{len(records)}/{len(issue_numbers)} records", elapsed)
     print(f"    Got {len(records)} records in {elapsed:.1f}s")
     return records
 
@@ -544,11 +549,12 @@ def collect(output_path=None) -> dict:
             release_body=release.get("body", "") if release else "",
             prerelease_body=prerelease.get("body", "") if prerelease else "",
             release_date=release.get("published_at", "") if release else "",
+            status=source_status,
         )
 
         # 8. Enrich with clawsweeper records
         if issues:
-            cs_records = fetch_clawsweeper_records([i["number"] for i in issues])
+            cs_records = fetch_clawsweeper_records([i["number"] for i in issues], status=source_status)
             clawsweeper["item_records"] = cs_records
             for item in issues:
                 rec = cs_records.get(item["number"])
