@@ -1,0 +1,19 @@
+# Pulls the latest code, then runs the full collect→assess→render pipeline once.
+# Triggered by openclaw-status.timer (not enabled on its own).
+[Unit]
+Description=OpenClaw Status — pull latest code + run the assessment pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=openclaw
+Group=openclaw
+WorkingDirectory=/opt/openclaw_status_app
+Environment=PYTHONUNBUFFERED=1
+# A failed pull (e.g. offline) must not block the scheduled run, hence the "-".
+ExecStartPre=-/usr/bin/git -C /opt/openclaw_status_app pull --ff-only
+ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py full
+# The LLM steps take a few minutes; give generous headroom.
+TimeoutStartSec=1200
+Nice=10

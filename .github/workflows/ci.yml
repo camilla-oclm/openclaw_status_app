@@ -1,0 +1,19 @@
+name: tests
+
+# The test suite is hermetic (no network, no API keys), so it runs on every
+# push/PR as a gate before code reaches the deploy box, which pulls from main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest

@@ -1,0 +1,13 @@
+# Caddy serves the generated static page and gets/renews HTTPS automatically
+# via Let's Encrypt. provision.sh substitutes __DOMAIN__ for the real domain
+# and installs this at /etc/caddy/Caddyfile.
+#
+# Prereq: the domain's A-record must already point at this box (ports 80+443
+# open) before Caddy can issue the certificate.
+__DOMAIN__ {
+	root * /opt/openclaw_status_app/web
+	file_server
+	encode gzip
+	# index.html is the only page; fall back to it for any path.
+	try_files {path} /index.html
+}
