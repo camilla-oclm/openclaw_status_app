@@ -6,11 +6,10 @@ Produces assessment.json with structured recommendation, evidence, and known iss
 
 import json
 import re
-import sys
 from datetime import datetime, timezone
 
 from openclaw_status import config
-from openclaw_status.lib import openrouter_call, load_json, save_json, log_usage, check_cost_thresholds, check_data_staleness
+from openclaw_status.lib import openrouter_call, load_json, save_json, log_usage, check_cost_thresholds
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # ── Project root ────────────────────────────────────────────────────────────
 ROOT = Path(__file__).parent.parent
 DATA_DIR = ROOT / "data"
-MOCKUP_DIR = ROOT / "mockups"
+WEB_DIR = ROOT / "web"
 
 # ── .env ────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env")
@@ -43,7 +43,6 @@ ASSESSMENT_FILE = DATA_DIR / "assessment.json"
 USAGE_LOG_FILE = DATA_DIR / "usage.json"
 HISTORY_FILE = DATA_DIR / "history.json"
 FINDINGS_HTML = DATA_DIR / "findings.html"
-MODEL_COMPARISON_FILE = DATA_DIR / "model-comparison.json"
 RUN_LOG_FILE = DATA_DIR / "run-log.json"
 
 # ── Composio ────────────────────────────────────────────────────────────────
@@ -53,9 +52,8 @@ COMPOSIO_ENV = {**os.environ, "PATH": f"{COMPOSIO_PATH}:{os.environ.get('PATH', 
 # ── API endpoint ────────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ── Frontend template sources (preferred first) ─────────────────────────────
-# The renderer injects pipeline data into the FIRST template that exists, via the
-# <script id="assessment-data"> JSON contract (legacy templates use `var DATA`).
-# mockup-status.html is the current production design; the others are fallbacks.
-# Keep this list in sync with the files in mockups/ — render.py warns on fallback.
-MOCKUP_CANDIDATES = ["mockup-status.html", "mockup-leaderboard.html", "mockup-cards.html"]
+# ── Frontend ────────────────────────────────────────────────────────────────
+# The renderer injects pipeline data into TEMPLATE_FILE via the
+# <script id="assessment-data"> JSON contract and writes the public page to OUTPUT_HTML.
+TEMPLATE_FILE = WEB_DIR / "template.html"
+OUTPUT_HTML = WEB_DIR / "index.html"

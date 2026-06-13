@@ -7,7 +7,6 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
 
 from openclaw_status import config
 from openclaw_status.lib import (
