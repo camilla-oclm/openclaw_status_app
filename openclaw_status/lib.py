@@ -1,12 +1,12 @@
 """
-Shared utilities: sanitization, Composio runner, OpenRouter API, file I/O.
+Shared utilities: retries, sanitization, OpenRouter API, file I/O, usage/cost
+tracking, pipeline lock, run log, and the pipeline timer.
 """
 
 import fcntl
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import uuid
@@ -46,69 +46,6 @@ def _retry(func, *args, retries=MAX_RETRIES, **kwargs):
                 print(f"  ↻ Retry {attempt+1}/{retries} in {wait}s: {e}", file=sys.stderr)
                 time.sleep(wait)
     raise last_err
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  Composio
-# ═══════════════════════════════════════════════════════════════════════════
-
-def composio(tool_slug: str, params: dict, timeout: int = 30) -> dict | None:
-    """Execute a Composio tool, returning parsed JSON output. Returns None on failure."""
-    cmd = ["composio", "execute", tool_slug, "-d", json.dumps(params)]
-
-    def _run():
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, env=config.COMPOSIO_ENV
-        )
-        if result.returncode != 0:
-            print(f"  ⚠ {tool_slug} failed (exit {result.returncode}): {result.stderr[:200]}", file=sys.stderr)
-            return None
-
-        output = result.stdout
-        # Find the LAST complete JSON object (skip log lines, banners)
-        # Use brace-matching instead of naive rfind to handle nested JSON
-        json_start = output.rfind("{")
-        if json_start == -1:
-            print(f"  ⚠ {tool_slug}: no JSON in output", file=sys.stderr)
-            return None
-
-        depth = 0
-        json_end = -1
-        for i in range(json_start, len(output)):
-            if output[i] == '{':
-                depth += 1
-            elif output[i] == '}':
-                depth -= 1
-                if depth == 0:
-                    json_end = i + 1
-                    break
-
-        if json_end == -1:
-            print(f"  ⚠ {tool_slug}: no complete JSON in output", file=sys.stderr)
-            return None
-
-        data = json.loads(output[json_start:json_end])
-        if "successful" in data:
-            if not data.get("successful"):
-                print(f"  ⚠ {tool_slug}: unsuccessful: {data.get('error','unknown')}", file=sys.stderr)
-                return None
-            return data.get("data", data)
-        return data
-
-    try:
-        result, attempts = _retry(_run)
-        if attempts > 1:
-            print(f"  ✓ {tool_slug} succeeded after {attempts} attempts", file=sys.stderr)
-        return result
-    except subprocess.TimeoutExpired:
-        print(f"  ⚠ {tool_slug} timed out after {timeout}s", file=sys.stderr)
-        return None
-    except json.JSONDecodeError as e:
-        print(f"  ⚠ {tool_slug}: JSON parse error: {e}", file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"  ⚠ {tool_slug}: unexpected error: {e}", file=sys.stderr)
-        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -424,53 +361,6 @@ def parallel_fetch(func, items, max_workers=4):
             except Exception:
                 results[item] = None
     return results
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  Firecrawl output parser
-# ═══════════════════════════════════════════════════════════════════════════
-
-def parse_firecrawl_markdown(data: dict) -> str:
-    """Extract markdown from a Firecrawl scrape result."""
-    output_path = data.get("outputFilePath", "")
-    if not output_path or not os.path.exists(output_path):
-        return ""
-    try:
-        inner = load_json(output_path)
-        # Navigate nested structure robustly: data -> data -> data, or data -> markdown
-        if isinstance(inner, dict):
-            for _ in range(3):  # max 3 levels of nesting
-                if isinstance(inner.get("data"), dict):
-                    inner = inner["data"]
-                else:
-                    break
-            # Look for markdown at current or one level deeper
-            if "markdown" in inner and isinstance(inner["markdown"], str):
-                return inner["markdown"] or ""
-            if isinstance(inner.get("data"), dict) and "markdown" in inner["data"]:
-                return inner["data"]["markdown"] or ""
-            # Last resort: search recursively for first "markdown" key
-            found = _find_markdown_key(inner)
-            if found:
-                return found
-        return ""
-    except Exception as e:
-        print(f"  ⚠ Failed to read Firecrawl output: {e}", file=sys.stderr)
-        return ""
-
-
-def _find_markdown_key(obj, max_depth=5):
-    """Recursively search for a 'markdown' key in nested dicts."""
-    if max_depth <= 0 or not isinstance(obj, dict):
-        return ""
-    if "markdown" in obj and isinstance(obj["markdown"], str):
-        return obj["markdown"]
-    for v in obj.values():
-        if isinstance(v, dict):
-            found = _find_markdown_key(v, max_depth - 1)
-            if found:
-                return found
-    return ""
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -45,9 +45,7 @@ def test_fetch_github_issues_records_on_passed_status(monkeypatch):
     Previously it recorded into a dead module-level global while collect()
     saved a shadowing local, so 'github_issues' never appeared in the output.
     """
-    # force the (hermetic) Composio fallback path — no live API
-    monkeypatch.setattr(collector.github, "has_token", lambda: False)
-    monkeypatch.setattr(collector, "_gh_graphql", lambda *a, **k: [])
+    monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: [])  # no live API
     status = SourceStatus()
     issues = collector.fetch_github_issues(status=status)
     assert issues == []
@@ -56,7 +54,15 @@ def test_fetch_github_issues_records_on_passed_status(monkeypatch):
 
 
 def test_fetch_github_issues_no_status_does_not_crash(monkeypatch):
-    monkeypatch.setattr(collector.github, "has_token", lambda: False)
-    monkeypatch.setattr(collector, "_gh_graphql", lambda *a, **k: [])
+    monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: [])
     # status defaults to None — must not raise
     assert collector.fetch_github_issues() == []
+
+
+def test_fetch_github_issues_marks_fixed_from_release_body(monkeypatch):
+    issues = [{"number": 42, "affects_version": True}, {"number": 99, "affects_version": False}]
+    monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: issues)
+    out = collector.fetch_github_issues(release_body="release notes — fixes #42", prerelease_body="")
+    fixed = {i["number"]: i["fixed_in"] for i in out}
+    assert fixed[42] == ["stable"]
+    assert fixed[99] == []

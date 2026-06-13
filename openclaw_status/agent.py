@@ -171,9 +171,7 @@ def build_context(raw: dict) -> str:
     prerelease = sources.get("latest_prerelease", {})
     issues = sources.get("github_issues", [])
     cs = sources.get("clawsweeper", {})
-    changelog = sources.get("changelog", "")
-    releases_page = sources.get("releases_page", "")
-    reddit = sources.get("reddit", [])
+    release_history = sources.get("release_history", [])
 
     parts = []
 
@@ -239,33 +237,18 @@ def build_context(raw: dict) -> str:
         for r in rc[:10]:
             parts.append(f"- #{r['number']} reason:{r.get('reason', '?')} {r['title'][:100]}")
 
-    # Release body (changelog)
+    # Release body (changelog for the assessed version)
     if release and release.get("body"):
         parts.append(f"\n## Release Changelog (v{version})\n{release['body'][:3000]}")
 
-    # Tavily-extracted changelog (may have cleaner formatting)
-    if changelog:
-        parts.append(f"\n## Extracted Changelog (from release page)\n{changelog[:3000]}")
-
-    # Release history highlights
-    if releases_page:
-        release_sections = re.split(r"(?=## openclaw \d+\.\d+\.\d+)", releases_page)
-        if len(release_sections) > 1:
-            highlights_match = re.search(
-                r"### Highlights\n(.*?)(?=\n### |\Z)",
-                release_sections[1] if len(release_sections) > 1 else "",
-                re.DOTALL,
-            )
-            if highlights_match:
-                parts.append(f"\n## Previous Release Highlights\n{highlights_match.group(1).strip()[:1000]}")
-
-    # Community sentiment
-    if reddit:
-        parts.append(f"\n## Reddit Posts ({len(reddit)} relevant)")
-        for r in reddit[:5]:
-            parts.append(f"- [{r.get('score', 0)} pts] {r['title'][:100]} (r/{r.get('subreddit', '?')})")
-            if r.get("snippet"):
-                parts.append(f"  {r['snippet'][:200]}")
+    # Previous-release highlights (the release just before the current one)
+    prev = next((r for r in release_history
+                 if not r.get("prerelease") and r.get("tag") != release.get("tag")), None)
+    if prev and prev.get("body"):
+        hm = re.search(r"###?\s*Highlights\s*\n(.*?)(?=\n###? |\Z)", prev["body"], re.DOTALL)
+        if hm:
+            parts.append(f"\n## Previous Release Highlights ({prev.get('tag','?')})\n"
+                         f"{hm.group(1).strip()[:1000]}")
 
     # Conflict Resolution: surface contradictions between sources
     conflicts = _detect_conflicts(issues, cs)

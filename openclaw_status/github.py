@@ -1,12 +1,10 @@
-"""Direct GitHub API client + issue-scouting logic.
+"""GitHub API client + issue-scouting logic.
 
-Preferred over Composio for GitHub reads when GITHUB_TOKEN is set: a single
-GraphQL query returns issues together with reaction counts, comment counts, body
-text and labels. That lets us rank candidates by community impact (👍) and flag
-version relevance — neither of which the Composio path can surface — and avoids
-spawning a subprocess (and scraping JSON from stdout) per call.
-
-When no token is set, the collector falls back to Composio (see collector.py).
+All GitHub data — issues and releases — is read through the GitHub API with a
+token (`GITHUB_TOKEN`). A single GraphQL query returns issues together with
+reaction counts, comments, body text and labels, so we can rank candidates by
+community impact (👍) and flag version relevance in one round trip; releases come
+from the REST API.
 """
 
 import json
@@ -91,6 +89,101 @@ def search_issues(query_string: str, limit: int = 25, timeout: int = 30) -> list
         return None
     nodes = (data.get("search") or {}).get("nodes") or []
     return [n for n in nodes if n]  # drop nulls (non-Issue search hits)
+
+
+def gh_rest(path: str, timeout: int = 30):
+    """GET a GitHub REST API path (e.g. '/repos/o/r/releases'). Returns parsed
+    JSON, or None on error / when no token is set."""
+    if not config.GITHUB_TOKEN:
+        return None
+
+    def _call():
+        req = urllib.request.Request(
+            config.GITHUB_API_URL + path,
+            headers={
+                "Authorization": f"Bearer {config.GITHUB_TOKEN}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "openclaw-status",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
+
+    try:
+        result, _ = _retry(_call)
+        return result
+    except urllib.error.HTTPError as e:
+        body = e.read().decode() if e.readable() else ""
+        print(f"  ⚠ GitHub REST {path} HTTP {e.code}: {body[:150]}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"  ⚠ GitHub REST {path} failed: {e}", file=sys.stderr)
+        return None
+
+
+def fetch_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 20) -> str:
+    """Fetch a raw file from a GitHub repo (raw.githubusercontent.com). Sends the
+    token if present (helps rate limits / private). Returns text, or '' on error."""
+    url = f"{config.GITHUB_RAW_URL}/{owner}/{repo}/{ref}/{path}"
+    headers = {"User-Agent": "openclaw-status"}
+    if config.GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {config.GITHUB_TOKEN}"
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            print(f"  ⚠ raw {path} HTTP {e.code}", file=sys.stderr)
+        return ""
+    except Exception as e:
+        print(f"  ⚠ raw {path} failed: {e}", file=sys.stderr)
+        return ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Releases (REST)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _norm_release(d: dict | None) -> dict | None:
+    if not d:
+        return None
+    return {
+        "tag": d.get("tag_name", ""),
+        "name": d.get("name", ""),
+        "published_at": d.get("published_at", "") or "",
+        "body": sanitize(d.get("body", ""), 5000),
+        "url": d.get("html_url", ""),
+        "prerelease": d.get("prerelease", False),
+        "draft": d.get("draft", False),
+    }
+
+
+def latest_release() -> dict | None:
+    """The latest published, non-prerelease release."""
+    return _norm_release(gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/latest"))
+
+
+def release_by_tag(tag: str) -> dict | None:
+    return _norm_release(
+        gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/tags/{tag}"))
+
+
+def list_releases(limit: int = 30) -> list[dict]:
+    """Recent releases (newest first), including pre-releases and drafts."""
+    data = gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases?per_page={limit}")
+    if not isinstance(data, list):
+        return []
+    return [r for r in (_norm_release(d) for d in data) if r]
+
+
+def latest_prerelease(releases: list[dict] = None) -> dict | None:
+    """Most recent non-draft pre-release, from a release list (fetched if None)."""
+    releases = releases if releases is not None else list_releases()
+    pres = [r for r in releases if r.get("prerelease") and not r.get("draft")]
+    pres.sort(key=lambda r: r.get("published_at", ""), reverse=True)
+    return pres[0] if pres else None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -273,8 +366,7 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> 
     skip an update). Only `stale` issues are skipped — NOT `clawsweeper:no-new-fix-pr`,
     which marks issues that have no fix yet (exactly the ones we care about).
 
-    Returns ranked, de-duplicated issue dicts, or None if the API is unavailable
-    (so the caller can fall back to Composio).
+    Returns ranked, de-duplicated issue dicts, or None if the API is unavailable.
     """
     repo = f"repo:{config.REPO_OWNER}/{config.REPO_NAME}"
     no_feat = "-label:enhancement"

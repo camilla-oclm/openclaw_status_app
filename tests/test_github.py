@@ -203,11 +203,39 @@ def test_rank_key_version_relevance_lifts_high_above_offversion_critical():
     assert sorted([off_version_critical, version_low], key=github.rank_key)[0] is off_version_critical
 
 
+# ── releases ─────────────────────────────────────────────────────────────────
+
+def test_norm_release():
+    raw = {"tag_name": "v2026.6.1", "name": "2026.6.1", "published_at": "2026-06-03T00:00:00Z",
+           "body": "notes", "html_url": "https://x/r", "prerelease": False, "draft": False}
+    r = github._norm_release(raw)
+    assert r["tag"] == "v2026.6.1"
+    assert r["prerelease"] is False
+    assert r["body"] == "notes"
+    assert github._norm_release(None) is None
+
+
+def test_latest_prerelease_picks_newest_nondraft():
+    releases = [
+        {"tag": "v2026.6.2-beta.1", "prerelease": True, "draft": False, "published_at": "2026-06-09"},
+        {"tag": "v2026.6.2-beta.2", "prerelease": True, "draft": False, "published_at": "2026-06-11"},
+        {"tag": "v2026.6.3-beta.draft", "prerelease": True, "draft": True, "published_at": "2026-06-12"},
+        {"tag": "v2026.6.1", "prerelease": False, "draft": False, "published_at": "2026-06-03"},
+    ]
+    pre = github.latest_prerelease(releases)
+    assert pre["tag"] == "v2026.6.2-beta.2"   # newest non-draft pre-release
+
+
+def test_latest_prerelease_none_when_no_prereleases():
+    assert github.latest_prerelease([{"tag": "v1", "prerelease": False, "draft": False}]) is None
+
+
 # ── API guards (no token) ────────────────────────────────────────────────────
 
 def test_no_token_means_unavailable(monkeypatch):
     monkeypatch.setattr(config, "GITHUB_TOKEN", None)
     assert github.has_token() is False
     assert github.gh_graphql("query{}") is None
+    assert github.gh_rest("/rate_limit") is None
     assert github.search_issues("repo:x is:issue") is None
     assert github.scout_issues("2026-06-03", "2026.6.1") is None

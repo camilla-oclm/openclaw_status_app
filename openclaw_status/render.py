@@ -148,7 +148,7 @@ def _safe_url(url: str) -> str:
     """Validate URL for safe use in href attributes. Blocks javascript: and data: schemes.
 
     The scheme is checked case-insensitively, but the original-case URL is
-    returned so case-sensitive paths (e.g. Reddit permalinks) aren't corrupted.
+    returned so case-sensitive paths aren't corrupted.
     """
     if not url:
         return ""
@@ -156,52 +156,6 @@ def _safe_url(url: str) -> str:
     if stripped.lower().startswith(("javascript:", "data:", "vbscript:")):
         return ""
     return stripped
-
-
-PLATFORM_COLORS = {
-    "windows": "#58a6ff", "macos": "#bc8cff", "linux": "#3fb950",
-    "discord": "#5865f2", "slack": "#e01e5a", "telegram": "#26a5e4",
-    "general": "#8b949e", "version": "#d29922", "unknown": "#8b949e",
-}
-PLATFORM_ICONS = {
-    "windows": "🪟", "macos": "🍎", "linux": "🐧",
-    "discord": "💬", "slack": "💼", "telegram": "✈️",
-    "general": "📋", "version": "🏷️", "unknown": "❓",
-}
-
-
-def _platform_badge(p: str) -> str:
-    c = PLATFORM_COLORS.get(p, "#8b949e")
-    ic = PLATFORM_ICONS.get(p, "📋")
-    return (
-        f'<span style="display:inline-flex;align-items:center;gap:3px;'
-        f'padding:1px 8px;border-radius:999px;font-size:0.72rem;font-weight:500;'
-        f'background:{c}22;color:{c};border:1px solid {c}44">{ic} {_esc(p)}</span>'
-    )
-
-
-def _score_bar(score):
-    if not score:
-        return ""
-    s = int(score)
-    color = "#3fb950" if s > 100 else "#d29922" if s > 20 else "#8b949e"
-    return f'<span style="color:{color};font-weight:600;font-size:0.8rem">▲ {s}</span>'
-
-
-def _plat_table(counts: dict, label: str) -> str:
-    if not counts:
-        return ""
-    rows = "".join(
-        f'<div style="display:flex;justify-content:space-between;padding:3px 0">'
-        f'<span>{_platform_badge(k)}</span><span style="font-weight:600">{v}</span></div>'
-        for k, v in sorted(counts.items(), key=lambda x: -x[1])
-    )
-    return (
-        f'<div style="background:#161b22;border:1px solid #30363d;'
-        f'border-radius:6px;padding:0.75rem;margin-bottom:0.5rem">'
-        f'<div style="font-size:0.75rem;color:#8b949e;text-transform:uppercase;'
-        f'margin-bottom:0.5rem">{label}</div>{rows}</div>'
-    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -216,7 +170,6 @@ def _build_issues_html(issues: list) -> str:
     html = ""
     for i in issues:
         num = i.get("number", "")
-        p = i.get("platform", "general")
         sev = i.get("severity", "high")
         cat = i.get("category", "general")
         cat_icon = {"diamond_lobster": "💎", "regression": "🔄", "active": "🟢"}.get(cat, "📋")
@@ -275,7 +228,9 @@ def _build_issues_html(issues: list) -> str:
             f'<td><a href="{_safe_url(url)}" target="_blank" style="color:#58a6ff;text-decoration:none">'
             f'{_esc(title)}</a>{cs_html}{comments_html}</td>'
         )
-        html += f"<td>{_platform_badge(p)}</td>"
+        ver_flag = (' <span style="color:#f85149;font-size:0.7rem">⊘ ver</span>'
+                    if i.get("affects_version") else "")
+        html += f'<td style="font-size:0.8rem;color:#e6edf3;white-space:nowrap">👍 {i.get("reactions",0)}{ver_flag}</td>'
         html += f'<td style="font-size:0.8rem;color:#e6edf3">{cat_icon} {cat_label}</td>'
         html += f'<td style="color:{sev_color};font-weight:600;font-size:0.8rem">{sev}</td>'
         html += f'<td style="font-size:0.8rem;color:#8b949e">{i.get("comments",0)} 💬</td>'
@@ -285,47 +240,22 @@ def _build_issues_html(issues: list) -> str:
     return html
 
 
-def _build_reddit_html(posts: list) -> str:
-    """Build Reddit table rows."""
-    if not posts:
-        return '<tr><td colspan="6" style="color:#8b949e;padding:1rem">No Reddit posts found</td></tr>'
-
-    html = ""
-    for r in posts:
-        snippet = _esc(r.get("snippet", "")[:150])
-        html += (
-            f'<tr>'
-            f'<td><a href="{_safe_url(r.get("url",""))}" target="_blank" '
-            f'style="color:#58a6ff;text-decoration:none">{_esc(r.get("title",""))}</a></td>'
-            f'<td>{_platform_badge(r.get("platform","general"))}</td>'
-            f'<td>{_score_bar(r.get("score",0))}</td>'
-            f'<td style="font-size:0.8rem;color:#8b949e">r/{_esc(r.get("subreddit",""))}</td>'
-            f'<td style="font-size:0.8rem;color:#8b949e">{r.get("num_comments",0)} 💬</td>'
-            f'<td style="font-size:0.8rem;color:#8b949e;max-width:250px;'
-            f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{snippet}</td>'
-            f'</tr>'
-        )
-    return html
-
-
-def _build_releases_html(releases_page: str) -> str:
-    """Build release history section from Firecrawl markdown."""
-    if not releases_page:
+def _build_releases_html(release_history: list) -> str:
+    """Build the release-history section from the GitHub API release list."""
+    if not release_history:
         return ""
 
-    sections = re.split(r"(?=## openclaw \d+\.\d+\.\d+)", releases_page)
     html = ""
-    for section in sections[1:11]:
-        lines = section.strip().split("\n")
-        vm = re.search(r"openclaw (\d+\.\d+\.\d+[^\s]*)", lines[0] if lines else "")
-        ver = vm.group(1) if vm else "?"
-        pr_refs = re.findall(r"#(\d+)", section)
+    for rel in release_history[:10]:
+        ver = rel.get("tag", "?")
+        body = rel.get("body", "") or ""
+        pr_refs = re.findall(r"#(\d+)", body)
+        tag = " (pre-release)" if rel.get("prerelease") else ""
 
-        # Parse highlights
-        highlights = []
-        in_hi = False
-        for line in lines:
-            if "### Highlights" in line:
+        # Parse highlights bullets from the body
+        highlights, in_hi = [], False
+        for line in body.split("\n"):
+            if re.match(r"###?\s*Highlights", line):
                 in_hi = True
                 continue
             if in_hi:
@@ -337,9 +267,9 @@ def _build_releases_html(releases_page: str) -> str:
         html += (
             '<div style="margin-bottom:1.25rem;padding:0.75rem;background:#161b22;'
             f'border:1px solid #30363d;border-radius:6px">'
-            f'<div style="font-weight:600;font-size:1rem;color:#58a6ff">v{_esc(ver)}</div>'
+            f'<div style="font-weight:600;font-size:1rem;color:#58a6ff">{_esc(ver)}{tag}</div>'
             f'<div style="font-size:0.75rem;color:#8b949e;margin-bottom:0.5rem">'
-            f'{len(pr_refs)} PR references</div>'
+            f'{rel.get("published_at","")[:10]} · {len(pr_refs)} PR references</div>'
         )
         if highlights:
             html += '<div style="margin-top:0.5rem">'
@@ -515,20 +445,17 @@ def build_findings_page(raw: dict = None) -> str:
     meta = raw.get("meta", {})
     version = raw.get("target_version", "?")
     collected = raw.get("collected_at", "")
-    pc = meta.get("platform_coverage", {})
     issues = sources.get("github_issues", [])
-    reddit = sources.get("reddit", [])
     changelog = _esc(sources.get("changelog", "No changelog fetched"))
-    releases_page = sources.get("releases_page", "")
+    release_history = sources.get("release_history", [])
     cs = sources.get("clawsweeper", {})
     prerelease = sources.get("latest_prerelease")
     rel = sources.get("latest_release", {})
     npm = sources.get("npm", {})
 
+    relevant = sum(1 for i in issues if i.get("affects_version"))
     issues_html = _build_issues_html(issues)
-    reddit_html = _build_reddit_html(reddit)
-    releases_html = _build_releases_html(releases_page)
-    release_count = len(re.findall(r"(?=## openclaw \d+\.\d+\.\d+)", releases_page))
+    releases_html = _build_releases_html(release_history)
     prerelease_html = _build_prerelease_html(prerelease, version)
     cs_html = _build_cs_html(cs.get("work_candidates", []), cs.get("recently_closed", []))
 
@@ -555,38 +482,13 @@ Version <strong>{_esc(version)}</strong> · Collected {collected_display} UTC
 
 <div class="stats">
 <div class="stat"><div class="val" style="color:var(--accent)">{len(issues)}</div><div class="label">GitHub Issues</div></div>
-<div class="stat"><div class="val" style="color:var(--yellow)">{len(reddit)}</div><div class="label">Reddit Posts</div></div>
-<div class="stat"><div class="val">{len(changelog)}</div><div class="label">Changelog Chars</div></div>
-<div class="stat"><div class="val" style="color:#bc8cff">{len(releases_page):,}</div><div class="label">Releases Page</div></div>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem">
-{_plat_table(pc.get('github_issues',{}), 'Issues by Platform')}
-{_plat_table(pc.get('reddit',{}), 'Reddit by Platform')}
+<div class="stat"><div class="val" style="color:var(--red)">{relevant}</div><div class="label">Affect This Version</div></div>
+<div class="stat"><div class="val">{len(changelog):,}</div><div class="label">Changelog Chars</div></div>
+<div class="stat"><div class="val" style="color:#bc8cff">{len(release_history)}</div><div class="label">Releases</div></div>
 </div>
 
 <h2>🐛 GitHub Issues ({len(issues)})</h2>
-<div class="filter-bar" id="issues-filter">
-<button class="filter-btn active" onclick="filterTable('issues','all')">All</button>
-<button class="filter-btn" onclick="filterTable('issues','windows')">🪟 Windows</button>
-<button class="filter-btn" onclick="filterTable('issues','macos')">🍎 macOS</button>
-<button class="filter-btn" onclick="filterTable('issues','linux')">🐧 Linux</button>
-<button class="filter-btn" onclick="filterTable('issues','version')">🏷️ Version</button>
-<button class="filter-btn" onclick="filterTable('issues','general')">📋 General</button>
-</div>
-<table id="issues-table"><thead><tr><th>#</th><th>Title</th><th>Platform</th><th>Category</th><th>Severity</th><th>💬</th><th>Labels</th></tr></thead><tbody>{issues_html}</tbody></table>
-
-<h2>💬 Reddit ({len(reddit)})</h2>
-<div class="filter-bar" id="reddit-filter">
-<button class="filter-btn active" onclick="filterTable('reddit','all')">All</button>
-<button class="filter-btn" onclick="filterTable('reddit','windows')">🪟 Windows</button>
-<button class="filter-btn" onclick="filterTable('reddit','macos')">🍎 macOS</button>
-<button class="filter-btn" onclick="filterTable('reddit','linux')">🐧 Linux</button>
-<button class="filter-btn" onclick="filterTable('reddit','discord')">💬 Discord</button>
-<button class="filter-btn" onclick="filterTable('reddit','slack')">💼 Slack</button>
-<button class="filter-btn" onclick="filterTable('reddit','general')">📋 General</button>
-</div>
-<table id="reddit-table"><thead><tr><th>Title</th><th>Platform</th><th>Score</th><th>Sub</th><th>💬</th><th>Snippet</th></tr></thead><tbody>{reddit_html}</tbody></table>
+<table id="issues-table"><thead><tr><th>#</th><th>Title</th><th>👍</th><th>Category</th><th>Severity</th><th>💬</th><th>Labels</th></tr></thead><tbody>{issues_html}</tbody></table>
 
 <h2>📋 Changelog</h2>
 <div class="changelog">{changelog}</div>
@@ -597,30 +499,13 @@ Version <strong>{_esc(version)}</strong> · Collected {collected_display} UTC
 <h2 style="margin-top:1.5rem">🧹 Clawsweeper State</h2>
 {cs_html}
 
-<h2 style="margin-top:1.5rem">📦 Release History ({release_count} releases)</h2>
+<h2 style="margin-top:1.5rem">📦 Release History ({len(release_history)} releases)</h2>
 <div class="changelog" style="max-height:600px">{releases_html}</div>
 
 <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);
 text-align:center;color:var(--muted);font-size:0.8rem">
 OpenClaw Status · Findings Viewer · {_esc(version)} · {_esc(collected_display)}
 </div>
-
-<script>
-function filterTable(table, platform) {{
-  const tableId = table === 'issues' ? 'issues-table' : 'reddit-table';
-  const filterId = table === 'issues' ? 'issues-filter' : 'reddit-filter';
-  const rows = document.querySelectorAll('#' + tableId + ' tbody tr');
-  const btns = document.querySelectorAll('#' + filterId + ' .filter-btn');
-  btns.forEach(function(b) {{ b.classList.remove('active'); }});
-  event.target.classList.add('active');
-  rows.forEach(function(row) {{
-    if (platform === 'all') {{ row.style.display = ''; return; }}
-    var badge = (row.children[colIndex(table)]?.textContent || '').toLowerCase();
-    row.style.display = badge.includes(platform) ? '' : 'none';
-  }});
-}}
-function colIndex(table) {{ return table === 'issues' ? 2 : 1; }}
-</script>
 </body>
 </html>"""
 

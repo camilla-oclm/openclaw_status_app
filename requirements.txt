@@ -1,0 +1,5 @@
+# Runtime dependency (everything else is the Python standard library).
+python-dotenv>=1.0
+
+# Dev / tests
+pytest>=7.0
