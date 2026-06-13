@@ -44,12 +44,13 @@ PRIMARY_REASONING = {"effort": "high", "exclude": False}
 VALIDATOR_MODEL = "qwen/qwen3.7-plus"
 VALIDATOR_REASONING = {"effort": "high", "exclude": False}
 
-# Fallback (used if the primary fails). A single cross-provider choice: qwen3.7-plus
-# is a different vendor entirely, so a deepseek outage doesn't take the run down.
+# Fallback (used if the primary fails). minimax-m3 is a third distinct provider —
+# different from both the deepseek analyst and the qwen validator — so a deepseek
+# outage neither sinks the run nor collapses analyst+validator onto the same model.
 # IDs are real OpenRouter slugs (provider/model) — a wrong slug returns HTTP 400
 # and burns a retry, so keep them in sync with https://openrouter.ai/api/v1/models.
 FALLBACK_MODELS = [
-    {"model": "qwen/qwen3.7-plus", "reasoning": {"effort": "high", "exclude": False}},
+    {"model": "minimax/minimax-m3", "reasoning": {"effort": "high", "exclude": False}},
 ]
 
 # Assessment output budget. The analyst/refine steps emit a full JSON document
