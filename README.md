@@ -192,3 +192,8 @@ openclaw_status_app/
   `fetch('latest.json')` so refreshing the data no longer means re-rendering the whole page.
 - **Route releases history more cheaply.** Release bodies are fetched per run; cache by ETag
   to skip unchanged data.
+- **Browsable previous runs.** Recycle the render rollback backup: instead of one
+  `web/index.html.prev`, archive each outgoing page to `web/archive/<version>.html` on render,
+  and make the history section's entries link to those snapshots (`data/history.json` already
+  lists them). Caddy serves `web/`, so the archive is reachable with no extra config; cap
+  retention (e.g. keep the last 30).
