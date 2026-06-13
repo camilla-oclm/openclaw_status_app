@@ -35,6 +35,31 @@ def cmd_render_assessment(args):
     render_assessment_page(output_path=out)
 
 
+def _populate_run_log(run_log):
+    """Best-effort: fill the run log from the pipeline's just-written outputs so
+    run-log.json is a real audit trail (run never fails on a logging hiccup)."""
+    from openclaw_status.lib import load_json
+    try:
+        raw = load_json(config.RAW_DATA_FILE)
+        run_log.update(
+            source_status=raw.get("source_status", {}),
+            pipeline_aborted=bool(raw.get("pipeline_aborted", False)),
+            abort_reason=raw.get("abort_reason", ""),
+        )
+    except Exception:
+        pass
+    try:
+        a = load_json(config.ASSESSMENT_FILE)
+        run_log.update(
+            cost_usd=(a.get("usage") or {}).get("cost_usd", 0),
+            model_used=a.get("primary_model", ""),
+            recommendation=(a.get("assessment") or {}).get("recommendation", ""),
+            validation_errors=a.get("validation_errors", []),
+        )
+    except Exception:
+        pass
+
+
 def cmd_full(args):
     print("\n" + "=" * 60)
     print("OpenClaw Status — Full Pipeline")
@@ -57,9 +82,11 @@ def cmd_full(args):
         print("\n[3/3] Rendering page...")
         cmd_render_assessment(args)
 
-        run_log.save()
         print("\n✅ Full pipeline complete!")
     finally:
+        _populate_run_log(run_log)
+        run_log.finish()
+        run_log.save()
         release_pipeline_lock()
 
 

@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from openclaw_status import agent, config
+from openclaw_status import agent, config, lib
 
 
 def _valid_assessment(**overrides):
@@ -63,6 +63,20 @@ def test_validate_detects_onclick_handler():
         _valid_assessment(sentiment_summary='cool onerror=alert(1) stuff here for testing')
     )
     assert any("XSS" in e for e in errors)
+
+
+def test_validate_detects_xss_in_nested_known_issues():
+    a = _valid_assessment(known_issues=[{"number": 1, "title": "<script>alert(1)</script>"}])
+    errors = agent.validate_assessment(a)
+    assert any("known_issues" in e for e in errors)
+
+
+def test_validate_nested_no_false_positive_on_equals():
+    # The nested check must NOT use the on*= handler pattern — ordinary prose like
+    # "one =" would otherwise be flagged and needlessly block deploy.
+    a = _valid_assessment(evidence={"for_updating": ["version one = good now"],
+                                    "against_updating": [], "neutral": []})
+    assert agent.validate_assessment(a) == []
 
 
 # ── _detect_conflicts ───────────────────────────────────────────────────────
@@ -231,3 +245,27 @@ def test_append_history_dedupes_same_version(tmp_path, monkeypatch):
     data = json.loads(hist.read_text())
     assert len(data) == 1
     assert data[0]["recommendation"] == "⏸️"
+
+
+# ── budget gate ─────────────────────────────────────────────────────────────
+
+def test_budget_gate_aborts_without_spending(tmp_path, monkeypatch):
+    # Today's spend already exceeds the daily limit → pipeline must refuse to start
+    # and make NO LLM call.
+    usage = tmp_path / "usage.json"
+    usage.write_text(json.dumps([
+        {"timestamp": lib.now_iso(), "cost_usd": 99.0, "success": True},
+    ]))
+    monkeypatch.setattr(config, "USAGE_LOG_FILE", usage)
+
+    def _boom(*a, **k):
+        raise AssertionError("openrouter_call must not run when the budget gate trips")
+    monkeypatch.setattr(agent, "openrouter_call", _boom)
+
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {}, "latest_prerelease": None, "github_issues": [],
+        "clawsweeper": {}, "release_history": [],
+    }}
+    result = agent.run_assessment_pipeline(raw=raw)
+    assert result["success"] is False
+    assert "budget exceeded" in result["error"]

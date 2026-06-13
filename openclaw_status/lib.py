@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import uuid
 import urllib.error
@@ -155,15 +156,30 @@ def extract_json(content: str) -> dict:
         pass
 
     # Strategy 2: Find outermost { ... } by brace matching
-    # Handles reasoning tokens or commentary prepended/appended
+    # Handles reasoning tokens or commentary prepended/appended. Braces inside
+    # string values are skipped (with escape handling) so a `}` in a string can't
+    # close the object early.
     start = text.find("{")
     if start != -1:
         depth = 0
         end = -1
+        in_str = False
+        escaped = False
         for i in range(start, len(text)):
-            if text[i] == "{":
+            ch = text[i]
+            if in_str:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
                 depth += 1
-            elif text[i] == "}":
+            elif ch == "}":
                 depth -= 1
                 if depth == 0:
                     end = i + 1
@@ -197,9 +213,22 @@ def load_json(path) -> dict:
 
 
 def save_json(path, data):
+    """Write JSON atomically: serialize to a temp file in the same directory, then
+    os.replace() it into place. A crash/kill mid-write can't leave a half-written
+    (corrupt) state file — readers see either the old file or the complete new one."""
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -300,6 +329,23 @@ def log_usage(model_id: str, usage: dict, success: bool):
 
 DAILY_COST_LIMIT = 2.0    # USD
 MONTHLY_COST_LIMIT = 30.0  # USD
+
+
+def notify(text: str) -> None:
+    """Best-effort push of an alert to config.ALERT_WEBHOOK_URL (Slack/Discord-style
+    {"text": ...} JSON). No-op if unset; never raises — an alert must not crash a run."""
+    url = config.ALERT_WEBHOOK_URL
+    if not url:
+        return
+    try:
+        data = json.dumps({"text": text}).encode()
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"Content-Type": "application/json", "User-Agent": "openclaw-status"},
+        )
+        urllib.request.urlopen(req, timeout=10).close()
+    except Exception as e:
+        print(f"  ⚠ Alert webhook failed: {e}", file=sys.stderr)
 
 
 def check_cost_thresholds():
@@ -403,33 +449,44 @@ def acquire_pipeline_lock(lock_path: Path = None) -> bool:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        fd = open(lock_path, "w")
+        # Open WITHOUT truncating (O_RDWR|O_CREAT, not "w") so we can still read the
+        # current holder's PID after a failed flock. flock is the source of truth for
+        # mutual exclusion: the kernel auto-releases it when a holder dies, so a
+        # successful flock here means any previous (even crashed) holder is gone.
+        fd = os.fdopen(os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644), "r+")
+    except OSError as e:
+        print(f"  ⚠ Lock acquisition error: {e}", file=sys.stderr)
+        return False
+
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        # Held by a live process — report its PID (best-effort) and back off.
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fd.seek(0)
+            holder = fd.read().strip()
         except OSError:
-            # Could not acquire — check if PID is alive
-            try:
-                with open(lock_path, "r") as f:
-                    old_pid = int(f.read().strip())
-                os.kill(old_pid, 0)  # Check if alive
-                fd.close()
-                print(f"  ⚠ Pipeline locked by PID {old_pid} (still running)", file=sys.stderr)
-                return False
-            except (ValueError, ProcessLookupError, FileNotFoundError):
-                # PID dead or unreadable — steal the lock
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        # Write our PID
+            holder = ""
+        fd.close()
+        print(f"  ⚠ Pipeline locked by PID {holder or '?'} (still running)", file=sys.stderr)
+        return False
+
+    # Acquired (fresh, or reclaimed from a dead holder) — record our PID.
+    try:
         fd.seek(0)
         fd.truncate()
         fd.write(str(os.getpid()))
         fd.flush()
-        # Keep fd open — closing releases the flock on some systems
-        _pipeline_lock_fds.append(fd)
-        print(f"  🔒 Pipeline locked (PID {os.getpid()})")
-        return True
-    except Exception as e:
+    except OSError as e:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
         print(f"  ⚠ Lock acquisition error: {e}", file=sys.stderr)
         return False
+
+    # Keep fd open for the process lifetime — closing it releases the flock.
+    _pipeline_lock_fds.append(fd)
+    print(f"  🔒 Pipeline locked (PID {os.getpid()})")
+    return True
 
 
 def release_pipeline_lock(lock_path: Path = None):

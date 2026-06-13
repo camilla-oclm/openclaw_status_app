@@ -6,8 +6,8 @@ raw-data.json. No third-party data brokers.
 
 import json
 import re
-import subprocess
 import sys
+import urllib.request
 
 from openclaw_status import config, github
 from openclaw_status.lib import (
@@ -46,14 +46,11 @@ class SourceStatus:
 
 def fetch_npm_version() -> dict | None:
     print("📦 Checking npm registry...")
+    url = f"https://registry.npmjs.org/{config.NPM_PACKAGE}/latest"
     try:
-        result = subprocess.run(
-            ["curl", "-s", f"https://registry.npmjs.org/{config.NPM_PACKAGE}/latest"],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode != 0:
-            return None
-        data = json.loads(result.stdout)
+        req = urllib.request.Request(url, headers={"User-Agent": "openclaw-status"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
         return {"version": data.get("version", ""), "name": data.get("name", "")}
     except Exception as e:
         print(f"  ⚠ npm fetch failed: {e}", file=sys.stderr)

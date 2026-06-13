@@ -9,7 +9,9 @@ import re
 from datetime import datetime, timezone
 
 from openclaw_status import config
-from openclaw_status.lib import openrouter_call, load_json, save_json, log_usage, check_cost_thresholds
+from openclaw_status.lib import (
+    openrouter_call, load_json, save_json, log_usage, check_cost_thresholds, notify,
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -294,6 +296,28 @@ def _detect_conflicts(issues: list, cs: dict) -> list[dict]:
 #  Output validation
 # ═══════════════════════════════════════════════════════════════════════════
 
+# XSS screens. The frontend is already XSS-safe (it builds every node with
+# textContent and guards hrefs), so these are defense-in-depth. The primary
+# free-text fields get the full pattern; nested free-text (evidence / known_issues
+# / changes) uses only the unambiguous `<script` / `javascript:` markers — the
+# `on*=` event-handler pattern is prone to false positives on ordinary prose
+# (e.g. "version one = ...") and a false positive would needlessly block deploy.
+_XSS_PRIMARY = re.compile(r"<script|javascript:|on\w+\s*=", re.IGNORECASE)
+_XSS_NESTED = re.compile(r"<script|javascript:", re.IGNORECASE)
+
+
+def _iter_strings(obj):
+    """Yield every string nested anywhere inside obj (dicts/lists/scalars)."""
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from _iter_strings(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _iter_strings(v)
+
+
 def validate_assessment(assessment: dict) -> list[str]:
     """Validate assessment output schema. Returns list of errors (empty = valid)."""
     errors = []
@@ -315,8 +339,11 @@ def validate_assessment(assessment: dict) -> list[str]:
         errors.append(f"Thesis too long: {len(thesis)} chars (max 5000)")
 
     for field in ("headline", "thesis", "sentiment_summary"):
-        val = assessment.get(field, "")
-        if re.search(r"<script|javascript:|on\w+\s*=", val, re.IGNORECASE):
+        if _XSS_PRIMARY.search(assessment.get(field, "") or ""):
+            errors.append(f"XSS pattern detected in {field}")
+
+    for field in ("evidence", "known_issues", "changes"):
+        if any(_XSS_NESTED.search(s) for s in _iter_strings(assessment.get(field))):
             errors.append(f"XSS pattern detected in {field}")
 
     return errors
@@ -418,8 +445,9 @@ def _step_primary(context: str) -> dict:
 
 
 def _step_validator(context: str, primary_assessment: dict) -> dict:
-    """Step 2: Validator (Owl Alpha, free) reviews the primary's work.
-    
+    """Step 2: an independent validator (config.VALIDATOR_MODEL — a different
+    provider from the analyst) reviews the primary's work.
+
     If the validator fails (API error, parse error), we return a FAIL-HARD signal
     instead of silently agreeing. This way the pipeline knows the review didn't happen.
     """
@@ -548,6 +576,18 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     print(f"Context size: {len(context):,} chars")
     print(f"{'='*60}\n")
 
+    # ── Hard budget gate ──
+    # A backstop to the post-run cost alerts (which only print): if today's or this
+    # month's spend already exceeds the limit, refuse to start so an unattended
+    # timer can't keep spending. Pair with a per-key spend cap at the OpenRouter
+    # dashboard for an out-of-process ceiling.
+    _daily, _monthly, budget_alerts = check_cost_thresholds()
+    if budget_alerts:
+        for a in budget_alerts:
+            print(f"   🛑 BUDGET GATE: {a} — refusing to start (no LLM spend)")
+        notify("🛑 OpenClaw Status: budget exceeded — skipping run (" + "; ".join(budget_alerts) + ")")
+        return {"success": False, "error": "budget exceeded: " + "; ".join(budget_alerts)}
+
     total_usage = {"tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "latency_ms": 0, "api_calls": 0}
     pipeline_steps = []
     validation_errors = []
@@ -556,6 +596,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     primary_result = _step_primary(context)
     if not primary_result["success"]:
         log_usage(config.PRIMARY_MODEL, {}, False)
+        notify(f"❌ OpenClaw Status: assessment failed — {str(primary_result.get('error'))[:200]}")
         return {"success": False, "error": primary_result["error"]}
 
     primary_assessment = primary_result["parsed"]
@@ -654,27 +695,10 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         "primary_recommendation": primary_assessment.get("recommendation"),
     }
 
-    # ── Output Fingerprinting ──
-    # Compare key fields against previous assessment. If identical, no deploy needed.
-    deployment_needed = True
-    if config.ASSESSMENT_FILE.exists():
-        try:
-            prev_assessment_raw = load_json(config.ASSESSMENT_FILE)
-            prev_a = prev_assessment_raw.get("assessment", {})
-            fp_match = (
-                prev_a.get("recommendation") == final_assessment.get("recommendation")
-                and prev_a.get("headline") == final_assessment.get("headline")
-                and len(prev_a.get("known_issues", [])) == len(final_assessment.get("known_issues", []))
-            )
-            if fp_match:
-                deployment_needed = False
-                print("  ℹ️ Assessment unchanged (fingerprint match) — skipping render")
-        except Exception:
-            pass
-    output["deployment_needed"] = deployment_needed
-
     # ── Diff Notification ──
-    # Compare new assessment vs previous and compute change summary.
+    # Compare new assessment vs previous and compute change summary (kept for
+    # future change-alerting; the page itself is re-rendered every run so the
+    # freshness timestamp stays current).
     diff = _compute_assessment_diff(final_assessment)
     if diff:
         output["diff"] = diff
@@ -693,6 +717,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     daily, monthly, alerts = check_cost_thresholds()
     for alert in alerts:
         print(f"   🚨 COST ALERT: {alert}")
+        notify(f"🚨 OpenClaw Status cost alert: {alert}")
 
     # Track validator reliability
     validator_unreviewed = validator_review.get("unreviewed", False) if not single_call else False
