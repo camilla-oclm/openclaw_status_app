@@ -436,6 +436,7 @@ def _step_validator(context: str, primary_assessment: dict) -> dict:
 
     result = openrouter_call(
         config.VALIDATOR_MODEL, VALIDATOR_PROMPT, user_content,
+        max_tokens=config.ASSESSMENT_MAX_TOKENS,
         reasoning=config.VALIDATOR_REASONING,
     )
 
