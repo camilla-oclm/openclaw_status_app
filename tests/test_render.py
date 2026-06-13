@@ -1,7 +1,9 @@
-"""Tests for openclaw_status.render — deploy guard, markdown sanitize, smoke test, injection."""
+"""Tests for openclaw_status.render — deploy guard, markdown sanitize, smoke test, injection, archive."""
+import os
+
 import pytest
 
-from openclaw_status import render
+from openclaw_status import config, render
 
 
 # ── _can_deploy ─────────────────────────────────────────────────────────────
@@ -121,3 +123,91 @@ def test_inject_legacy_var_data_contract():
 def test_inject_no_marker_returns_unchanged():
     tpl = "<html><body>no data slot here</body></html>"
     assert render._inject_data(tpl, {"version": "1.0"}) == tpl
+
+
+# ── archive / per-version snapshots ─────────────────────────────────────────
+
+def _page(version, extra=None):
+    """A realistic rendered page: data injected via the production contract, so
+    `</script>` inside string values is escaped just like the real renderer does."""
+    data = {"version": version, "thesis": "danger </script><script>x</script>"}
+    if extra:
+        data.update(extra)
+    tpl = '<html><body><script id="assessment-data" type="application/json">{}</script></body></html>'
+    return render._inject_data(tpl, data)
+
+
+def test_page_version_reads_injected_version(tmp_path):
+    p = tmp_path / "index.html"
+    p.write_text(_page("2026.6.6"))  # version survives even past an escaped </script>
+    assert render._page_version(str(p)) == "2026.6.6"
+
+
+def test_page_version_none_without_data_block(tmp_path):
+    p = tmp_path / "index.html"
+    p.write_text("<html><body>legacy, no injected data</body></html>")
+    assert render._page_version(str(p)) is None
+
+
+def test_page_version_rejects_path_traversal(tmp_path):
+    p = tmp_path / "index.html"
+    p.write_text(_page("../../etc/passwd"))  # contains "/" → not a safe filename
+    assert render._page_version(str(p)) is None
+
+
+def test_backup_archives_by_version(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "ARCHIVE_KEEP", 30)
+    out = tmp_path / "index.html"
+    out.write_text(_page("2026.6.6"))
+
+    assert render._backup_existing(str(out)) == "2026.6.6"
+    assert (tmp_path / "archive" / "2026.6.6.html").exists()
+    assert render._archived_versions() == ["2026.6.6"]
+    assert not (tmp_path / "index.html.prev").exists()  # no stale .prev when archived
+
+
+def test_backup_falls_back_to_prev_when_version_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    out = tmp_path / "index.html"
+    out.write_text("<html><body>legacy page, no version</body></html>")
+
+    assert render._backup_existing(str(out)) is None
+    assert (tmp_path / "index.html.prev").exists()
+    assert not (tmp_path / "archive").exists()
+
+
+def test_backup_no_existing_page_returns_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    assert render._backup_existing(str(tmp_path / "missing.html")) is None
+
+
+def test_prune_keeps_newest_by_mtime(tmp_path, monkeypatch):
+    arch = tmp_path / "archive"
+    arch.mkdir()
+    monkeypatch.setattr(config, "ARCHIVE_DIR", arch)
+    monkeypatch.setattr(config, "ARCHIVE_KEEP", 3)
+    for i in range(5):
+        f = arch / f"v{i}.html"
+        f.write_text("x")
+        os.utime(f, (1000 + i, 1000 + i))  # v4 newest, v0 oldest
+
+    render._prune_archive()
+    assert sorted(p.name for p in arch.glob("*.html")) == ["v2.html", "v3.html", "v4.html"]
+
+
+def test_archived_versions_empty_when_dir_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "does-not-exist")
+    assert render._archived_versions() == []
+
+
+def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
+    arch = tmp_path / "archive"
+    arch.mkdir()
+    (arch / "2026.6.1.html").write_text("x")
+    (arch / "2026.5.28.html").write_text("x")
+    monkeypatch.setattr(config, "ARCHIVE_DIR", arch)
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+
+    data = render._build_assessment_data({"assessment": {}, "version": "2026.6.6"}, {"sources": {}})
+    assert sorted(data["archived_versions"]) == ["2026.5.28", "2026.6.1"]

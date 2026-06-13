@@ -247,6 +247,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .tl .tlb{flex:1}
 .tl .tlv{font-weight:700; font-family:var(--mono); font-size:.92rem}
 .tl .tlv .cur{font-size:.66rem; font-weight:700; color:var(--accent); margin-left:.4rem; vertical-align:middle}
+.tl .tlv a.snap{color:inherit; text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px; text-decoration-color:var(--tone)}
+.tl .tlv a.snap:hover{text-decoration-style:solid}
 .tl .tlr{font-size:.84rem; color:var(--muted); margin-top:.1rem}
 .tl .tld{font-size:.74rem; color:var(--faint); margin-top:.1rem}
 
@@ -1044,16 +1046,24 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var h = (DATA.version_history||[]).slice();
     if (!h.length) return null;
     h.sort(function(a,b){ return String(b.assessed_at).localeCompare(String(a.assessed_at)); });
+    var arch = {};
+    (DATA.archived_versions||[]).forEach(function(v){ arch[v] = 1; });
     var s = el("div",{"class":"section"});
     s.appendChild(sectionHead("Past verdicts", h.length));
     var tl = el("div",{"class":"timeline"});
     h.forEach(function(e){
       var v = VERDICTS[e.recommendation] || {tone:"tone-muted"};
       var isCur = e.version === DATA.version;
+      // Past verdicts with an archived snapshot become links to that frozen page.
+      var label = "v"+e.version;
+      var vlabel = (!isCur && arch[e.version])
+        ? el("a",{"class":"snap", href:"archive/"+encodeURIComponent(e.version)+".html",
+                  title:"View the page as it was for v"+e.version}, label)
+        : document.createTextNode(label);
       tl.appendChild(el("div",{"class":"tl "+v.tone},[
         el("div",{"class":"marker"}, e.recommendation||"?"),
         el("div",{"class":"tlb"},[
-          el("div",{"class":"tlv"},[document.createTextNode("v"+e.version), isCur?el("span",{"class":"cur"},"● CURRENT"):null]),
+          el("div",{"class":"tlv"},[vlabel, isCur?el("span",{"class":"cur"},"● CURRENT"):null]),
           el("div",{"class":"tlr"}, e.reason || e.headline || ""),
           el("div",{"class":"tld"}, cap(e.confidence||"")+" confidence · "+fmtDate(e.assessed_at))
         ])

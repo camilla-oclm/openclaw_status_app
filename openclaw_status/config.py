@@ -25,6 +25,10 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if not GITHUB_TOKEN:
     print("⚠ WARNING: GITHUB_TOKEN not set. GitHub collection will fail.", file=sys.stderr)
 
+# Optional: a Slack/Discord-style incoming webhook. When set, cost/failure alerts
+# are POSTed to it (as {"text": ...}) in addition to stdout. Unset → stdout only.
+ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL")
+
 # ── Repository ──────────────────────────────────────────────────────────────
 REPO_OWNER = "openclaw"
 REPO_NAME = "openclaw"
@@ -59,7 +63,8 @@ FALLBACK_MODELS = [
 # OpenRouter counts reasoning tokens against this cap too: a high-effort run burns
 # ~4–6k tokens *just thinking* before any JSON, so the budget must cover reasoning
 # + the full document. 16k clears both with margin (deepseek-v4-pro allows 384k
-# output, qwen3.7-plus 65k). The validator's output stays small → keeps the default.
+# output, qwen3.7-plus 65k). The validator reasons too, so _step_validator passes
+# it this same budget (its JSON would otherwise truncate behind the reasoning tokens).
 ASSESSMENT_MAX_TOKENS = 16000
 
 # Cap on how many issues are fed into the LLM prompt. The collector persists the
@@ -72,6 +77,9 @@ RAW_DATA_FILE = DATA_DIR / "raw-data.json"
 ASSESSMENT_FILE = DATA_DIR / "assessment.json"
 USAGE_LOG_FILE = DATA_DIR / "usage.json"
 HISTORY_FILE = DATA_DIR / "history.json"
+# ETag cache for GitHub REST responses (conditional requests → 304s don't re-download
+# or count against the rate limit). Runtime state; gitignored.
+ETAG_CACHE_FILE = DATA_DIR / "etag-cache.json"
 
 # ── API endpoints ───────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -84,3 +92,10 @@ GITHUB_RAW_URL = "https://raw.githubusercontent.com"
 # <script id="assessment-data"> JSON contract and writes the public page to OUTPUT_HTML.
 TEMPLATE_FILE = WEB_DIR / "template.html"
 OUTPUT_HTML = WEB_DIR / "index.html"
+
+# Browsable per-version snapshots of past pages. On each render the outgoing page
+# is copied to ARCHIVE_DIR/<version>.html (recycling the old single .prev backup)
+# and the history section links to it. Caddy serves web/, so /archive/<v>.html is
+# reachable with no extra config. Retention is capped at ARCHIVE_KEEP (oldest pruned).
+ARCHIVE_DIR = WEB_DIR / "archive"
+ARCHIVE_KEEP = 30

@@ -96,21 +96,83 @@ def smoke_test_html(html_path: str, expected_version: str = "") -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Rollback Mechanism
+#  Archive / Rollback Mechanism
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _backup_existing(output_path: str) -> bool:
-    """Copy current index.html to index.html.prev before overwriting.
+# A page's version is read back from its injected assessment-data JSON. Only a
+# filesystem-safe version (word chars, dots, dashes — no "/" or "..") is accepted,
+# so a version string can never escape the archive directory when used as a filename.
+_SAFE_VERSION = re.compile(r"[\w.\-]+")
+_DATA_SCRIPT = re.compile(
+    r'<script id="assessment-data" type="application/json">(.*?)</script>',
+    flags=re.DOTALL,
+)
 
-    Returns True if backup was made, False if no existing file to back up.
+
+def _page_version(html_path: str) -> str | None:
+    """Read the version a rendered page was built for, from its injected JSON."""
+    try:
+        with open(html_path) as f:
+            m = _DATA_SCRIPT.search(f.read())
+        if not m:
+            return None
+        version = (json.loads(m.group(1)) or {}).get("version")  # \/ is valid JSON
+    except (OSError, ValueError):
+        return None
+    return version if isinstance(version, str) and _SAFE_VERSION.fullmatch(version) else None
+
+
+def _prune_archive() -> None:
+    """Keep only the newest config.ARCHIVE_KEEP snapshots (by mtime); drop the rest."""
+    snaps = sorted(
+        config.ARCHIVE_DIR.glob("*.html"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+    for old in snaps[config.ARCHIVE_KEEP:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+
+def _archived_versions() -> list[str]:
+    """Versions that currently have a browsable snapshot under web/archive/."""
+    if not config.ARCHIVE_DIR.exists():
+        return []
+    return sorted(p.stem for p in config.ARCHIVE_DIR.glob("*.html"))
+
+
+def _backup_existing(output_path: str) -> str | None:
+    """Snapshot the current page before it's overwritten.
+
+    Recycles what used to be a single index.html.prev into a browsable, per-version
+    archive: the outgoing page is copied to web/archive/<version>.html (named from
+    its own injected version), and the archive is pruned to config.ARCHIVE_KEEP.
+    The history section links to these snapshots. If the outgoing page's version
+    can't be determined, we fall back to a single .html.prev so an immediate
+    rollback copy always exists.
+
+    Returns the archived version, or None if there was nothing to archive / it was
+    only kept as .prev.
     """
     p = Path(output_path)
-    if p.exists():
+    if not p.exists():
+        return None
+
+    version = _page_version(str(p))
+    if not version:
         backup = p.with_suffix(".html.prev")
         shutil.copy2(str(p), str(backup))
         print(f"  📦 Backed up existing page to: {backup}")
-        return True
-    return False
+        return None
+
+    config.ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = config.ARCHIVE_DIR / f"{version}.html"
+    shutil.copy2(str(p), str(dest))
+    _prune_archive()
+    print(f"  📚 Archived previous page → {dest}")
+    return version
 
 
 def _can_deploy(assessment_raw: dict) -> tuple[bool, list[str]]:
@@ -215,6 +277,8 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         },
         "clawsweeper_work": cw.get("work_candidates", []),
         "clawsweeper_closed": cw.get("recently_closed", []),
+        # Versions with a browsable snapshot — history entries link to these.
+        "archived_versions": _archived_versions(),
     }
     return _deep_sanitize_markdown(data)
 
