@@ -92,8 +92,9 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    unsupported claims.
 3. **Refine** (analyst again) — only if the validator disagrees.
 
-If the analyst call fails, it falls back to `qwen/qwen3.7-plus` as well (a different provider,
-so a single-vendor outage doesn't sink the run). All models are served via OpenRouter.
+If the analyst call fails, it falls back to `minimax/minimax-m3` — a third distinct provider,
+so a single-vendor outage doesn't sink the run (and the analyst and validator stay on
+different models). All models are served via OpenRouter.
 
 The output is schema- and XSS-validated, appended to `data/history.json`, and cost/latency
 is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
