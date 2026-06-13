@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark light">
+<title>OpenClaw Status — Should you update?</title>
+<style>
+:root{
+  --bg:#0a0c10; --bg2:#0d1117; --card:#161b22; --card2:#1c2230;
+  --border:#283039; --border2:#30363d;
+  --text:#e6edf3; --muted:#9098a1; --faint:#6e7681;
+  --accent:#58a6ff;
+  --good:#3fb950; --warn:#d6a02a; --bad:#f85149; --info:#58a6ff; --gray:#8b949e;
+  --good-bg:rgba(63,185,80,.13); --warn-bg:rgba(214,160,42,.14);
+  --bad-bg:rgba(248,81,73,.13); --info-bg:rgba(88,166,255,.13); --gray-bg:rgba(139,148,158,.13);
+  --good-bd:rgba(63,185,80,.42); --warn-bd:rgba(214,160,42,.42);
+  --bad-bd:rgba(248,81,73,.42); --info-bd:rgba(88,166,255,.42); --gray-bd:rgba(139,148,158,.38);
+  --shadow:0 1px 0 rgba(0,0,0,.2); --radius:14px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+html[data-theme="light"]{
+  --bg:#f4f6fa; --bg2:#eef1f6; --card:#ffffff; --card2:#f7f9fc;
+  --border:#d8dee6; --border2:#d0d7de;
+  --text:#1f2328; --muted:#59636e; --faint:#818b96;
+  --accent:#0969da; --info:#0969da;
+  --good-bg:rgba(26,127,55,.10); --warn-bg:rgba(154,103,0,.12);
+  --bad-bg:rgba(207,34,46,.10); --info-bg:rgba(9,105,218,.10); --gray-bg:rgba(110,119,129,.10);
+  --good:#1a7f37; --warn:#9a6700; --bad:#cf222e; --gray:#6e7781;
+  --shadow:0 1px 3px rgba(31,35,40,.08),0 1px 2px rgba(31,35,40,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--text); line-height:1.6;
+  font-size:15px; letter-spacing:.01em;
+  min-height:100vh;
+}
+.tone-good{--tone:var(--good);--tone-bg:var(--good-bg);--tone-bd:var(--good-bd)}
+.tone-warn{--tone:var(--warn);--tone-bg:var(--warn-bg);--tone-bd:var(--warn-bd)}
+.tone-bad{--tone:var(--bad);--tone-bg:var(--bad-bg);--tone-bd:var(--bad-bd)}
+.tone-info{--tone:var(--info);--tone-bg:var(--info-bg);--tone-bd:var(--info-bd)}
+.tone-muted{--tone:var(--gray);--tone-bg:var(--gray-bg);--tone-bd:var(--gray-bd)}
+
+/* top bar */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:.7rem clamp(1rem,4vw,2rem);
+  background:color-mix(in srgb,var(--bg) 82%,transparent);
+  backdrop-filter:saturate(140%) blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.brand{display:flex; align-items:center; gap:.55rem; font-weight:700; font-size:1.02rem}
+.brand .logo{font-size:1.25rem}
+.brand .dim{color:var(--muted); font-weight:500}
+.bar-right{display:flex; align-items:center; gap:.6rem}
+.fresh{
+  display:inline-flex; align-items:center; gap:.4rem;
+  font-size:.78rem; font-weight:600; padding:.3rem .65rem; border-radius:999px;
+  background:var(--tone-bg); color:var(--tone); border:1px solid var(--tone-bd);
+}
+.fresh .dot{width:7px;height:7px;border-radius:50%;background:var(--tone)}
+.icon-btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:34px;height:34px;border-radius:9px; cursor:pointer;
+  background:var(--card); border:1px solid var(--border2); color:var(--text);
+  font-size:.95rem; transition:.15s;
+}
+.icon-btn:hover{background:var(--card2); border-color:var(--accent)}
+
+.wrap{max-width:940px; margin:0 auto; padding:clamp(1.1rem,3.5vw,2.2rem) clamp(1rem,4vw,2rem) 4rem}
+
+/* hero */
+.hero{
+  position:relative; overflow:hidden;
+  border:1px solid var(--border2); border-radius:18px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--tone-bg), transparent 55%),
+    var(--card);
+  padding:1.6rem 1.7rem 1.7rem; margin-bottom:1.2rem;
+  box-shadow:var(--shadow);
+}
+.hero::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:6px; background:var(--tone);
+}
+.eyebrow{font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:700}
+.hero-version{font-size:clamp(1.5rem,4.5vw,2.05rem); font-weight:800; margin-top:.35rem; letter-spacing:-.02em}
+.hero-version .vnum{font-family:var(--mono); color:var(--tone)}
+.hero-sub{color:var(--muted); font-size:.86rem; margin-top:.15rem}
+.hero-sub .sep{opacity:.5; margin:0 .45rem}
+.verdict{
+  display:inline-flex; align-items:center; gap:.55rem; margin-top:1.15rem;
+  font-size:1.18rem; font-weight:800; padding:.6rem 1.05rem; border-radius:12px;
+  background:var(--tone-bg); color:var(--tone); border:1px solid var(--tone-bd);
+}
+.verdict .em{font-size:1.35rem; line-height:1}
+.verdict-blurb{margin-top:.75rem; color:var(--text); font-weight:600; font-size:1.02rem}
+.hero-headline{margin-top:.5rem; color:var(--muted); font-size:.96rem; max-width:62ch}
+.conf-row{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.1rem; align-items:center}
+.chip{
+  display:inline-flex; align-items:center; gap:.4rem; font-size:.76rem; font-weight:600;
+  padding:.32rem .7rem; border-radius:999px; border:1px solid var(--border2);
+  background:var(--card2); color:var(--muted);
+}
+.chip b{color:var(--text); font-weight:700}
+.chip.lvl-high{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
+.chip.lvl-medium{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
+.chip.lvl-low{color:var(--bad); border-color:var(--bad-bd); background:var(--bad-bg)}
+
+/* low-confidence banner */
+.banner{
+  display:flex; gap:.7rem; align-items:flex-start; margin-bottom:1.2rem;
+  padding:.85rem 1rem; border-radius:12px;
+  background:var(--warn-bg); border:1px solid var(--warn-bd); color:var(--text); font-size:.88rem;
+}
+.banner .bi{font-size:1.1rem; line-height:1.3}
+
+/* stats */
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.75rem; margin-bottom:1.7rem}
+.stat{
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:.85rem 1rem; box-shadow:var(--shadow);
+}
+.stat .v{font-size:1.7rem; font-weight:800; font-family:var(--mono); line-height:1.1}
+.stat .l{font-size:.74rem; color:var(--muted); margin-top:.2rem; text-transform:uppercase; letter-spacing:.05em; font-weight:600}
+.stat .s{font-size:.74rem; color:var(--faint); margin-top:.15rem}
+
+/* sections */
+.section{margin-top:2rem}
+.sec-head{display:flex; align-items:baseline; gap:.6rem; margin-bottom:.9rem; padding-bottom:.5rem; border-bottom:1px solid var(--border)}
+.sec-title{font-size:1.12rem; font-weight:700; letter-spacing:-.01em}
+.sec-count{font-size:.8rem; color:var(--muted); font-weight:600; font-family:var(--mono)}
+.sec-note{font-size:.82rem; color:var(--muted); margin-left:auto; font-weight:500}
+
+.prose{
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:1.15rem 1.25rem; font-size:.97rem; color:var(--text); box-shadow:var(--shadow);
+}
+.prose p{margin-bottom:.8rem}
+.prose p:last-child{margin-bottom:0}
+.ilink{color:var(--accent); text-decoration:none; font-family:var(--mono); font-size:.92em; font-weight:600}
+.ilink:hover{text-decoration:underline}
+
+/* evidence */
+.ev-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem}
+@media(max-width:680px){.ev-grid{grid-template-columns:1fr}}
+.ev-card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:1.05rem 1.15rem; box-shadow:var(--shadow)}
+.ev-card h3{font-size:.82rem; text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:.45rem; margin-bottom:.7rem}
+.ev-for h3{color:var(--good)} .ev-against h3{color:var(--bad)} .ev-neutral h3{color:var(--muted)}
+.ev-card ul{list-style:none; display:flex; flex-direction:column; gap:.6rem}
+.ev-card li{position:relative; padding-left:1.1rem; font-size:.9rem; color:var(--text)}
+.ev-card li::before{content:""; position:absolute; left:0; top:.55em; width:7px; height:7px; border-radius:50%}
+.ev-for li::before{background:var(--good)} .ev-against li::before{background:var(--bad)} .ev-neutral li::before{background:var(--gray)}
+.ev-neutral{grid-column:1/-1}
+
+/* filters */
+.filters{display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:.9rem}
+.fbtn{
+  font-size:.78rem; font-weight:600; padding:.32rem .8rem; border-radius:999px; cursor:pointer;
+  background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s;
+}
+.fbtn:hover{color:var(--text); border-color:var(--accent)}
+.fbtn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff}
+html[data-theme="light"] .fbtn[aria-pressed="true"]{color:#fff}
+
+/* issue cards */
+.issue{
+  display:flex; gap:.85rem; align-items:flex-start;
+  background:var(--card); border:1px solid var(--border); border-left-width:3px; border-radius:12px;
+  padding:.8rem .95rem; margin-bottom:.6rem; box-shadow:var(--shadow);
+}
+.issue.sev-high{border-left-color:var(--bad)}
+.issue.sev-medium{border-left-color:var(--warn)}
+.issue.sev-low{border-left-color:var(--gray)}
+.issue .num{font-family:var(--mono); font-size:.82rem; font-weight:700; color:var(--accent); text-decoration:none; white-space:nowrap; padding-top:.05rem}
+.issue .num:hover{text-decoration:underline}
+.issue .body{flex:1; min-width:0}
+.issue .title{font-weight:600; font-size:.93rem}
+.issue .tags{display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.5rem}
+.tag{
+  display:inline-flex; align-items:center; gap:.3rem; font-size:.71rem; font-weight:600;
+  padding:.18rem .55rem; border-radius:999px; border:1px solid var(--border2);
+  background:var(--card2); color:var(--muted);
+}
+.tag.t-bad{color:var(--bad); border-color:var(--bad-bd); background:var(--bad-bg)}
+.tag.t-warn{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
+.tag.t-good{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
+.tag.t-info{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
+
+/* tabs (changes) */
+.tabs{display:flex; gap:.4rem; margin-bottom:.9rem; flex-wrap:wrap}
+.tab{
+  font-size:.83rem; font-weight:600; padding:.4rem .9rem; border-radius:10px; cursor:pointer;
+  background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s;
+  display:inline-flex; align-items:center; gap:.45rem;
+}
+.tab:hover{color:var(--text)}
+.tab[aria-selected="true"]{background:var(--card2); color:var(--text); border-color:var(--accent)}
+.tab .cnt{font-family:var(--mono); font-size:.75rem; background:var(--bg2); padding:.05rem .4rem; border-radius:6px; color:var(--muted)}
+.change{
+  background:var(--card); border:1px solid var(--border); border-radius:12px;
+  padding:.75rem .95rem; margin-bottom:.55rem; box-shadow:var(--shadow);
+}
+.change .ct{font-weight:600; font-size:.92rem}
+.change .cm{font-size:.82rem; color:var(--muted); margin-top:.25rem}
+.empty{color:var(--faint); font-size:.88rem; padding:.6rem 0}
+
+/* platform grid */
+.plat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:.7rem}
+.plat{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:.8rem .9rem; box-shadow:var(--shadow)}
+.plat .ph{display:flex; align-items:center; justify-content:space-between; gap:.5rem}
+.plat .pn{font-weight:600; font-size:.88rem; display:flex; align-items:center; gap:.4rem}
+.plat .pl{font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em}
+.plat .track{height:6px; border-radius:999px; background:var(--bg2); margin-top:.6rem; overflow:hidden}
+.plat .fill{height:100%; border-radius:999px}
+.imp-none{--ic:var(--good)} .imp-low{--ic:var(--info)} .imp-medium{--ic:var(--warn)} .imp-high{--ic:var(--bad)}
+.plat .pl{color:var(--ic)} .plat .fill{background:var(--ic)}
+
+/* sentiment */
+.quote{
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  border-left:3px solid var(--accent); padding:1.1rem 1.25rem; font-size:.96rem; box-shadow:var(--shadow);
+}
+.quote .qh{font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700; margin-bottom:.5rem}
+
+/* details / triage */
+details.triage{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden}
+details.triage summary{cursor:pointer; padding:.9rem 1.15rem; font-weight:600; font-size:.95rem; list-style:none; display:flex; align-items:center; justify-content:space-between}
+details.triage summary::-webkit-details-marker{display:none}
+details.triage summary .caret{color:var(--muted); transition:.2s; font-size:.8rem}
+details.triage[open] summary .caret{transform:rotate(90deg)}
+.triage-body{padding:0 1.15rem 1.1rem; display:grid; grid-template-columns:1fr 1fr; gap:1.2rem}
+@media(max-width:680px){.triage-body{grid-template-columns:1fr}}
+.triage-col h4{font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:.4rem 0 .6rem}
+.trow{font-size:.83rem; padding:.4rem 0; border-bottom:1px solid var(--border); display:flex; gap:.5rem; align-items:baseline}
+.trow:last-child{border-bottom:none}
+.trow .tn{font-family:var(--mono); color:var(--accent); text-decoration:none; font-weight:600; white-space:nowrap}
+.trow .tt{color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+/* history timeline */
+.timeline{display:flex; flex-direction:column; gap:0}
+.tl{display:flex; gap:.9rem; padding-bottom:1rem; position:relative}
+.tl:not(:last-child)::before{content:""; position:absolute; left:11px; top:24px; bottom:0; width:2px; background:var(--border)}
+.tl .marker{width:24px; height:24px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-size:.8rem; border:2px solid var(--tone); background:var(--tone-bg)}
+.tl .tlb{flex:1}
+.tl .tlv{font-weight:700; font-family:var(--mono); font-size:.92rem}
+.tl .tlv .cur{font-size:.66rem; font-weight:700; color:var(--accent); margin-left:.4rem; vertical-align:middle}
+.tl .tlr{font-size:.84rem; color:var(--muted); margin-top:.1rem}
+.tl .tld{font-size:.74rem; color:var(--faint); margin-top:.1rem}
+
+/* footer */
+.foot{margin-top:2.6rem; padding-top:1.4rem; border-top:1px solid var(--border); color:var(--muted); font-size:.83rem}
+.foot .how{display:flex; gap:.6rem; align-items:flex-start; margin-bottom:1rem}
+.foot .how .fi{font-size:1.05rem}
+.foot .meta{display:flex; flex-wrap:wrap; gap:.4rem .9rem; font-size:.78rem; color:var(--faint)}
+.foot .meta code{font-family:var(--mono); color:var(--muted)}
+.foot a{color:var(--accent); text-decoration:none}
+.foot a:hover{text-decoration:underline}
+
+.errbox{max-width:600px; margin:4rem auto; text-align:center; color:var(--muted)}
+.errbox h2{color:var(--text); margin-bottom:.5rem}
+</style>
+</head>
+<body>
+
+<header class="topbar tone-muted">
+  <div class="brand"><span class="logo">🦞</span> OpenClaw <span class="dim">Status</span></div>
+  <div class="bar-right">
+    <span id="fresh" class="fresh tone-muted" hidden><span class="dot"></span><span id="fresh-text"></span></span>
+    <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle theme" title="Toggle light/dark">🌙</button>
+  </div>
+</header>
+
+<main class="wrap"><div id="app"></div></main>
+
+<script id="assessment-data" type="application/json">
+{
+  "assessed_at": "2026-06-07T05:49:56.787629+00:00",
+  "version": "2026.6.1",
+  "recommendation": "⏸️",
+  "headline": "v2026.6.1 introduces valuable features but ships with multiple critical regressions across core functionality — skip until fixes land.",
+  "confidence": "high",
+  "thesis": "Version 2026.6.1 brings meaningful advancements like Skill Workshop GUI, Windows node support as a first-class citizen, and improved recovery paths for interrupted tool calls and channel delivery. However, at least eight new regressions have been reported within 48 hours of release, all labeled critical severity by the community and Clawsweeper. These regressions include complete build failure (#91035), persistent dirty status for the local embeddings provider (#91001), hidden tool-call validation errors in the TUI (#90982), avatar assignment not scoped per agent (#90890), severe performance degradation for sessions.list under concurrency (#90814), Skill Workshop GUI not showing skills (#90756), WhatsApp media auto-reply silently failing to dispatch (#90704), and inability to cancel running cron tasks (#90630). Additionally, a work candidate (#91067) documents a regression in tool.call error handling that silently discards composed messages. The combination of these issues affects all platforms and core workflows (build, memory, UI, channels, task management). While the changelog describes substantial improvements, the practical experience for users upgrading from v2026.5.20 is likely degraded across multiple critical paths. No pre-release fixes are available for these regressions; they remain open with Clawsweeper decisions of keep_open. The risk of upgrading outweighs the benefits for most users. The recommendation is to skip this version and wait for a patch release that resolves these regressions.",
+  "evidence": {
+    "for_updating": [
+      "Skill Workshop now has a full Control UI flow with proposal lists, today actions, revision handoff, and locale coverage (changelog).",
+      "Windows node support graduated from beta to first-class citizen (Reddit post, changelog).",
+      "Channels and mobile delivery are steadier across Telegram, WhatsApp, iMessage, Slack, Discord, etc. (changelog).",
+      "Provider coverage expanded to include MiniMax M3, Google/Vertex catalog fixes, and OpenRouter SQLite model caching (changelog)."
+    ],
+    "against_updating": [
+      "Build fails on v2026.6.1 (#91035): Docker setup times out, preventing deployment for users relying on containerized builds.",
+      "Local embeddings provider reports dirty status always, breaking memory search functionality (#91001).",
+      "TUI hides tool-call validation errors behind 'run aborted', forcing users to check gateway logs to diagnose failures (#90982).",
+      "Avatar assignment is not per-agent: setting an avatar for one agent changes it for all (#90890).",
+      "sessions.list becomes O(rows) slow under concurrency due to a global workspaceDir mutation, impacting gateway performance (#90814).",
+      "Skill Workshop does not show skills in the GUI, only via CLI, rendering the new UI useless (#90756).",
+      "WhatsApp media auto-reply generates response but does not dispatch, causing message loss for image messages (#90704).",
+      "Cron tasks cannot be cancelled even when they appear in the task ledger, leaving runaway jobs unstoppable (#90630).",
+      "Clawsweeper work candidate #91067 identifies a regression where orphan tool.call fail-closed handling silently discards composed messages."
+    ],
+    "neutral": [
+      "The release includes many marginal improvements to timeout handling, session metadata, and plugin loading (changelog).",
+      "Two diamond-lobster issues (#64103, #60339) remain open but are not regressions specific to this version.",
+      "Community sentiment is limited; only one Reddit post highlights Windows support positively, but no negative posts have surfaced yet on social channels."
+    ]
+  },
+  "known_issues": [
+    {
+      "number": 91035,
+      "title": "Build fails on v2026.6.1 (Docker timeout)",
+      "severity": "high",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 91001,
+      "title": "Local embeddings provider dirty status always",
+      "severity": "high",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 90982,
+      "title": "TUI hides tool-call validation errors behind 'run aborted'",
+      "severity": "high",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 90890,
+      "title": "Avatar assignment not per-agent",
+      "severity": "medium",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 90814,
+      "title": "sessions.list O(rows) plugin-metadata scans under concurrency",
+      "severity": "high",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 90756,
+      "title": "Skill Workshop GUI does not show skills",
+      "severity": "high",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 90704,
+      "title": "WhatsApp media auto-reply does not dispatch outbound message",
+      "severity": "high",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 90630,
+      "title": "Cron task cannot be cancelled",
+      "severity": "medium",
+      "category": "regression",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 64103,
+      "title": "Session status field values mislead agents into spawning duplicate sessions",
+      "severity": "medium",
+      "category": "diamond_lobster",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    },
+    {
+      "number": 60339,
+      "title": "offloadedRefs metadata lost in transcript for iOS share/node path",
+      "severity": "high",
+      "category": "diamond_lobster",
+      "clawsweeper_decision": "keep_open",
+      "fixed_in": null
+    }
+  ],
+  "changes": {
+    "breaking": [
+      {
+        "title": "Docs: add a dedicated Skill Workshop guide and refresh ClawHub showcase cards (#88734)",
+        "impact": "No breaking changes; documentation only."
+      },
+      {
+        "title": "Skills: let the skill_workshop agent tool accept optional review_hint for revision proposals (truncated from changelog)",
+        "impact": "Possible behavior change for skill workshop tool, but likely additive."
+      }
+    ],
+    "fixes": [
+      {
+        "title": "Agents and CLI-backed runtimes recover more cleanly from interrupted tool calls, stale session bindings, compaction handoffs, and media delivery retries (#88129, #88136, #88141, #88162, #88182)",
+        "verified": false
+      },
+      {
+        "title": "Channels and mobile delivery steadier across Telegram, WhatsApp, iMessage, Slack, Discord, Microsoft Teams, Google Chat, Google Meet, and iOS realtime Talk (#88096, #88105, #88183, #88231)",
+        "verified": false
+      },
+      {
+        "title": "Skills and plugin loading now handle stale disabled snapshots and loader failures more clearly (#79072, #79173)",
+        "verified": false
+      },
+      {
+        "title": "MCP tool results coercion to prevent Anthropic 400s and poisoned session history (#90710, #90728)",
+        "verified": false
+      },
+      {
+        "title": "Anthropic extended-thinking sessions recovery after prompt-cache expiry or Gateway restart (truncated from changelog)",
+        "verified": false
+      }
+    ],
+    "features": [
+      {
+        "title": "Skill Workshop now has a full Control UI flow with proposal lists, today actions, revision handoff, searchable file previews, review states, locale coverage, and reusable session routing.",
+        "value": "Governed skill creation and review directly in the GUI."
+      },
+      {
+        "title": "Windows node support graduated from beta to first-class citizen (Reddit, changelog)",
+        "value": "Native Windows support without Linux dependency."
+      },
+      {
+        "title": "Provider coverage and model metadata include MiniMax M3, account OAuth endpoints, Google/Vertex catalog fixes, OpenRouter SQLite model caching, Copilot Claude 1M capabilities, Foundry reasoning alignment, and OpenAI response replay guards (#88480, #88512, #88851, #88860)",
+        "value": "Expanded model support and accuracy improvements."
+      },
+      {
+        "title": "Workboard, SecretRef plugin manifests, hosted iOS push relay, and external Copilot/Tokenjuice packaging (#82326, #87469, #87796, #88107, #88117)",
+        "value": "Broader orchestration and integration surfaces."
+      },
+      {
+        "title": "Chat and Control UI startup paths improvements: keep sends alive through history loading, stream deltas, skip markdown work while streaming, keep drafts local while typing, clear composer after sends, trace first-output latency (#88772, #88825, #88998, #89030, #89106)",
+        "value": "Smoother and more responsive UI."
+      }
+    ]
+  },
+  "sentiment_summary": "Community sentiment is mixed: the release notes are positive about new features, but the rapid accumulation of critical regression reports on GitHub (8+ new issues in 2 days) indicates significant user frustration with the stability of this version. No negative social media posts have been observed yet, but the issue tracker tells a clear story of broke functionality.",
+  "platform_impact": {
+    "windows": "high",
+    "macos": "high",
+    "linux": "high",
+    "discord": "low",
+    "slack": "low",
+    "telegram": "medium"
+  },
+  "usage": {
+    "tokens_in": 15101,
+    "tokens_out": 3359,
+    "cost_usd": 0.001731146,
+    "latency_ms": 38811,
+    "api_calls": 2
+  },
+  "version_history": [
+    {
+      "version": "2026.5.27",
+      "assessed_at": "2026-05-30T15:03:29.326544+00:00",
+      "recommendation": "🔄",
+      "confidence": "high",
+      "headline": "Multiple critical regressions in v2026.5.27 across channels and platforms; pre-release with fixes available, wait for next stable.",
+      "reason": "14 regressions, fixes in beta",
+      "cost_usd": 0.0033
+    },
+    {
+      "version": "2026.5.28",
+      "assessed_at": "2026-06-03T17:52:49.678380+00:00",
+      "recommendation": "🔄",
+      "confidence": "medium",
+      "headline": "v2026.5.28 introduces critical regressions; fixes available in beta pre-release — wait for next stable",
+      "reason": "v2026.5.28 introduces critical regressions",
+      "cost_usd": 0.00173474
+    },
+    {
+      "version": "2026.6.1",
+      "assessed_at": "2026-06-07T05:49:56.788545+00:00",
+      "recommendation": "⏸️",
+      "confidence": "high",
+      "headline": "v2026.6.1 introduces valuable features but ships with multiple critical regressions across core functionality — skip until fixes land.",
+      "reason": "v2026.6.1 introduces valuable features but ships with mul...",
+      "cost_usd": 0.001731146
+    }
+  ],
+  "npm": {
+    "version": "2026.6.1",
+    "name": "openclaw"
+  },
+  "latest_release": {
+    "tag": "v2026.6.1",
+    "published_at": "2026-06-03",
+    "prerelease": false
+  },
+  "latest_prerelease": {
+    "tag": "",
+    "published_at": ""
+  },
+  "clawsweeper_work": [
+    {
+      "number": 79745,
+      "title": "Memory/QMD: isolate mcporter sidecars per agent",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 05:16 UTC"
+    },
+    {
+      "number": 66174,
+      "title": "Fix session transcript path canonicalization on save",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 05:06 UTC"
+    },
+    {
+      "number": 90976,
+      "title": "fix(agents): prevent ReDoS in background-session name derivation",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 04:54 UTC"
+    },
+    {
+      "number": 90960,
+      "title": "fix(google): enable vertex image and video generation",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 03:55 UTC"
+    },
+    {
+      "number": 91075,
+      "title": "MCP runtime idle sweep defeated by releaseLease resetting lastUsedAt",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 03:19 UTC"
+    },
+    {
+      "number": 90167,
+      "title": "fix(plugins): resolve config env vars for runtime loads",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 03:16 UTC"
+    },
+    {
+      "number": 91067,
+      "title": "[Bug]: Regression 2026.6.1: orphan tool.call fail-closed handling silently discards the composed assistant...",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 02:20 UTC"
+    },
+    {
+      "number": 68280,
+      "title": "fix(gateway): fail fast on missing local probe auth",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 01:54 UTC"
+    },
+    {
+      "number": 84017,
+      "title": "fix(gateway): bind MCP loopback scope to tokens",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 01:24 UTC"
+    },
+    {
+      "number": 2535,
+      "title": "Update install telemetry and ranking signals",
+      "priority": "high",
+      "reviewed_at": "Jun 7, 2026, 01:23 UTC"
+    }
+  ],
+  "clawsweeper_closed": [
+    {
+      "number": 70523,
+      "title": "fix(memory-core): suppress raw dreaming inline dumps on fallback (Fixes #70509)",
+      "reason": "duplicate_or_superseded",
+      "closed_at": "Jun 7, 2026, 05:14 UTC"
+    },
+    {
+      "number": 70422,
+      "title": "feat(minimax): expand VLM model detection",
+      "reason": "implemented_on_main",
+      "closed_at": "Jun 7, 2026, 05:13 UTC"
+    },
+    {
+      "number": 70647,
+      "title": "test(agents): pin empty-turn coverage for non-strict-agentic nemotron",
+      "reason": "duplicate_or_superseded",
+      "closed_at": "Jun 7, 2026, 05:13 UTC"
+    },
+    {
+      "number": 70540,
+      "title": "feat(memory-core): add memory_add tool",
+      "reason": "duplicate_or_superseded",
+      "closed_at": "Jun 7, 2026, 05:13 UTC"
+    },
+    {
+      "number": 91088,
+      "title": "refactor(matrix): store sync cache in sqlite",
+      "reason": "none",
+      "closed_at": "Jun 7, 2026, 05:13 UTC"
+    },
+    {
+      "number": 70568,
+      "title": "fix(telegram): scope ambiguous exec approvals to one account",
+      "reason": "implemented_on_main",
+      "closed_at": "Jun 7, 2026, 05:13 UTC"
+    },
+    {
+      "number": 69463,
+      "title": "feat(observability): add configurable session tracing headers for LLM requests",
+      "reason": "duplicate_or_superseded",
+      "closed_at": "Jun 7, 2026, 05:13 UTC"
+    },
+    {
+      "number": 70584,
+      "title": "fix: clamp effort=low/minimal to medium for claude-opus-4.7",
+      "reason": "duplicate_or_superseded",
+      "closed_at": "Jun 7, 2026, 05:12 UTC"
+    },
+    {
+      "number": 70363,
+      "title": "feat(auto-reply): run-generation fence for stronger interruptibility (refs #70319)",
+      "reason": "duplicate_or_superseded",
+      "closed_at": "Jun 7, 2026, 05:12 UTC"
+    },
+    {
+      "number": 69519,
+      "title": "Sessions page: use numeric input for Limit field",
+      "reason": "duplicate_or_superseded",
+      "closed_at": "Jun 7, 2026, 05:12 UTC"
+    }
+  ]
+}
+</script>
+<script>
+(function(){
+  "use strict";
+
+  // ── parse data (error-safe) ──────────────────────────────────────────────
+  var DATA;
+  try {
+    DATA = JSON.parse(document.getElementById("assessment-data").textContent);
+  } catch (e) { DATA = null; }
+
+  var app = document.getElementById("app");
+
+  function showError(msg){
+    app.textContent = "";
+    var box = el("div", {"class":"errbox"}, [
+      el("h2", null, "Assessment unavailable"),
+      el("p", null, msg)
+    ]);
+    app.appendChild(box);
+  }
+
+  // ── tiny safe DOM helper ─────────────────────────────────────────────────
+  function el(tag, props, kids){
+    var n = document.createElement(tag);
+    if (props) for (var k in props){
+      if (!Object.prototype.hasOwnProperty.call(props,k)) continue;
+      var val = props[k];
+      if (val == null) continue;
+      if (k === "class") n.className = val;
+      else if (k === "href"){
+        var u = safeUrl(val);
+        if (u){ n.setAttribute("href", u); n.setAttribute("target","_blank"); n.setAttribute("rel","noopener noreferrer"); }
+      }
+      else n.setAttribute(k, val);
+    }
+    if (kids != null){
+      if (!Array.isArray(kids)) kids = [kids];
+      for (var i=0;i<kids.length;i++){
+        var c = kids[i];
+        if (c == null) continue;
+        n.appendChild(typeof c === "object" ? c : document.createTextNode(String(c)));
+      }
+    }
+    return n;
+  }
+  function safeUrl(u){
+    if (!u) return "";
+    var s = String(u).trim();
+    if (/^(javascript|data|vbscript):/i.test(s)) return "";
+    return s;
+  }
+  function issueUrl(n){ return "https://github.com/openclaw/openclaw/issues/" + n; }
+
+  // turn "#91035" inside prose into a github link
+  function linkify(text){
+    var out = [], re = /#(\d{3,})/g, last = 0, m;
+    text = String(text || "");
+    while ((m = re.exec(text))){
+      if (m.index > last) out.push(document.createTextNode(text.slice(last, m.index)));
+      out.push(el("a", {"class":"ilink", href: issueUrl(m[1])}, "#" + m[1]));
+      last = re.lastIndex;
+    }
+    if (last < text.length) out.push(document.createTextNode(text.slice(last)));
+    return out;
+  }
+
+  function timeAgo(iso){
+    var t = new Date(iso); if (isNaN(t)) return "";
+    var s = (Date.now() - t.getTime())/1000;
+    if (s < 0) s = 0;
+    var d = Math.floor(s/86400);
+    if (d >= 1) return d + (d===1?" day ago":" days ago");
+    var h = Math.floor(s/3600); if (h >= 1) return h + "h ago";
+    var mn = Math.floor(s/60); return mn + "m ago";
+  }
+  function fmtDate(iso){
+    if (!iso) return "";
+    var d = new Date(iso); if (isNaN(d)) return String(iso).slice(0,10);
+    return d.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+  }
+  function cap(s){ s = String(s||""); return s.charAt(0).toUpperCase()+s.slice(1); }
+
+  // ── lookup tables ─────────────────────────────────────────────────────────
+  var VERDICTS = {
+    "✅": {label:"Update now",              tone:"tone-good", blurb:"Safe to update — no blocking issues found in this release."},
+    "⚠️": {label:"Update with precautions", tone:"tone-warn", blurb:"Worthwhile, but back up first — some real risk remains."},
+    "⏸️": {label:"Skip this version",       tone:"tone-bad",  blurb:"Hold off — the open issues outweigh the benefits right now."},
+    "🔄": {label:"Wait for next release",   tone:"tone-info", blurb:"Fixes are already lined up in a pre-release — wait for it to land."}
+  };
+  var CAT = {
+    regression:    {icon:"🔄", label:"Regression",      cls:"t-bad"},
+    diamond_lobster:{icon:"💎", label:"Diamond Lobster", cls:"t-info"},
+    active:        {icon:"🟢", label:"Active",          cls:"t-warn"}
+  };
+  var PLAT = [
+    ["windows","🪟","Windows"],["macos","🍎","macOS"],["linux","🐧","Linux"],
+    ["discord","💬","Discord"],["slack","💼","Slack"],["telegram","✈️","Telegram"]
+  ];
+  var IMPACT = {none:{label:"None",w:10},low:{label:"Low",w:38},medium:{label:"Medium",w:68},high:{label:"High",w:100}};
+
+  // ── sections ──────────────────────────────────────────────────────────────
+  function sectionHead(title, count, note){
+    return el("div",{"class":"sec-head"},[
+      el("h2",{"class":"sec-title"}, title),
+      count != null ? el("span",{"class":"sec-count"}, count) : null,
+      note ? el("span",{"class":"sec-note"}, note) : null
+    ]);
+  }
+
+  function hero(v){
+    var rel = DATA.latest_release || {}, npm = DATA.npm || {};
+    var sub = [];
+    if (rel.published_at) sub.push("Released " + fmtDate(rel.published_at));
+    if (npm.version) sub.push("npm " + npm.version);
+    var subNodes = [];
+    sub.forEach(function(s,i){
+      if (i) subNodes.push(el("span",{"class":"sep"},"·"));
+      subNodes.push(document.createTextNode(s));
+    });
+
+    var conf = String(DATA.confidence||"medium").toLowerCase();
+    var pre = DATA.latest_prerelease || {};
+    var chips = [
+      el("span",{"class":"chip lvl-"+conf},[document.createTextNode("Confidence: "), el("b",null,cap(conf))]),
+      el("span",{"class":"chip"},[document.createTextNode("Assessed "), el("b",null,timeAgo(DATA.assessed_at))])
+    ];
+    if (pre.tag) chips.push(el("span",{"class":"chip"},[el("b",null,"Pre-release "+pre.tag)," available"]));
+
+    return el("div",{"class":"hero "+v.tone},[
+      el("div",{"class":"eyebrow"},"Release assessment"),
+      el("div",{"class":"hero-version"},["OpenClaw ", el("span",{"class":"vnum"},"v"+(DATA.version||"?"))]),
+      el("div",{"class":"hero-sub"}, subNodes),
+      el("div",{"class":"verdict "+v.tone},[el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label)]),
+      el("div",{"class":"verdict-blurb"}, v.blurb),
+      DATA.headline ? el("div",{"class":"hero-headline"}, DATA.headline) : null,
+      el("div",{"class":"conf-row"}, chips)
+    ]);
+  }
+
+  function lowConfBanner(){
+    if (String(DATA.confidence||"").toLowerCase() !== "low") return null;
+    return el("div",{"class":"banner"},[
+      el("span",{"class":"bi"},"⚠️"),
+      el("span",null,"This assessment was made with low confidence — the underlying data may be incomplete. Treat the verdict as a weak signal and verify against the linked issues before deciding.")
+    ]);
+  }
+
+  function stats(){
+    var ki = DATA.known_issues || [];
+    var ch = DATA.changes || {};
+    var regs = ki.filter(function(i){return i.category==="regression";}).length;
+    var high = ki.filter(function(i){return i.severity==="high";}).length;
+    var fixes = (ch.fixes||[]).length;
+    var feats = (ch.features||[]).length;
+    var tiles = [
+      {v:ki.length, l:"Known issues", s:high+" high severity", c:"var(--text)"},
+      {v:regs, l:"Regressions", s:"since release", c:regs?"var(--bad)":"var(--good)"},
+      {v:fixes, l:"Fixes shipped", s:"in this release", c:"var(--good)"},
+      {v:feats, l:"New features", s:(ch.breaking||[]).length+" breaking", c:"var(--accent)"}
+    ];
+    var grid = el("div",{"class":"stats"});
+    tiles.forEach(function(t){
+      grid.appendChild(el("div",{"class":"stat"},[
+        el("div",{"class":"v",style:"color:"+t.c}, String(t.v)),
+        el("div",{"class":"l"}, t.l),
+        el("div",{"class":"s"}, t.s)
+      ]));
+    });
+    return grid;
+  }
+
+  function thesis(){
+    if (!DATA.thesis) return null;
+    var s = el("div",{"class":"section"});
+    s.appendChild(sectionHead("Why this verdict"));
+    var box = el("div",{"class":"prose"});
+    String(DATA.thesis).split(/\n\s*\n/).forEach(function(para){
+      if (!para.trim()) return;
+      box.appendChild(el("p", null, linkify(para.trim())));
+    });
+    s.appendChild(box);
+    return s;
+  }
+
+  function evList(title, items, cls){
+    if (!items || !items.length) return null;
+    var ul = el("ul");
+    items.forEach(function(it){ ul.appendChild(el("li", null, linkify(it))); });
+    return el("div",{"class":"ev-card "+cls},[el("h3",null,title), ul]);
+  }
+  function evidence(){
+    var e = DATA.evidence || {};
+    var cards = [
+      evList("✓ Reasons to update", e.for_updating, "ev-for"),
+      evList("✕ Reasons to hold off", e.against_updating, "ev-against"),
+      evList("Context", e.neutral, "ev-neutral")
+    ].filter(Boolean);
+    if (!cards.length) return null;
+    var s = el("div",{"class":"section"});
+    s.appendChild(sectionHead("The case for & against"));
+    var g = el("div",{"class":"ev-grid"});
+    cards.forEach(function(c){ g.appendChild(c); });
+    s.appendChild(g);
+    return s;
+  }
+
+  function issueCard(i){
+    var sev = String(i.severity||"medium");
+    var cat = CAT[i.category] || {icon:"📋",label:cap(i.category||"issue"),cls:""};
+    var tags = [ el("span",{"class":"tag "+cat.cls},[cat.icon+" "+cat.label]) ];
+    var dec = i.clawsweeper_decision;
+    if (dec && dec!=="unknown"){
+      tags.push(el("span",{"class":"tag "+(dec==="keep_open"?"t-warn":"t-good")}, (dec==="keep_open"?"⊙ keep open":"✓ "+dec)));
+    }
+    if (i.fixed_in){
+      tags.push(el("span",{"class":"tag t-good"}, "✓ fixed in "+i.fixed_in));
+    } else if (i.category==="regression"){
+      tags.push(el("span",{"class":"tag t-bad"}, "● unfixed"));
+    }
+    tags.push(el("span",{"class":"tag"}, sev+" severity"));
+    return el("div",{"class":"issue sev-"+sev, "data-cat":i.category||"other"},[
+      el("a",{"class":"num", href:issueUrl(i.number)}, "#"+i.number),
+      el("div",{"class":"body"},[
+        el("div",{"class":"title"}, i.title||"(untitled)"),
+        el("div",{"class":"tags"}, tags)
+      ])
+    ]);
+  }
+  function issues(){
+    var ki = (DATA.known_issues||[]).slice();
+    if (!ki.length) return null;
+    var order = {high:0,medium:1,low:2};
+    var catOrder = {regression:0,diamond_lobster:1,active:2};
+    function rank(map,key){ return (key in map) ? map[key] : 9; }  // NB: 0 is falsy, don't use ||
+    ki.sort(function(a,b){
+      var s = rank(order,a.severity) - rank(order,b.severity);
+      if (s) return s;
+      return rank(catOrder,a.category) - rank(catOrder,b.category);
+    });
+    var s = el("div",{"class":"section", id:"issues"});
+    s.appendChild(sectionHead("Known issues", ki.length, "newest regressions first"));
+
+    var cats = {};
+    ki.forEach(function(i){ if(i.category) cats[i.category]=(cats[i.category]||0)+1; });
+    var filters = el("div",{"class":"filters"});
+    var allBtn = el("button",{"class":"fbtn", type:"button", "aria-pressed":"true", "data-f":"all"}, "All ("+ki.length+")");
+    filters.appendChild(allBtn);
+    Object.keys(cats).forEach(function(c){
+      var meta = CAT[c]||{icon:"📋",label:cap(c)};
+      filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":c}, meta.icon+" "+meta.label+" ("+cats[c]+")"));
+    });
+    s.appendChild(filters);
+
+    var list = el("div",{"class":"issue-list"});
+    ki.forEach(function(i){ list.appendChild(issueCard(i)); });
+    s.appendChild(list);
+
+    filters.addEventListener("click", function(ev){
+      var btn = ev.target.closest(".fbtn"); if(!btn) return;
+      var f = btn.getAttribute("data-f");
+      filters.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b===btn?"true":"false"); });
+      list.querySelectorAll(".issue").forEach(function(row){
+        row.style.display = (f==="all" || row.getAttribute("data-cat")===f) ? "" : "none";
+      });
+    });
+    return s;
+  }
+
+  function changes(){
+    var ch = DATA.changes || {};
+    var groups = [
+      {key:"fixes",    icon:"✓", label:"Fixes",    items:ch.fixes||[],    sub:function(x){return x.verified?"verified":"";}, field:"title"},
+      {key:"features", icon:"✨", label:"Features", items:ch.features||[], sub:function(x){return x.value||"";}, field:"title"},
+      {key:"breaking", icon:"⚠", label:"Breaking", items:ch.breaking||[], sub:function(x){return x.impact||"";}, field:"title"}
+    ];
+    var total = groups.reduce(function(a,g){return a+g.items.length;},0);
+    if (!total) return null;
+    var s = el("div",{"class":"section"});
+    s.appendChild(sectionHead("What's new in this release", total));
+
+    var tabs = el("div",{"class":"tabs", role:"tablist"});
+    var panel = el("div",{"class":"panel"});
+    groups.forEach(function(g, idx){
+      var tab = el("button",{"class":"tab", type:"button", role:"tab", "data-k":g.key, "aria-selected": idx===0?"true":"false"},
+        [document.createTextNode(g.icon+" "+g.label), el("span",{"class":"cnt"}, String(g.items.length))]);
+      tabs.appendChild(tab);
+    });
+    s.appendChild(tabs);
+    s.appendChild(panel);
+
+    function paint(key){
+      panel.textContent = "";
+      var g = groups.filter(function(x){return x.key===key;})[0];
+      if (!g.items.length){ panel.appendChild(el("div",{"class":"empty"},"Nothing in this category.")); return; }
+      g.items.forEach(function(it){
+        var sub = g.sub(it);
+        panel.appendChild(el("div",{"class":"change"},[
+          el("div",{"class":"ct"}, linkify(it[g.field]||"")),
+          sub ? el("div",{"class":"cm"}, (g.key==="fixes"&&it.verified)? "✓ "+sub : sub) : null
+        ]));
+      });
+    }
+    tabs.addEventListener("click", function(ev){
+      var tab = ev.target.closest(".tab"); if(!tab) return;
+      tabs.querySelectorAll(".tab").forEach(function(t){ t.setAttribute("aria-selected", t===tab?"true":"false"); });
+      paint(tab.getAttribute("data-k"));
+    });
+    // first non-empty tab
+    var first = groups.filter(function(g){return g.items.length;})[0] || groups[0];
+    tabs.querySelectorAll(".tab").forEach(function(t){ t.setAttribute("aria-selected", t.getAttribute("data-k")===first.key?"true":"false"); });
+    paint(first.key);
+    return s;
+  }
+
+  function platforms(){
+    var pi = DATA.platform_impact || {};
+    if (!Object.keys(pi).length) return null;
+    var s = el("div",{"class":"section"});
+    s.appendChild(sectionHead("Platform impact", null, "how hard each surface is hit"));
+    var g = el("div",{"class":"plat-grid"});
+    PLAT.forEach(function(p){
+      var lvl = String(pi[p[0]]||"none").toLowerCase();
+      var meta = IMPACT[lvl] || IMPACT.none;
+      g.appendChild(el("div",{"class":"plat imp-"+lvl},[
+        el("div",{"class":"ph"},[
+          el("span",{"class":"pn"}, p[1]+" "+p[2]),
+          el("span",{"class":"pl"}, meta.label)
+        ]),
+        el("div",{"class":"track"},[ el("div",{"class":"fill", style:"width:"+meta.w+"%"}) ])
+      ]));
+    });
+    s.appendChild(g);
+    return s;
+  }
+
+  function sentiment(){
+    if (!DATA.sentiment_summary) return null;
+    var s = el("div",{"class":"section"});
+    s.appendChild(sectionHead("Community sentiment"));
+    s.appendChild(el("div",{"class":"quote"},[
+      el("div",{"class":"qh"},"What users are saying"),
+      el("div", null, linkify(DATA.sentiment_summary))
+    ]));
+    return s;
+  }
+
+  function triage(){
+    var work = DATA.clawsweeper_work || [], closed = DATA.clawsweeper_closed || [];
+    if (!work.length && !closed.length) return null;
+    function col(title, items, kind){
+      var c = el("div",{"class":"triage-col"});
+      c.appendChild(el("h4", null, title+" ("+items.length+")"));
+      items.slice(0,8).forEach(function(it){
+        c.appendChild(el("div",{"class":"trow"},[
+          el("a",{"class":"tn", href:issueUrl(it.number)}, "#"+it.number),
+          el("span",{"class":"tt"}, it.title||"")
+        ]));
+      });
+      return c;
+    }
+    var s = el("div",{"class":"section"});
+    s.appendChild(sectionHead("Issue-triage activity", null, "from Clawsweeper"));
+    var d = el("details",{"class":"triage"});
+    d.appendChild(el("summary", null, [
+      document.createTextNode("🧹  "+work.length+" in progress · "+closed.length+" recently closed"),
+      el("span",{"class":"caret"},"▶")
+    ]));
+    d.appendChild(el("div",{"class":"triage-body"},[
+      col("🛠 In progress", work, "work"),
+      col("✓ Recently closed", closed, "closed")
+    ]));
+    s.appendChild(d);
+    return s;
+  }
+
+  function history(){
+    var h = (DATA.version_history||[]).slice();
+    if (!h.length) return null;
+    h.sort(function(a,b){ return String(b.assessed_at).localeCompare(String(a.assessed_at)); });
+    var s = el("div",{"class":"section"});
+    s.appendChild(sectionHead("Past verdicts", h.length));
+    var tl = el("div",{"class":"timeline"});
+    h.forEach(function(e){
+      var v = VERDICTS[e.recommendation] || {tone:"tone-muted"};
+      var isCur = e.version === DATA.version;
+      tl.appendChild(el("div",{"class":"tl "+v.tone},[
+        el("div",{"class":"marker"}, e.recommendation||"?"),
+        el("div",{"class":"tlb"},[
+          el("div",{"class":"tlv"},[document.createTextNode("v"+e.version), isCur?el("span",{"class":"cur"},"● CURRENT"):null]),
+          el("div",{"class":"tlr"}, e.reason || e.headline || ""),
+          el("div",{"class":"tld"}, cap(e.confidence||"")+" confidence · "+fmtDate(e.assessed_at))
+        ])
+      ]));
+    });
+    s.appendChild(tl);
+    return s;
+  }
+
+  function footer(){
+    var u = DATA.usage || {};
+    var meta = [];
+    if (DATA.assessed_at) meta.push(el("span",null,["Assessed ", el("code",null,fmtDate(DATA.assessed_at))]));
+    if (u.cost_usd != null) meta.push(el("span",null,["Cost ", el("code",null,"$"+Number(u.cost_usd).toFixed(4))]));
+    if (u.api_calls) meta.push(el("span",null,["Pipeline ", el("code",null,u.api_calls+" model calls")]));
+    if (u.tokens_in) meta.push(el("span",null,["Tokens ", el("code",null,(u.tokens_in)+"→"+(u.tokens_out||0))]));
+
+    return el("footer",{"class":"foot"},[
+      el("div",{"class":"how"},[
+        el("span",{"class":"fi"},"🤖"),
+        el("span",null,"This verdict is generated automatically: a data collector pulls GitHub releases, post-release bug reports, Clawsweeper triage and community chatter, then a two-model LLM pipeline (analyst + validator) weighs the evidence. No human edits the result — always sanity-check against the linked issues.")
+      ]),
+      el("div",{"class":"meta"}, meta.concat([
+        el("a",{href:"https://github.com/openclaw/openclaw/releases"}, "Releases ↗")
+      ]))
+    ]);
+  }
+
+  // ── theme toggle ──────────────────────────────────────────────────────────
+  function initTheme(){
+    var btn = document.getElementById("theme-toggle");
+    var saved = null;
+    try { saved = localStorage.getItem("oc-theme"); } catch(e){}
+    var prefersLight = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
+    var initial = saved || (prefersLight ? "light" : "dark");
+    apply(initial);
+    btn.addEventListener("click", function(){
+      var next = document.documentElement.getAttribute("data-theme")==="light" ? "dark" : "light";
+      apply(next);
+      try { localStorage.setItem("oc-theme", next); } catch(e){}
+    });
+    function apply(t){
+      document.documentElement.setAttribute("data-theme", t);
+      btn.textContent = t==="light" ? "🌙" : "☀️";
+    }
+  }
+
+  // ── freshness pill ────────────────────────────────────────────────────────
+  function initFresh(){
+    if (!DATA.assessed_at) return;
+    var pill = document.getElementById("fresh");
+    var txt = document.getElementById("fresh-text");
+    var days = (Date.now() - new Date(DATA.assessed_at).getTime())/86400000;
+    var tone = days < 2 ? "tone-good" : days < 7 ? "tone-warn" : "tone-bad";
+    pill.className = "fresh " + tone;
+    txt.textContent = "Updated " + timeAgo(DATA.assessed_at);
+    pill.hidden = false;
+  }
+
+  // ── boot ──────────────────────────────────────────────────────────────────
+  initTheme();
+  if (!DATA || !DATA.recommendation){
+    showError("The assessment data could not be loaded. The pipeline may not have run yet.");
+  } else {
+    var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
+    document.title = "OpenClaw v" + (DATA.version||"") + " — " + v.label;
+    [ lowConfBanner(), hero(v), stats(), thesis(), evidence(), issues(),
+      changes(), platforms(), sentiment(), triage(), history(), footer()
+    ].forEach(function(node){ if (node) app.appendChild(node); });
+    initFresh();
+  }
+})();
+</script>
+</body>
+</html>
