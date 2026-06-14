@@ -22,8 +22,6 @@ from openclaw_status.lib import _retry, sanitize, load_json, save_json
 #  API client
 # ═══════════════════════════════════════════════════════════════════════════
 
-DIAMOND_LABEL = "issue-rating: 🦞 diamond lobster"
-
 _SEARCH_QUERY = """
 query($q: String!, $n: Int!) {
   search(query: $q, type: ISSUE, first: $n) {
@@ -201,11 +199,6 @@ def _norm_release(d: dict | None) -> dict | None:
 def latest_release() -> dict | None:
     """The latest published, non-prerelease release."""
     return _norm_release(gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/latest"))
-
-
-def release_by_tag(tag: str) -> dict | None:
-    return _norm_release(
-        gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/tags/{quote(tag, safe='')}"))
 
 
 def list_releases(limit: int = 30) -> list[dict]:

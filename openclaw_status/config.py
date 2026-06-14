@@ -103,19 +103,17 @@ GITHUB_RAW_URL = "https://raw.githubusercontent.com"
 # <script id="assessment-data"> JSON contract and writes the public page to OUTPUT_HTML.
 TEMPLATE_FILE = WEB_DIR / "template.html"
 OUTPUT_HTML = WEB_DIR / "index.html"
-# Same payload as the page's inlined data, written as a sibling file. The page
-# `fetch()`es this at runtime (falling back to the inlined copy) so the data can
-# refresh without re-rendering the whole HTML. Generated; gitignored.
-LATEST_JSON = WEB_DIR / "latest.json"
 
 # Public base URL of the deployed site — used in the RSS feed item links.
 SITE_URL = "https://clawstat.us"
-# Shareable static artifacts written next to the page on each render (Caddy serves web/):
-#   feed.xml  — RSS of verdicts (subscribe with no account)
-#   badge.svg — embeddable shields-style status badge ("OpenClaw vX: wait for next")
-# Both generated; gitignored.
-FEED_XML = WEB_DIR / "feed.xml"
-BADGE_SVG = WEB_DIR / "badge.svg"
+# Each render also writes sibling artifacts next to OUTPUT_HTML (paths derived via
+# Path.with_name in render.py, so they stay together even for a custom output dir;
+# Caddy serves web/, so all are reachable):
+#   latest.json — the page payload, fetched at runtime so data refreshes without an
+#                 HTML rebuild (the inlined copy is the file:// / offline fallback)
+#   feed.xml    — RSS of verdicts (subscribe with no account)
+#   badge.svg   — embeddable shields-style status badge
+# All generated; gitignored.
 
 # Browsable per-version snapshots of past pages. On each render the outgoing page
 # is copied to ARCHIVE_DIR/<version>.html (recycling the old single .prev backup)
