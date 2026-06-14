@@ -15,6 +15,20 @@ from openclaw_status import config
 from openclaw_status.lib import load_json
 
 
+def _make_world_readable(path) -> None:
+    """Widen a generated artifact to 0644 (best-effort).
+
+    A static file server (e.g. Caddy on the deploy box) runs as its *own* user, so
+    it can only read the page through the world bit. But `tempfile.mkstemp` and the
+    atomic write/rename produce 0600 files — which would 404/403 once the pipeline
+    overwrites the page the provisioner had made world-readable. Re-widen each output.
+    """
+    try:
+        os.chmod(path, 0o644)
+    except OSError:
+        pass
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Pre-deployment Smoke Test
 # ═══════════════════════════════════════════════════════════════════════════
@@ -170,6 +184,7 @@ def _backup_existing(output_path: str) -> str | None:
     config.ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     dest = config.ARCHIVE_DIR / f"{version}.html"
     shutil.copy2(str(p), str(dest))
+    _make_world_readable(dest)
     _prune_archive()
     print(f"  📚 Archived previous page → {dest}")
     return version
@@ -327,6 +342,7 @@ def _write_latest_json(data: dict, output_path: str) -> None:
         with os.fdopen(fd, "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp, str(dest))
+        _make_world_readable(dest)
     except Exception:
         try:
             os.unlink(tmp)
@@ -397,6 +413,7 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
 
     # Smoke test passed — move tmp to final location
     shutil.move(tmp_path, out)
+    _make_world_readable(out)  # served by Caddy (different user) — must be world-readable
 
     # Emit the same payload as a sibling latest.json for the runtime fetch path.
     _write_latest_json(data, out)
