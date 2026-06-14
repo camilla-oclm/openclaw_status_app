@@ -293,3 +293,19 @@ def test_budget_gate_emits_no_real_webhook_post(tmp_path, monkeypatch):
     result = agent.run_assessment_pipeline(raw=raw)
     assert result["success"] is False
     assert posted == []  # no webhook POST happened
+
+
+# ── run-completion summary message ───────────────────────────────────────────
+
+def test_run_summary_message_includes_run_and_total_cost():
+    msg = agent._run_summary_message("2026.6.6", "⏸️", 0.022, 0.13, 0.45, 7)
+    assert "v2026.6.6" in msg
+    assert "⏸️" in msg
+    assert "7 known issues" in msg
+    assert "this run $0.0220" in msg   # the cost of this run
+    assert "today $0.13" in msg        # running daily total
+    assert "month $0.45" in msg        # running monthly total
+
+
+def test_run_summary_message_singular_issue():
+    assert "(1 known issue)" in agent._run_summary_message("1.0", "✅", 0.0, 0.0, 0.0, 1)
