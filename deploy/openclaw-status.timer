@@ -1,4 +1,4 @@
-# Runs the pipeline shortly after boot and every 3h thereafter. The app polls
+# Runs the pipeline shortly after boot and every 6h thereafter. The app polls
 # npm/GitHub for new OpenClaw releases, so a few-hour cadence keeps the verdict
 # fresh without burning API budget. Adjust OnUnitActiveSec to taste.
 [Unit]
@@ -6,7 +6,7 @@ Description=Run the OpenClaw Status pipeline periodically
 
 [Timer]
 OnBootSec=10min
-OnUnitActiveSec=3h
+OnUnitActiveSec=6h
 Persistent=true
 
 [Install]
