@@ -327,8 +327,16 @@ def collect(output_path=None) -> dict:
     # run-to-run (see openclaw_status/ledger.py).
     from openclaw_status import ledger
     before = len(issues)
+    # Version-agnostic "ongoing majors" — high-impact open issues that don't reference
+    # this version and aren't post-release regressions. The ledger doesn't track them
+    # (we focus on the current release), but they're handed to the analyst as context.
+    ongoing_majors = sorted(
+        (i for i in issues if not ledger.is_version_relevant(i)),
+        key=github.rank_key,
+    )[:12]
     issues = ledger.merge_version_issues(version, issues, now)
-    print(f"  📒 Ledger: {before} scouted → {len(issues)} accumulated for v{version or '?'}")
+    print(f"  📒 Ledger: {before} scouted → {len(issues)} accumulated "
+          f"(+{len(ongoing_majors)} ongoing majors as context) for v{version or '?'}")
 
     def _counts(items, key):
         counts = {}
@@ -347,6 +355,7 @@ def collect(output_path=None) -> dict:
             "release_history": release_history,
             "clawsweeper": clawsweeper,
             "github_issues": issues,
+            "ongoing_majors": ongoing_majors,
         },
         "meta": {
             "collector_version": "2.0.0",

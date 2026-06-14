@@ -91,6 +91,13 @@ def test_empty_version_returns_input_unchanged(led):
     assert not config.ISSUE_LEDGER_FILE.exists()
 
 
+def test_is_version_relevant_predicate():
+    assert ledger.is_version_relevant({"affects_version": True, "category": "active"})
+    assert ledger.is_version_relevant({"affects_version": False, "category": "regression"})
+    # version-agnostic major → not relevant to this release (kept only as context)
+    assert not ledger.is_version_relevant({"affects_version": False, "category": "diamond_lobster"})
+
+
 def test_is_new_flags_issues_first_seen_after_prior_run(led):
     # First run has no prior run, so nothing is "new" (avoids flagging the whole baseline).
     a = ledger.merge_version_issues("1.0", [_issue(1)], now="2026-01-01T00:00:00+00:00")

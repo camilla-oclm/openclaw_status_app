@@ -235,6 +235,24 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
             if i.get("body"):
                 parts.append(f"Body:\n{i['body'][:800]}")
 
+    # Ongoing majors — high-impact OPEN issues that are NOT specific to this version
+    # (they predate it / don't reference it and aren't post-release regressions).
+    # Context only: they affect users on any release, so they must NOT by themselves
+    # drive the update verdict, and must NOT be listed as regressions for this version.
+    majors = sources.get("ongoing_majors", [])
+    if majors:
+        parts.append(
+            f"\n## Ongoing Majors — context only ({len(majors)})\n"
+            "High-impact open issues that are NOT specific to this release. Treat as background: "
+            f"they exist regardless of which version a user is on, so they should NOT by themselves "
+            f"decide the verdict for v{version}, and should NOT be reported as v{version} regressions."
+        )
+        for i in majors:
+            parts.append(
+                f"- #{i.get('number')} [{i.get('severity', '?')}] {str(i.get('title', ''))[:120]} "
+                f"(👍 {i.get('reactions', 0)}, category={i.get('category', '?')})"
+            )
+
     # Clawsweeper work candidates
     wc = cs.get("work_candidates", [])
     if wc:
