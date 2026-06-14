@@ -42,11 +42,10 @@ providers** argue it out before anything ships.
 - **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (~$0.02–0.05/run).
 - **Hermetic test suite.** ~100 network-free tests gate CI on every push.
 
-**Live demo: <https://camilla-oclm.github.io/openclaw_status_app/>** — the decision page
-rebuilds itself every few hours and deploys to GitHub Pages straight from CI: the full
-collect → assess → render pipeline runs *inside the workflow*, so there's no always-on server.
-The custom domain **[clawstat.us](https://clawstat.us)** is being pointed at it. An AWS Lightsail
-host is also fully scripted as an alternative — see [`deploy/`](deploy/).
+**Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
+the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
+serves the result over auto-HTTPS. The whole host is scripted in [`deploy/`](deploy/) (one
+`provision.sh` run).
 
 ---
 
@@ -226,7 +225,7 @@ openclaw_status_app/
 │   └── archive/            per-version page snapshots (gitignored)
 ├── docs/                   README screenshots (hero-dark.png / hero-light.png)
 ├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile
-├── .github/workflows/      ci.yml (tests) + pages.yml (build & deploy the live demo)
+├── .github/workflows/      ci.yml (hermetic tests on every push)
 ├── tests/                  pytest suite
 └── data/                   pipeline outputs (gitignored)
 ```
@@ -235,15 +234,14 @@ openclaw_status_app/
 
 ## Status / next steps
 
-- **Live demo — done.** The page deploys to GitHub Pages from CI on every push and every ~6h
-  (`.github/workflows/pages.yml`), reachable at
-  <https://camilla-oclm.github.io/openclaw_status_app/>. Pointing **clawstat.us** at it is a DNS step.
+- **Live — done.** Deployed at **<https://clawstat.us>** on an AWS Lightsail VM (Route53 DNS,
+  Caddy auto-HTTPS), self-updating every 3h via a systemd timer that pulls + runs `run.py full`.
 - **Alerting — live.** A Discord webhook (`ALERT_WEBHOOK_URL`) gets a run-completion confirmation
   (verdict + this-run cost + running daily/monthly totals) plus alerts on cost thresholds, the
   budget gate, and assessment failures. A hard budget gate stops runaway spend.
   Verify any time with `run.py notify-test`.
 - **Runtime data refresh — done.** The page reads `latest.json` at runtime (inlined copy as
   fallback), so data refreshes without rebuilding the whole HTML.
-- **AWS host (optional alternative).** A self-updating Lightsail VM is fully scripted in
-  [`deploy/`](deploy/) (provision script + systemd timer + Caddyfile) for when shell access on
-  the host is wanted; it needs the operator's one-time AWS account + box.
+- **Reproducible host.** The whole box is scripted in [`deploy/`](deploy/) (provision script +
+  systemd unit/timer + Caddyfile) — one `sudo deploy/provision.sh clawstat.us` from a fresh
+  Ubuntu instance.
