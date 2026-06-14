@@ -204,6 +204,18 @@ def test_build_context_no_truncation_note_when_under_cap(monkeypatch):
         assert f"### #{n} " in ctx
 
 
+def test_build_context_includes_ongoing_majors_as_context():
+    raw = _raw_with_n_issues(2)
+    raw["sources"]["ongoing_majors"] = [
+        {"number": 555, "severity": "critical", "title": "old major bug",
+         "reactions": 99, "category": "diamond_lobster"},
+    ]
+    ctx = agent.build_context(raw)
+    assert "Ongoing Majors" in ctx
+    assert "#555" in ctx
+    assert "NOT specific to this release" in ctx
+
+
 def test_build_context_continuity_anchors_prior_verdict():
     raw = _raw_with_n_issues(2)
     assert "Continuity" not in agent.build_context(raw)  # no prior verdict → no anchor

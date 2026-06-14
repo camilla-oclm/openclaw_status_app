@@ -50,9 +50,10 @@ def _merge_fixed(prev, new):
     return out
 
 
-def _affects_release(it: dict) -> bool:
+def is_version_relevant(it: dict) -> bool:
     """Whether a scouted issue affects the assessed release — i.e. what we accumulate.
-    Version-agnostic majors stay as LLM context but don't enter this version's ledger."""
+    The complement (version-agnostic "ongoing majors") is kept only as LLM context,
+    never added to this version's ledger or its known-issues count."""
     return bool(it.get("affects_version") or it.get("category") == "regression")
 
 
@@ -103,7 +104,7 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None) ->
     store = entry["issues"]
 
     for it in scouted:
-        if not _affects_release(it):
+        if not is_version_relevant(it):
             continue
         num = it.get("number")
         if num is None:
