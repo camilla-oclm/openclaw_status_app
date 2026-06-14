@@ -314,6 +314,26 @@ def _inject_data(html: str, data: dict) -> str:
     return html
 
 
+def _write_latest_json(data: dict, output_path: str) -> None:
+    """Write the page data to latest.json next to the rendered page (atomically).
+
+    The template `fetch()`es this at runtime to refresh its data without
+    re-rendering the HTML; the inlined `<script id="assessment-data">` copy stays
+    as the fallback for offline / file:// viewing where fetch isn't available.
+    """
+    dest = Path(output_path).with_name("latest.json")
+    fd, tmp = tempfile.mkstemp(suffix=".json", dir=str(dest.parent))
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, str(dest))
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
 def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output_path: str = None) -> str:
     """Build the public assessment page by injecting pipeline data into the template.
 
@@ -377,6 +397,9 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
 
     # Smoke test passed — move tmp to final location
     shutil.move(tmp_path, out)
+
+    # Emit the same payload as a sibling latest.json for the runtime fetch path.
+    _write_latest_json(data, out)
 
     # Set can_deploy flag in assessment_raw for downstream
     if assessment_raw is not None:

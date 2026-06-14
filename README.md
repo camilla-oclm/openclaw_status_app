@@ -2,6 +2,12 @@
 
 **Should you update to the latest OpenClaw release?** This tool answers that.
 
+<p align="center">
+  <img src="docs/hero-dark.png" alt="The OpenClaw Status decision page: a Skip-this-version verdict for v2026.6.6, with stats and an evidence-backed thesis" width="820">
+  <br>
+  <em>The generated decision page — a verdict-first dashboard backed by scored, version-relevant bug evidence (<a href="docs/hero-light.png">light theme</a>).</em>
+</p>
+
 It watches the [`openclaw/openclaw`](https://github.com/openclaw/openclaw) repo, scouts
 the bugs people are actually hitting after a release — ranked by community impact and by
 whether they affect the version being assessed — asks an LLM to weigh the evidence, and
@@ -36,9 +42,11 @@ providers** argue it out before anything ships.
 - **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (~$0.02–0.05/run).
 - **Hermetic test suite.** ~100 network-free tests gate CI on every push.
 
-**Live demo:** deployment is fully scripted for AWS (Lightsail + Route53 + Caddy auto-HTTPS,
-self-updating every few hours) — see [`plan.md`](plan.md). Not yet live; run it locally with the
-steps below.
+**Live demo: <https://camilla-oclm.github.io/openclaw_status_app/>** — the decision page
+rebuilds itself every few hours and deploys to GitHub Pages straight from CI: the full
+collect → assess → render pipeline runs *inside the workflow*, so there's no always-on server.
+The custom domain **[clawstat.us](https://clawstat.us)** is being pointed at it. An AWS Lightsail
+host is also fully scripted as an alternative — see [`plan.md`](plan.md).
 
 ---
 
@@ -135,6 +143,10 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   `textContent` (XSS-safe) and no inline handlers (CSP-clean). A deploy guard refuses to
   publish a low-confidence or invalid assessment, and a smoke test validates the HTML
   before it overwrites the previous page.
+- **`web/latest.json`** — the same payload written as a sibling file. The page renders from the
+  inlined copy instantly, then `fetch()`es `latest.json` and re-renders if it's fresher — so a
+  data refresh doesn't need a full HTML rebuild, while `file://` / offline viewing still works
+  from the inlined copy.
 - **Browsable history.** Instead of discarding the outgoing page, each render snapshots it to
   `web/archive/<version>.html` (named from the version it was built for) and the "Past verdicts"
   timeline links every entry that has a snapshot. Retention is capped (`config.ARCHIVE_KEEP`,
@@ -210,8 +222,11 @@ openclaw_status_app/
 ├── web/
 │   ├── template.html       production frontend template (data injected here)
 │   ├── index.html          generated public page (gitignored)
+│   ├── latest.json         generated runtime-fetch payload (gitignored)
 │   └── archive/            per-version page snapshots (gitignored)
+├── docs/                   README screenshots (hero-dark.png / hero-light.png)
 ├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile
+├── .github/workflows/      ci.yml (tests) + pages.yml (build & deploy the live demo)
 ├── plan.md                 deploy runbook (Lightsail + Route53 + Caddy)
 ├── tests/                  pytest suite
 └── data/                   pipeline outputs (gitignored)
@@ -219,12 +234,15 @@ openclaw_status_app/
 
 ---
 
-## Next steps / TODO
+## Status / next steps
 
-- **Deploy it.** AWS provisioning is fully scripted in [`deploy/`](deploy/) + [`plan.md`](plan.md)
-  (Lightsail VM + Route53 + Caddy auto-HTTPS, a systemd timer running `run.py full` every ~3h).
-  What's left is the operator's one-time AWS account + domain + box. See [`dropoff.md`](dropoff.md).
-- **Turn on alerting.** Cost/budget/failure alerts already POST to `ALERT_WEBHOOK_URL` when set
-  (and a hard budget gate stops runaway spend) — point it at a Slack/Discord webhook to go live.
-- **Live data without re-render.** The app injects data at build time; switching the frontend to
-  a runtime `fetch('latest.json')` would let data refresh without rebuilding the whole page.
+- **Live demo — done.** The page deploys to GitHub Pages from CI on every push and every ~6h
+  (`.github/workflows/pages.yml`), reachable at
+  <https://camilla-oclm.github.io/openclaw_status_app/>. Pointing **clawstat.us** at it is a DNS step.
+- **Alerting — live.** Cost/budget/failure alerts POST to a Discord webhook (`ALERT_WEBHOOK_URL`),
+  with a hard budget gate to stop runaway spend. Verify any time with `run.py notify-test`.
+- **Runtime data refresh — done.** The page reads `latest.json` at runtime (inlined copy as
+  fallback), so data refreshes without rebuilding the whole HTML.
+- **AWS host (optional alternative).** A self-updating Lightsail VM is fully scripted in
+  [`deploy/`](deploy/) + [`plan.md`](plan.md) for when shell access on the host is wanted; it
+  needs the operator's one-time AWS account + box. See [`dropoff.md`](dropoff.md).

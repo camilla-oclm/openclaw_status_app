@@ -665,11 +665,17 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 (function(){
   "use strict";
 
-  // ── parse data (error-safe) ──────────────────────────────────────────────
-  var DATA;
-  try {
-    DATA = JSON.parse(document.getElementById("assessment-data").textContent);
-  } catch (e) { DATA = null; }
+  // ── data source ──────────────────────────────────────────────────────────
+  // DATA comes from one of two places: the inlined assessment-data JSON block
+  // (the build-time copy, always present) and, when reachable, a runtime
+  // fetch('latest.json'). The page renders from the inline copy instantly, then
+  // re-renders if latest.json brings fresher data — so a data refresh doesn't need
+  // a full HTML rebuild, while offline / file:// viewing still works from inline.
+  var DATA = null;
+  function parseInline(){
+    try { return JSON.parse(document.getElementById("assessment-data").textContent); }
+    catch (e) { return null; }
+  }
 
   var app = document.getElementById("app");
 
@@ -1123,17 +1129,36 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     pill.hidden = false;
   }
 
-  // ── boot ──────────────────────────────────────────────────────────────────
-  initTheme();
-  if (!DATA || !DATA.recommendation){
-    showError("The assessment data could not be loaded. The pipeline may not have run yet.");
-  } else {
+  // ── render ──────────────────────────────────────────────────────────────────
+  // Rebuilds the page body from the current DATA. Safe to call more than once
+  // (clears #app first) so the runtime-fetch path can re-render in place.
+  function render(){
+    app.textContent = "";
+    if (!DATA || !DATA.recommendation){
+      showError("The assessment data could not be loaded. The pipeline may not have run yet.");
+      return;
+    }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     document.title = "OpenClaw v" + (DATA.version||"") + " — " + v.label;
     [ lowConfBanner(), hero(v), stats(), thesis(), evidence(), issues(),
       changes(), platforms(), sentiment(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
+  }
+
+  // ── boot ──────────────────────────────────────────────────────────────────
+  initTheme();
+  DATA = parseInline();   // build-time copy: always present, renders instantly
+  render();
+
+  // Progressive enhancement: when latest.json is reachable (served pages, not
+  // file://), refresh from it and re-render. Pure addition — any failure leaves
+  // the already-rendered inline data on screen.
+  if (window.fetch){
+    fetch("latest.json", {cache:"no-store"})
+      .then(function(r){ if (!r.ok) throw new Error("http "+r.status); return r.json(); })
+      .then(function(d){ if (d && d.recommendation){ DATA = d; render(); } })
+      .catch(function(){ /* keep the inlined data */ });
   }
 })();
 </script>
