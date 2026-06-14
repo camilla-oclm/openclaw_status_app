@@ -269,3 +269,27 @@ def test_budget_gate_aborts_without_spending(tmp_path, monkeypatch):
     result = agent.run_assessment_pipeline(raw=raw)
     assert result["success"] is False
     assert "budget exceeded" in result["error"]
+
+
+def test_budget_gate_emits_no_real_webhook_post(tmp_path, monkeypatch):
+    # The budget gate calls notify(); the suite must never POST to a real webhook,
+    # even when the dev's .env populated ALERT_WEBHOOK_URL (the autouse
+    # _no_real_webhook fixture nulls it). Spy on the network to prove no POST.
+    usage = tmp_path / "usage.json"
+    usage.write_text(json.dumps([
+        {"timestamp": lib.now_iso(), "cost_usd": 99.0, "success": True},
+    ]))
+    monkeypatch.setattr(config, "USAGE_LOG_FILE", usage)
+    monkeypatch.setattr(agent, "openrouter_call",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no LLM")))
+    posted = []
+    monkeypatch.setattr(lib.urllib.request, "urlopen",
+                        lambda *a, **k: posted.append(a))
+
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {}, "latest_prerelease": None, "github_issues": [],
+        "clawsweeper": {}, "release_history": [],
+    }}
+    result = agent.run_assessment_pipeline(raw=raw)
+    assert result["success"] is False
+    assert posted == []  # no webhook POST happened
