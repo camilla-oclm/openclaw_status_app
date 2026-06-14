@@ -162,7 +162,9 @@ def test_backup_archives_by_version(tmp_path, monkeypatch):
     out.write_text(_page("2026.6.6"))
 
     assert render._backup_existing(str(out)) == "2026.6.6"
-    assert (tmp_path / "archive" / "2026.6.6.html").exists()
+    snap = tmp_path / "archive" / "2026.6.6.html"
+    assert snap.exists()
+    assert snap.stat().st_mode & 0o004  # world-readable for the static file server
     assert render._archived_versions() == ["2026.6.6"]
     assert not (tmp_path / "index.html.prev").exists()  # no stale .prev when archived
 
@@ -212,6 +214,15 @@ def test_write_latest_json_sibling_of_page(tmp_path):
     assert sibling.exists()
     # Round-trips exactly (no </ escaping — it's a real .json file, not inlined HTML).
     assert json.loads(sibling.read_text()) == data
+    assert sibling.stat().st_mode & 0o004  # world-readable for the static file server
+
+
+def test_make_world_readable_widens_to_644(tmp_path):
+    p = tmp_path / "x.html"
+    p.write_text("hi")
+    os.chmod(p, 0o600)
+    render._make_world_readable(str(p))
+    assert os.stat(p).st_mode & 0o044 == 0o044  # group + world read
 
 
 def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
