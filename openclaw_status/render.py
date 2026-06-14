@@ -228,6 +228,30 @@ def _deep_sanitize_markdown(obj):
     return obj
 
 
+_HIGHLIGHTS_RE = re.compile(r"###?\s*Highlights\s*\n(.*?)(?=\n###? |\Z)", re.DOTALL | re.IGNORECASE)
+_BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S)", re.MULTILINE)
+
+
+def _extract_highlights(body: str, limit: int = 6) -> list:
+    """Pull the '### Highlights' bullets from a release changelog body (best-effort).
+
+    Powers the "catching up from an older version" changelog: each past release
+    contributes a few headline bullets, aggregated client-side across the span.
+    """
+    if not body:
+        return []
+    m = _HIGHLIGHTS_RE.search(body)
+    section = m.group(1) if m else body
+    out = []
+    for b in _BULLET_RE.findall(section):
+        b = re.sub(r"\s+", " ", b).strip()
+        if b:
+            out.append(b[:240])
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     """Merge assessment.json + raw-data.json into the flat DATA dict the template expects."""
     a = assessment_raw.get("assessment", {})
@@ -267,6 +291,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "reactions": raw_i.get("reactions", 0),
             "impact": raw_i.get("impact"),
             "affects_version": raw_i.get("affects_version", False),
+            # Ledger-derived: "new since last run" badge + issue age.
+            "is_new": bool(issue.get("is_new")),
+            "first_seen": issue.get("first_seen") or raw_i.get("first_seen"),
         })
 
     lr = sources.get("latest_release", {})
@@ -286,6 +313,19 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "platform_impact": a.get("platform_impact", {}),
         "usage": {k: v for k, v in (assessment_raw.get("usage") or {}).items() if k != "cost_usd"},
         "version_history": version_history,
+        # Stable-release changelog (newest first) with extracted Highlights — the
+        # "catching up from an older version" section aggregates these client-side.
+        "release_history": [
+            {
+                "tag": r.get("tag", ""),
+                "version": (r.get("tag", "") or "").lstrip("v"),
+                "published_at": (r.get("published_at", "") or "")[:10],
+                "prerelease": bool(r.get("prerelease")),
+                "highlights": _extract_highlights(r.get("body", "") or ""),
+            }
+            for r in (sources.get("release_history") or [])
+            if not r.get("prerelease")
+        ],
         "npm": sources.get("npm", {}),
         "latest_release": {
             "tag": lr.get("tag", "") if lr else "",
@@ -356,6 +396,124 @@ def _write_latest_json(data: dict, output_path: str) -> None:
             pass
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Shareable artifacts: RSS feed + embeddable status badge
+# ═══════════════════════════════════════════════════════════════════════════
+
+# (short message, shields-style colour) per verdict — used by the feed + badge.
+_VERDICT_TEXT = {
+    "✅": ("update now", "#4c1"),
+    "⚠️": ("update with care", "#dfb317"),
+    "⏸️": ("skip this version", "#e05d44"),
+    "🔄": ("wait for next", "#007ec6"),
+}
+
+
+def _xml_escape(s) -> str:
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&apos;"))
+
+
+def _rfc822(iso: str) -> str:
+    """ISO timestamp → RFC-822 date for RSS <pubDate> (best-effort)."""
+    if not iso:
+        return ""
+    try:
+        from datetime import datetime
+        from email.utils import format_datetime
+        return format_datetime(datetime.fromisoformat(iso))
+    except Exception:
+        return ""
+
+
+def _atomic_write_text(dest: Path, text: str) -> None:
+    """Write text atomically and make it world-readable (Caddy serves it)."""
+    fd, tmp = tempfile.mkstemp(suffix=dest.suffix, dir=str(dest.parent))
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp, str(dest))
+        _make_world_readable(dest)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def _write_feed(data: dict, output_path: str) -> None:
+    """RSS 2.0 feed of verdicts (one item per tracked version) → web/feed.xml."""
+    dest = Path(output_path).with_name("feed.xml")
+    site = config.SITE_URL.rstrip("/")
+    archived = set(data.get("archived_versions") or [])
+    hist = sorted(data.get("version_history", []) or [],
+                  key=lambda e: str(e.get("assessed_at", "")), reverse=True)
+    items = []
+    for e in hist[:20]:
+        ver = e.get("version", "")
+        label = _VERDICT_TEXT.get(e.get("recommendation", ""), ("assessed", ""))[0]
+        link = f"{site}/archive/{ver}.html" if ver in archived else site + "/"
+        pub = _rfc822(e.get("assessed_at", ""))
+        items.append(
+            "    <item>\n"
+            f"      <title>{_xml_escape(f'OpenClaw v{ver}: {label}')}</title>\n"
+            f"      <link>{_xml_escape(link)}</link>\n"
+            f"      <guid isPermaLink=\"false\">v{_xml_escape(ver)}-{_xml_escape(str(e.get('assessed_at',''))[:19])}</guid>\n"
+            + (f"      <pubDate>{pub}</pubDate>\n" if pub else "")
+            + f"      <description>{_xml_escape(e.get('headline') or e.get('reason') or '')}</description>\n"
+            "    </item>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0">\n  <channel>\n'
+        "    <title>OpenClaw Status — should you update?</title>\n"
+        f"    <link>{_xml_escape(site)}/</link>\n"
+        "    <description>A verdict on every OpenClaw release: update now, update with care, "
+        "wait for the next, or skip.</description>\n"
+        + ("\n".join(items) + "\n" if items else "")
+        + "  </channel>\n</rss>\n"
+    )
+    _atomic_write_text(dest, xml)
+
+
+def _badge_svg(label: str, message: str, color: str) -> str:
+    """A self-contained shields-style SVG badge (no external dependency)."""
+    def w(s):
+        return int(len(s) * 6.6) + 12
+    lw, mw = w(label), w(message)
+    total = lw + mw
+    lx, mx = lw / 2, lw + mw / 2
+    le, me = _xml_escape(label), _xml_escape(message)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{total}" height="20" role="img" '
+        f'aria-label="{le}: {me}">\n'
+        f'<title>{le}: {me}</title>\n'
+        '<linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/>'
+        '<stop offset="1" stop-opacity=".1"/></linearGradient>\n'
+        f'<clipPath id="r"><rect width="{total}" height="20" rx="3" fill="#fff"/></clipPath>\n'
+        '<g clip-path="url(#r)">\n'
+        f'<rect width="{lw}" height="20" fill="#444"/>\n'
+        f'<rect x="{lw}" width="{mw}" height="20" fill="{color}"/>\n'
+        f'<rect width="{total}" height="20" fill="url(#s)"/>\n'
+        '</g>\n'
+        '<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">\n'
+        f'<text x="{lx:.0f}" y="15" fill="#010101" fill-opacity=".3">{le}</text>\n'
+        f'<text x="{lx:.0f}" y="14">{le}</text>\n'
+        f'<text x="{mx:.0f}" y="15" fill="#010101" fill-opacity=".3">{me}</text>\n'
+        f'<text x="{mx:.0f}" y="14">{me}</text>\n'
+        '</g>\n</svg>\n'
+    )
+
+
+def _write_badge(data: dict, output_path: str) -> None:
+    """Embeddable SVG status badge → web/badge.svg."""
+    dest = Path(output_path).with_name("badge.svg")
+    ver = data.get("version", "")
+    label = f"OpenClaw v{ver}" if ver else "OpenClaw"
+    msg, color = _VERDICT_TEXT.get(data.get("recommendation", ""), ("assessed", "#6e7681"))
+    _atomic_write_text(dest, _badge_svg(label, msg, color))
+
+
 def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output_path: str = None) -> str:
     """Build the public assessment page by injecting pipeline data into the template.
 
@@ -423,6 +581,10 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
 
     # Emit the same payload as a sibling latest.json for the runtime fetch path.
     _write_latest_json(data, out)
+
+    # Shareable static artifacts: an RSS feed of verdicts and an embeddable badge.
+    _write_feed(data, out)
+    _write_badge(data, out)
 
     # Set can_deploy flag in assessment_raw for downstream
     if assessment_raw is not None:

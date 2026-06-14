@@ -89,3 +89,14 @@ def test_empty_version_returns_input_unchanged(led):
     scouted = [_issue(1)]
     assert ledger.merge_version_issues("", scouted) is scouted
     assert not config.ISSUE_LEDGER_FILE.exists()
+
+
+def test_is_new_flags_issues_first_seen_after_prior_run(led):
+    # First run has no prior run, so nothing is "new" (avoids flagging the whole baseline).
+    a = ledger.merge_version_issues("1.0", [_issue(1)], now="2026-01-01T00:00:00+00:00")
+    assert all(not i["is_new"] for i in a)
+    # Second run adds #2 — only #2 is new since the previous run.
+    b = {i["number"]: i for i in
+         ledger.merge_version_issues("1.0", [_issue(1), _issue(2)], now="2026-01-02T00:00:00+00:00")}
+    assert b[2]["is_new"] is True
+    assert b[1]["is_new"] is False
