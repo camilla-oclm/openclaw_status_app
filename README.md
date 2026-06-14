@@ -41,8 +41,12 @@ providers** argue it out before anything ships.
 - **Ships only trustworthy pages.** A deploy guard refuses low-confidence or invalid
   assessments, an HTML smoke test runs *before* the old page is overwritten, and each outgoing
   page is archived to a browsable per-version snapshot.
+- **Built for humans *and* machines.** The same verdict ships as an interactive page, a JSON API
+  (`latest.json`), an RSS feed, a status badge, and an **agent-readable mirror** (`llms.txt` /
+  `llms-full.txt`) — plus server-rendered HTML + JSON-LD so search engines and LLM agents can read
+  the answer without executing JavaScript.
 - **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (~$0.02–0.05/run).
-- **Hermetic test suite.** 130+ network-free tests gate CI on every push.
+- **Hermetic test suite.** 150+ network-free tests gate CI on every push.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
 the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
@@ -167,6 +171,18 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
     self-update) can read `https://clawstat.us/llms.txt` for the current verdict + links, or
     `llms-full.txt` for the entire assessment as clean markdown — no HTML/JS to parse. The page's
     `<head>` advertises both via `<link rel="alternate">`.
+- **SEO / crawlability.** Because the page builds its body in JS, each render also injects
+  search-engine signals into the static HTML (every field HTML-escaped — same XSS-safe rule as the
+  DOM side):
+  - a **dynamic `<title>` + `<meta name="description">`** carrying the version + verdict + headline,
+    a **canonical** link, and **Open Graph / Twitter** cards (preview image `web/og.png`);
+  - a **server-rendered answer** inside `#app` (a real `<h1>Should you update OpenClaw vX? — …</h1>`,
+    the headline, why-this-verdict, and top issues) so the verdict is crawlable without running JS —
+    the script clears `#app` and rebuilds the interactive page on load;
+  - **JSON-LD** structured data (`WebSite` + `WebPage` + a `FAQPage` answering "Should you update /
+    is OpenClaw vX safe to update?");
+  - **`web/robots.txt`** + **`web/sitemap.xml`** (homepage + every archived version), emitted each
+    render. Caddy serves unknown paths as real `404`s (no SPA fallback) to avoid soft-404 duplicates.
 
 ---
 

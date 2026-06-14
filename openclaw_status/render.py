@@ -663,6 +663,170 @@ def _write_llms(data: dict, output_path: str) -> None:
     _atomic_write_text(base.with_name("llms-full.txt"), _llms_full_md(data))
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  On-page SEO: dynamic <title>/description, OG/Twitter, JSON-LD, server-rendered
+#  answer (crawlable without JS), robots.txt + sitemap.xml.
+#  EVERY field here is untrusted LLM/GitHub text injected into HTML/attrs/JSON —
+#  so all of it is HTML-escaped (and `<` is \u-escaped inside the JSON-LD) to keep
+#  the page XSS-safe, exactly like the textContent rule on the JS side.
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _html_escape(s) -> str:
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&#39;"))
+
+
+def _truncate(s, n: int) -> str:
+    s = " ".join(str(s or "").split())
+    if len(s) <= n:
+        return s
+    return s[:n].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+
+
+def _seo_title(data: dict) -> str:
+    ver = data.get("version", "")
+    if not ver:
+        return "ClawStat.us — Should you update OpenClaw?"
+    return f"Should you update OpenClaw v{ver}? {_verdict_phrase(data.get('recommendation', ''))} — ClawStat.us"
+
+
+def _seo_description(data: dict) -> str:
+    h = (data.get("headline") or "").strip()
+    if not h:
+        h = (f"An automated, evidence-backed verdict on whether to update OpenClaw "
+             f"v{data.get('version', '')}.")
+    return _truncate(h, 160)
+
+
+def _json_ld(data: dict) -> str:
+    site = config.SITE_URL.rstrip("/")
+    ver = data.get("version", "")
+    phrase = _verdict_phrase(data.get("recommendation", ""))
+    desc = _seo_description(data)
+    assessed = data.get("assessed_at", "") or ""
+    webpage = {
+        "@type": "WebPage", "@id": f"{site}/#webpage", "url": f"{site}/",
+        "name": _seo_title(data), "isPartOf": {"@id": f"{site}/#website"},
+        "description": desc,
+        "about": {"@type": "SoftwareApplication", "name": "OpenClaw",
+                  "applicationCategory": "DeveloperApplication",
+                  **({"softwareVersion": ver} if ver else {})},
+    }
+    if assessed:
+        webpage["datePublished"] = assessed
+        webpage["dateModified"] = assessed
+    answer = f"{phrase}. {desc}"
+    graph = {"@context": "https://schema.org", "@graph": [
+        {"@type": "WebSite", "@id": f"{site}/#website", "url": f"{site}/", "name": "ClawStat.us",
+         "description": "Automated, evidence-backed verdicts on whether to update each OpenClaw release."},
+        webpage,
+        {"@type": "FAQPage", "@id": f"{site}/#faq", "isPartOf": {"@id": f"{site}/#webpage"},
+         "mainEntity": [
+             {"@type": "Question", "name": f"Should you update OpenClaw v{ver}?",
+              "acceptedAnswer": {"@type": "Answer", "text": answer}},
+             {"@type": "Question", "name": f"Is OpenClaw v{ver} safe to update?",
+              "acceptedAnswer": {"@type": "Answer", "text": answer}},
+         ]},
+    ]}
+    # \u-escape `<` so the JSON can never break out of the <script> (and stays valid JSON-LD).
+    return ('<script type="application/ld+json">'
+            + json.dumps(graph, ensure_ascii=False).replace("<", "\\u003c")
+            + "</script>")
+
+
+def _seo_head(data: dict) -> str:
+    site = config.SITE_URL.rstrip("/")
+    e = _html_escape
+    title, desc = _seo_title(data), _seo_description(data)
+    return "\n".join([
+        f'<meta name="description" content="{e(desc)}">',
+        f'<link rel="canonical" href="{site}/">',
+        '<meta property="og:type" content="website">',
+        '<meta property="og:site_name" content="ClawStat.us">',
+        f'<meta property="og:title" content="{e(title)}">',
+        f'<meta property="og:description" content="{e(desc)}">',
+        f'<meta property="og:url" content="{site}/">',
+        f'<meta property="og:image" content="{site}/og.png">',
+        '<meta name="twitter:card" content="summary_large_image">',
+        f'<meta name="twitter:title" content="{e(title)}">',
+        f'<meta name="twitter:description" content="{e(desc)}">',
+        f'<meta name="twitter:image" content="{site}/og.png">',
+        _json_ld(data),
+    ])
+
+
+def _seo_body(data: dict) -> str:
+    """Server-rendered crawlable answer placed inside #app; the JS replaces it on load."""
+    e = _html_escape
+    ver = data.get("version", "")
+    phrase = _verdict_phrase(data.get("recommendation", ""))
+    conf = data.get("confidence", "")
+    assessed = (data.get("assessed_at", "") or "")[:10]
+    h1 = f"Should you update OpenClaw v{ver}? — {phrase}" if ver else "Should you update OpenClaw?"
+    out = ['<article class="ssr">', f"<h1>{e(h1)}</h1>"]
+    verdict_line = f"<strong>Verdict:</strong> {e(phrase)}"
+    if conf:
+        verdict_line += f" ({e(conf)} confidence)"
+    if assessed:
+        verdict_line += f", assessed {e(assessed)}"
+    out.append(f"<p>{verdict_line}.</p>")
+    if data.get("headline"):
+        out.append(f"<p>{e(data['headline'].strip())}</p>")
+    thesis = (data.get("thesis") or "").strip()
+    if thesis:
+        out += ["<h2>Why this verdict</h2>", f"<p>{e(thesis.split(chr(10) + chr(10))[0].strip())}</p>"]
+    ki = data.get("known_issues") or []
+    if ki:
+        out.append(f"<h2>Known issues ({len(ki)})</h2>")
+        out.append("<ul>")
+        for i in ki[:8]:
+            out.append(f"<li>#{e(i.get('number'))} ({e(i.get('severity') or '')}) "
+                       f"{e((i.get('title') or '').strip())}</li>")
+        out.append("</ul>")
+    out.append('<p>Machine-readable: <a href="latest.json">JSON API</a> · '
+               '<a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">full markdown</a></p>')
+    out.append("</article>")
+    return "\n".join(out)
+
+
+def _inject_seo(html: str, data: dict) -> str:
+    """Fill the SEO placeholders: dynamic <title>, the head meta/JSON-LD block, and the
+    server-rendered answer inside #app. No-ops cleanly if a placeholder is absent."""
+    title = _html_escape(_seo_title(data))
+    html = re.sub(r"<title>.*?</title>", lambda m: f"<title>{title}</title>", html,
+                  count=1, flags=re.DOTALL)
+    html = html.replace("<!--SEO-HEAD-->", _seo_head(data), 1)
+    html = html.replace("<!--SSR-->", _seo_body(data), 1)
+    return html
+
+
+def _write_robots(output_path: str) -> None:
+    """robots.txt → allow all + advertise the sitemap."""
+    site = config.SITE_URL.rstrip("/")
+    body = f"User-agent: *\nAllow: /\n\nSitemap: {site}/sitemap.xml\n"
+    _atomic_write_text(Path(output_path).with_name("robots.txt"), body)
+
+
+def _write_sitemap(data: dict, output_path: str) -> None:
+    """sitemap.xml → the homepage + every archived per-version snapshot."""
+    site = config.SITE_URL.rstrip("/")
+    lastmod = (data.get("assessed_at", "") or "")[:10]
+    urls = [("    <url>\n"
+             f"      <loc>{site}/</loc>\n"
+             + (f"      <lastmod>{_xml_escape(lastmod)}</lastmod>\n" if lastmod else "")
+             + "      <changefreq>daily</changefreq>\n      <priority>1.0</priority>\n"
+             "    </url>")]
+    for ver in (data.get("archived_versions") or []):
+        urls.append("    <url>\n"
+                    f"      <loc>{site}/archive/{_xml_escape(ver)}.html</loc>\n"
+                    "      <changefreq>monthly</changefreq>\n      <priority>0.4</priority>\n"
+                    "    </url>")
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           + "\n".join(urls) + "\n</urlset>\n")
+    _atomic_write_text(Path(output_path).with_name("sitemap.xml"), xml)
+
+
 def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output_path: str = None) -> str:
     """Build the public assessment page by injecting pipeline data into the template.
 
@@ -701,6 +865,7 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
 
     data = _build_assessment_data(assessment_raw, raw)
     html = _inject_data(html, data)
+    html = _inject_seo(html, data)   # dynamic title/meta/JSON-LD + server-rendered answer
     version = data.get("version", "")
 
     # ── Smoke Test: validate before writing ──
@@ -736,6 +901,9 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
     _write_badge(data, out)
     # Agent-readable layer: llms.txt + a full markdown mirror of the verdict.
     _write_llms(data, out)
+    # SEO crawl infrastructure: robots.txt + sitemap.xml.
+    _write_robots(out)
+    _write_sitemap(data, out)
 
     # Set can_deploy flag in assessment_raw for downstream
     if assessment_raw is not None:

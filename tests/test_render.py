@@ -297,6 +297,50 @@ def test_write_llms_emits_agent_layer(tmp_path, monkeypatch):
     assert "New GUI" in full and "windows: high" in full
 
 
+def test_inject_seo_fills_title_meta_jsonld_and_ssr():
+    tpl = ('<html><head><title>x</title><!--SEO-HEAD--></head>'
+           '<body><main><div id="app"><!--SSR--></div></main></body></html>')
+    data = {"version": "2.0", "recommendation": "⏸️", "confidence": "high",
+            "headline": "Skip it for now.", "thesis": "Multiple regressions.\n\nSecond para.",
+            "known_issues": [{"number": 123, "title": "Boom", "severity": "high"}],
+            "assessed_at": "2026-06-14T00:00:00+00:00"}
+    out = render._inject_seo(tpl, data)
+    assert "<title>Should you update OpenClaw v2.0? Skip this version — ClawStat.us</title>" in out
+    assert 'name="description"' in out and 'property="og:title"' in out and 'name="twitter:card"' in out
+    assert 'rel="canonical"' in out and 'application/ld+json' in out
+    assert "<h1>Should you update OpenClaw v2.0? — Skip this version</h1>" in out
+    assert "Multiple regressions." in out and "Second para." not in out  # only first thesis para
+    assert "#123" in out and "Boom" in out
+    assert "<!--SSR-->" not in out and "<!--SEO-HEAD-->" not in out
+
+
+def test_seo_escapes_untrusted_text():
+    data = {"version": "2.0", "recommendation": "⏸️",
+            "headline": "<script>alert(1)</script>",
+            "known_issues": [{"number": 1, "title": "<img src=x onerror=alert(1)>", "severity": "high"}]}
+    body, head = render._seo_body(data), render._seo_head(data)
+    assert "<script>alert" not in body and "&lt;script&gt;" in body     # headline escaped in body
+    assert "<img src=x" not in body and "&lt;img" in body               # issue title escaped in body
+    assert "<script>alert" not in head and "&lt;script&gt;" in head     # headline reused in head meta, escaped
+    # JSON-LD can't be broken out of its <script> even with a hostile version string.
+    ld = render._json_ld({"version": "x</script><script>evil", "recommendation": "⏸️"})
+    assert ld.count("</script>") == 1                  # only the real closing tag
+    assert "\\u003c/script" in ld                      # the hostile one was \u-escaped
+
+
+def test_write_sitemap_and_robots(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    render._write_sitemap({"assessed_at": "2026-06-14T00:00:00+00:00",
+                           "archived_versions": ["2.0", "1.9"]}, str(out))
+    sm = (tmp_path / "sitemap.xml").read_text()
+    assert "<loc>https://example.test/</loc>" in sm
+    assert "archive/2.0.html" in sm and "archive/1.9.html" in sm
+    assert (tmp_path / "sitemap.xml").stat().st_mode & 0o004
+    render._write_robots(str(out))
+    assert "Sitemap: https://example.test/sitemap.xml" in (tmp_path / "robots.txt").read_text()
+
+
 def test_build_data_extracts_stable_release_history(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
     monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
