@@ -40,7 +40,7 @@ providers** argue it out before anything ships.
   assessments, an HTML smoke test runs *before* the old page is overwritten, and each outgoing
   page is archived to a browsable per-version snapshot.
 - **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (~$0.02–0.05/run).
-- **Hermetic test suite.** ~100 network-free tests gate CI on every push.
+- **Hermetic test suite.** 130+ network-free tests gate CI on every push.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
 the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
@@ -195,11 +195,33 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # ~100 tests, hermetic (no network)
+python3 -m pytest        # 130+ tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
 validator, the data-injection contract, and the HTML smoke test.
+
+---
+
+## Deploy (self-host)
+
+The live site at <https://clawstat.us> runs on a small Ubuntu VM (AWS Lightsail): a systemd
+timer rebuilds the page every 6h and Caddy terminates HTTPS. The whole host is scripted in
+[`deploy/`](deploy/) (provision script + systemd unit/timer + Caddyfile). On a fresh box with
+this repo cloned to `/opt/openclaw_status_app`:
+
+```bash
+sudo deploy/provision.sh <your-domain>     # deps + Caddy + venv + the systemd timer
+sudo nano /opt/openclaw_status_app/.env    # OPENROUTER_API_KEY + GITHUB_TOKEN (+ ALERT_WEBHOOK_URL)
+sudo -u openclaw /opt/openclaw_status_app/.venv/bin/python run.py full   # seed the first page
+```
+
+Point the domain's DNS A-record at the box and open ports 80/443 — Caddy issues the TLS cert
+automatically. After that, the timer pulls `main` and reruns the pipeline every 6h, so shipping
+a change is just `git push`. Useful on-box commands: `journalctl -u openclaw-status.service -f`
+(logs), `systemctl list-timers openclaw-status.timer` (schedule), `sudo systemctl start
+openclaw-status.service` (deploy now). Changes under `deploy/` need a re-run of `provision.sh`
+to reinstall the `/etc` copies.
 
 ---
 
