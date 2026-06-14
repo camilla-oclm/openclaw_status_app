@@ -15,6 +15,9 @@ web/badge.svg
 web/*.html.prev
 web/archive/
 
+# Local design-prototype scratch dir (Phase 0 redesign — never committed)
+web/proto/
+
 # Python
 __pycache__/
 *.pyc
