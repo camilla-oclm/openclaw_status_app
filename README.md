@@ -46,7 +46,7 @@ providers** argue it out before anything ships.
 rebuilds itself every few hours and deploys to GitHub Pages straight from CI: the full
 collect → assess → render pipeline runs *inside the workflow*, so there's no always-on server.
 The custom domain **[clawstat.us](https://clawstat.us)** is being pointed at it. An AWS Lightsail
-host is also fully scripted as an alternative — see [`plan.md`](plan.md).
+host is also fully scripted as an alternative — see [`deploy/`](deploy/).
 
 ---
 
@@ -227,7 +227,6 @@ openclaw_status_app/
 ├── docs/                   README screenshots (hero-dark.png / hero-light.png)
 ├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile
 ├── .github/workflows/      ci.yml (tests) + pages.yml (build & deploy the live demo)
-├── plan.md                 deploy runbook (Lightsail + Route53 + Caddy)
 ├── tests/                  pytest suite
 └── data/                   pipeline outputs (gitignored)
 ```
@@ -244,5 +243,5 @@ openclaw_status_app/
 - **Runtime data refresh — done.** The page reads `latest.json` at runtime (inlined copy as
   fallback), so data refreshes without rebuilding the whole HTML.
 - **AWS host (optional alternative).** A self-updating Lightsail VM is fully scripted in
-  [`deploy/`](deploy/) + [`plan.md`](plan.md) for when shell access on the host is wanted; it
-  needs the operator's one-time AWS account + box. See [`dropoff.md`](dropoff.md).
+  [`deploy/`](deploy/) (provision script + systemd timer + Caddyfile) for when shell access on
+  the host is wanted; it needs the operator's one-time AWS account + box.

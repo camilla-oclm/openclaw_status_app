@@ -20,3 +20,7 @@ __pycache__/
 
 # Local Claude Code settings (and any other local Claude state)
 .claude/
+
+# Internal planning / handoff docs — kept local, never published to the public repo.
+plan.md
+dropoff.md

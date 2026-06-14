@@ -3,7 +3,7 @@ name: deploy-pages
 # Builds the public decision page and publishes it to GitHub Pages — a live,
 # self-updating demo. The pipeline runs in CI (collect → assess → render), so the
 # site refreshes on a schedule without any always-on server. This is the quick
-# public demo; the AWS Lightsail runbook in plan.md is the alternative production host.
+# public demo; the AWS Lightsail scripts in deploy/ are the alternative production host.
 on:
   push:
     branches: [main]
