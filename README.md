@@ -238,8 +238,10 @@ openclaw_status_app/
 - **Live demo — done.** The page deploys to GitHub Pages from CI on every push and every ~6h
   (`.github/workflows/pages.yml`), reachable at
   <https://camilla-oclm.github.io/openclaw_status_app/>. Pointing **clawstat.us** at it is a DNS step.
-- **Alerting — live.** Cost/budget/failure alerts POST to a Discord webhook (`ALERT_WEBHOOK_URL`),
-  with a hard budget gate to stop runaway spend. Verify any time with `run.py notify-test`.
+- **Alerting — live.** A Discord webhook (`ALERT_WEBHOOK_URL`) gets a run-completion confirmation
+  (verdict + this-run cost + running daily/monthly totals) plus alerts on cost thresholds, the
+  budget gate, and assessment failures. A hard budget gate stops runaway spend.
+  Verify any time with `run.py notify-test`.
 - **Runtime data refresh — done.** The page reads `latest.json` at runtime (inlined copy as
   fallback), so data refreshes without rebuilding the whole HTML.
 - **AWS host (optional alternative).** A self-updating Lightsail VM is fully scripted in

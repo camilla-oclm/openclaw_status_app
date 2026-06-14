@@ -552,6 +552,16 @@ def _step_refinement(context: str, primary_assessment: dict, validator_review: d
 #  Main pipeline entry point
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _run_summary_message(version, recommendation, run_cost, daily_total, monthly_total, n_issues):
+    """Compact one-line run-completion notice for the alert webhook: the verdict
+    plus this run's cost and the running daily/monthly totals (which include this run)."""
+    return (
+        f"✅ OpenClaw Status — v{version} {recommendation} "
+        f"({n_issues} known issue{'' if n_issues == 1 else 's'}) · "
+        f"this run ${run_cost:.4f} · today ${daily_total:.2f} · month ${monthly_total:.2f}"
+    )
+
+
 def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict:
     """Run the LLM assessment pipeline.
 
@@ -726,6 +736,16 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
 
     output["validator_unreviewed"] = validator_unreviewed
     output["cost_alerts"] = alerts
+
+    # Run-completion confirmation: verdict + this run's cost + running totals.
+    # (No-op unless ALERT_WEBHOOK_URL is set; daily/monthly already include this run.)
+    notify(_run_summary_message(
+        version,
+        final_assessment.get("recommendation", "?"),
+        total_usage.get("cost_usd", 0.0),
+        daily, monthly,
+        len(final_assessment.get("known_issues", [])),
+    ))
 
     return {"success": True, "assessment": final_assessment, "usage": total_usage}
 
