@@ -204,6 +204,16 @@ def test_build_context_no_truncation_note_when_under_cap(monkeypatch):
         assert f"### #{n} " in ctx
 
 
+def test_build_context_continuity_anchors_prior_verdict():
+    raw = _raw_with_n_issues(2)
+    assert "Continuity" not in agent.build_context(raw)  # no prior verdict → no anchor
+    ctx = agent.build_context(raw, {"recommendation": "⏸️", "confidence": "high",
+                                     "assessed_at": "2026-06-10T00:00:00+00:00"})
+    assert "Continuity" in ctx
+    assert "KEEP the previous verdict" in ctx
+    assert "⏸️" in ctx
+
+
 # ── model config ────────────────────────────────────────────────────────────
 
 def test_fallback_models_have_valid_slug_shape():

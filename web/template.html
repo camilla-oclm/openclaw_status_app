@@ -173,6 +173,7 @@ html[data-theme="light"] .fbtn[aria-pressed="true"]{color:#fff}
   background:var(--card); border:1px solid var(--border); border-left-width:3px; border-radius:12px;
   padding:.8rem .95rem; margin-bottom:.6rem; box-shadow:var(--shadow);
 }
+.issue.sev-critical{border-left-color:var(--bad); border-left-width:4px}
 .issue.sev-high{border-left-color:var(--bad)}
 .issue.sev-medium{border-left-color:var(--warn)}
 .issue.sev-low{border-left-color:var(--gray)}
@@ -908,11 +909,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var ki = DATA.known_issues || [];
     var ch = DATA.changes || {};
     var regs = ki.filter(function(i){return i.category==="regression";}).length;
-    var high = ki.filter(function(i){return i.severity==="high";}).length;
+    var severe = ki.filter(function(i){return i.severity==="high"||i.severity==="critical";}).length;
     var fixes = (ch.fixes||[]).length;
     var feats = (ch.features||[]).length;
     var tiles = [
-      {v:ki.length, l:"Known issues", s:high+" high severity", c:"var(--text)"},
+      {v:ki.length, l:"Known issues", s:severe+" high/critical", c:"var(--text)"},
       {v:regs, l:"Regressions", s:"since release", c:regs?"var(--bad)":"var(--good)"},
       {v:fixes, l:"Fixes shipped", s:"in this release", c:"var(--good)"},
       {v:feats, l:"New features", s:(ch.breaking||[]).length+" breaking", c:"var(--accent)"}
@@ -983,7 +984,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (i.reactions){
       tags.push(el("span",{"class":"tag"}, "👍 "+i.reactions));
     }
-    tags.push(el("span",{"class":"tag"}, sev+" severity"));
+    var sevCls = (sev==="critical"||sev==="high")?"t-bad":(sev==="medium"?"t-warn":"");
+    tags.push(el("span",{"class":"tag "+sevCls}, sev+" severity"));
     if (mine) tags.unshift(el("span",{"class":"tag t-me"}, "★ your stack"));
     return el("div",{"class":"issue sev-"+sev+(mine?" mine":""), "data-cat":i.category||"other", "data-mine":mine?"1":"0"},[
       el("a",{"class":"num", href:issueUrl(i.number)}, "#"+i.number),
@@ -996,7 +998,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function issues(){
     var ki = (DATA.known_issues||[]).slice();
     if (!ki.length) return null;
-    var order = {high:0,medium:1,low:2};
+    var order = {critical:0,high:1,medium:2,low:3};
     var catOrder = {regression:0,diamond_lobster:1,active:2};
     function rank(map,key){ return (key in map) ? map[key] : 9; }  // NB: 0 is falsy, don't use ||
     ki.sort(function(a,b){

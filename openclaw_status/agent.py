@@ -144,8 +144,13 @@ OUTPUT FORMAT: Return ONLY valid JSON. Same schema as before.
 #  Context builder
 # ═══════════════════════════════════════════════════════════════════════════
 
-def build_context(raw: dict) -> str:
-    """Format raw data into a structured prompt context for the LLM."""
+def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
+    """Format raw data into a structured prompt context for the LLM.
+
+    `prev_verdict` (the last assessment of this version, if any) anchors the verdict:
+    a released version is immutable, so the model should hold its prior call unless the
+    evidence materially changed — this is what stops the verdict flip-flopping run-to-run.
+    """
     sources = raw["sources"]
     version = raw.get("target_version", "unknown")
     release = sources.get("latest_release", {})
@@ -168,6 +173,22 @@ def build_context(raw: dict) -> str:
             f"Version: {prerelease.get('tag', '?')}\n"
             f"Published: {prerelease.get('published_at', '?')[:10]}\n"
             f"This contains fixes pending for the next stable release."
+        )
+
+    # Continuity — anchor the verdict so it doesn't flip-flop on noise.
+    if prev_verdict and prev_verdict.get("recommendation"):
+        parts.append(
+            "## Continuity — IMPORTANT\n"
+            f"A previous assessment of v{version} exists: verdict "
+            f"{prev_verdict.get('recommendation')} ({prev_verdict.get('confidence', '?')}), made "
+            f"{str(prev_verdict.get('assessed_at', ''))[:10]}.\n"
+            "This version is already RELEASED and immutable — it won't be patched until the next "
+            "release, so its known issues only ACCUMULATE; they don't vanish between runs. Treat the "
+            "issue list as a growing ledger, not a fresh snapshot.\n"
+            "KEEP the previous verdict UNLESS the evidence has materially changed since then — e.g. a "
+            "NEW high/critical regression affecting this version, or NEW pre-release fixes for its "
+            "blockers. Do NOT change the verdict over noise (reaction-count drift, re-ordering, or "
+            "issues you simply didn't list last time). If you do change it, justify the change in the thesis."
         )
 
     # Issues — ordered by the collector as severity → version-relevance → impact.
@@ -363,7 +384,7 @@ def append_history(version: str, assessment: dict, usage: dict):
             reason = reason[:57] + "..."
 
     ki = assessment.get("known_issues", [])
-    high_count = sum(1 for i in ki if i.get("severity") == "high")
+    high_count = sum(1 for i in ki if i.get("severity") in ("high", "critical"))
     regressions = sum(1 for i in ki if i.get("category") == "regression")
     if not reason and ki:
         reason = f"{len(ki)} issues, {high_count} high"
@@ -568,6 +589,20 @@ def _run_summary_message(version, recommendation, run_cost, daily_total, monthly
     )
 
 
+def _previous_verdict(version: str) -> dict | None:
+    """The most recent history entry for this version (anchors the sticky verdict)."""
+    if not version or not config.HISTORY_FILE.exists():
+        return None
+    try:
+        hist = load_json(config.HISTORY_FILE)
+    except Exception:
+        return None
+    for h in reversed(hist if isinstance(hist, list) else []):
+        if h.get("version") == version:
+            return h
+    return None
+
+
 def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict:
     """Run the LLM assessment pipeline.
 
@@ -580,8 +615,9 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     if raw is None:
         raw = load_json(config.RAW_DATA_FILE)
 
-    context = build_context(raw)
     version = raw.get("target_version", "unknown")
+    prev_verdict = _previous_verdict(version)
+    context = build_context(raw, prev_verdict)
 
     print(f"\n{'='*60}")
     print(f"OpenClaw Status — LLM Assessment Pipeline")
@@ -680,6 +716,15 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
             print(f"\n{'─'*60}")
             print("STEP 3/3 — Skipped (models agree)")
             print(f"{'─'*60}")
+
+    # ── Deterministic, accumulating known-issues ──
+    # Replace the model's hand-picked list with the per-version ledger (already the
+    # source of github_issues this run) so the displayed Known-issues set and its
+    # counts (stats, history) are stable and monotonic, not re-guessed every run.
+    from openclaw_status import ledger
+    accumulated = (raw.get("sources") or {}).get("github_issues", [])
+    if accumulated:
+        final_assessment["known_issues"] = ledger.display_known_issues(accumulated)
 
     # ── Final output ──
     rec = final_assessment.get("recommendation", "?")

@@ -81,6 +81,17 @@ HISTORY_FILE = DATA_DIR / "history.json"
 # or count against the rate limit). Runtime state; gitignored.
 ETAG_CACHE_FILE = DATA_DIR / "etag-cache.json"
 
+# Per-version accumulating issue ledger. A released version is immutable (it won't be
+# patched until the next release), so the issues affecting it only grow. Re-deriving
+# "known issues" from a fresh GitHub scout every run made the list and the verdict
+# flip-flop (a busy run surfaced 20 issues, a quiet one 7). The ledger upserts the
+# version-relevant issues each run — reactions only climb, fix-status fills in — and
+# never drops them, so the displayed set and its counts are deterministic and monotonic.
+# Keyed by version. Runtime state; gitignored (data/ is ignored wholesale).
+ISSUE_LEDGER_FILE = DATA_DIR / "issue-ledger.json"
+LEDGER_MAX_ISSUES_PER_VERSION = 60   # cap per version (keep the highest-ranked)
+LEDGER_KEEP_VERSIONS = 12            # prune the ledger to the most-recently-seen versions
+
 # ── API endpoints ───────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
