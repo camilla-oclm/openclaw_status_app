@@ -8,6 +8,7 @@
 <title>ClawStat.us — Should you update OpenClaw?</title>
 <link rel="alternate" type="text/markdown" href="llms-full.txt" title="Full verdict as markdown (for LLMs / agents)">
 <link rel="alternate" type="application/json" href="latest.json" title="Assessment JSON API">
+<!--SEO-HEAD-->
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
    ClawStat.us — "status board / data-viz" design system
@@ -441,6 +442,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .errbox{max-width:600px; margin:4rem auto; text-align:center; color:var(--muted)}
 .errbox h2{color:var(--text); margin-bottom:.5rem}
 
+/* server-rendered answer: crawlable / no-JS fallback inside #app (JS replaces it on load) */
+.ssr{max-width:70ch; margin:1rem auto; color:var(--text)}
+.ssr h1{font-family:var(--display); font-size:clamp(1.4rem,4vw,2rem); font-weight:800; letter-spacing:-.02em; margin-bottom:.8rem}
+.ssr h2{font-family:var(--display); font-size:1.1rem; font-weight:800; margin:1.2rem 0 .4rem}
+.ssr p{margin-bottom:.7rem} .ssr ul{margin:.3rem 0 .7rem 1.2rem} .ssr li{margin-bottom:.25rem}
+.ssr a{color:var(--accent)}
+
 /* ── scrollbars / focus / motion ───────────────────────────────────────── */
 ::-webkit-scrollbar{width:9px; height:9px}
 ::-webkit-scrollbar-thumb{background:var(--border2); border-radius:8px}
@@ -473,7 +481,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   </div>
 </header>
 
-<main class="wrap"><div id="app"></div></main>
+<main class="wrap"><div id="app"><!--SSR--></div></main>
 
 <script id="assessment-data" type="application/json">
 {

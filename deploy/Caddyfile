@@ -6,9 +6,10 @@
 # open) before Caddy can issue the certificate.
 __DOMAIN__ {
 	root * /opt/openclaw_status_app/web
-	file_server
 	encode gzip
-	# Real files (index.html, archive/<version>.html) are served directly;
-	# any unknown path falls back to the main page.
-	try_files {path} /index.html
+	# Every public page is a real file (index.html for "/", archive/<version>.html,
+	# llms.txt, robots.txt, sitemap.xml, …), so serve them directly and let unknown
+	# paths return a real 404. No SPA fallback — a blanket fallback to /index.html
+	# turns every junk URL into a 200 soft-404 (duplicate content) that dilutes SEO.
+	file_server
 }

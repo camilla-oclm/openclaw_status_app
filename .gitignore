@@ -14,6 +14,8 @@ web/feed.xml
 web/badge.svg
 web/llms.txt
 web/llms-full.txt
+web/robots.txt
+web/sitemap.xml
 web/*.html.prev
 web/archive/
 
