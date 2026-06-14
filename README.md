@@ -162,6 +162,11 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   - **`web/latest.json`** is also a documented public **JSON API** — the full assessment payload
     (`version`, `recommendation`, `confidence`, `thesis`, `known_issues`, `changes`, …). Poll it
     instead of scraping the page.
+  - **`web/llms.txt`** + **`web/llms-full.txt`** — an **agent-readable mirror** ([llms.txt](https://llmstxt.org)
+    convention). The page is JS-rendered, so an LLM/agent (e.g. an OpenClaw agent deciding whether to
+    self-update) can read `https://clawstat.us/llms.txt` for the current verdict + links, or
+    `llms-full.txt` for the entire assessment as clean markdown — no HTML/JS to parse. The page's
+    `<head>` advertises both via `<link rel="alternate">`.
 
 ---
 

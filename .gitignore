@@ -12,6 +12,8 @@ web/index.html
 web/latest.json
 web/feed.xml
 web/badge.svg
+web/llms.txt
+web/llms-full.txt
 web/*.html.prev
 web/archive/
 
