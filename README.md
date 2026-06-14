@@ -235,7 +235,7 @@ openclaw_status_app/
 ## Status / next steps
 
 - **Live — done.** Deployed at **<https://clawstat.us>** on an AWS Lightsail VM (Route53 DNS,
-  Caddy auto-HTTPS), self-updating every 3h via a systemd timer that pulls + runs `run.py full`.
+  Caddy auto-HTTPS), self-updating every 6h via a systemd timer that pulls + runs `run.py full`.
 - **Alerting — live.** A Discord webhook (`ALERT_WEBHOOK_URL`) gets a run-completion confirmation
   (verdict + this-run cost + running daily/monthly totals) plus alerts on cost thresholds, the
   budget gate, and assessment failures. A hard budget gate stops runaway spend.
