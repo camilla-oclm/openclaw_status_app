@@ -1,0 +1,77 @@
+name: deploy-pages
+
+# Builds the public decision page and publishes it to GitHub Pages — a live,
+# self-updating demo. The pipeline runs in CI (collect → assess → render), so the
+# site refreshes on a schedule without any always-on server. This is the quick
+# public demo; the AWS Lightsail runbook in plan.md is the alternative production host.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours — catches new releases; ~$0.04/run
+  workflow_dispatch:         # manual "Run workflow" button
+
+# Least privilege: read the repo, write Pages, mint the deploy OIDC token.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One live deploy at a time; let a newer run supersede an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      # Persist pipeline state (history/usage/etag cache) across runs so the
+      # "Past verdicts" timeline accumulates and ETags keep cutting GitHub fetches.
+      # web/ is rebuilt every run, so only data/ is cached.
+      - name: Restore pipeline state
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: pipeline-state-${{ github.run_id }}
+          restore-keys: |
+            pipeline-state-
+
+      - name: Build the page (collect → assess → render)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # The built-in Actions token reads the public openclaw/openclaw repo
+          # (issues + releases) — no separate PAT secret needed.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python run.py full
+
+      # The deploy guard skips writing index.html on a low-confidence/invalid
+      # assessment. If that happened, fail the job so the *previous* good deploy
+      # stays live instead of publishing an empty site.
+      - name: Verify a page was produced
+        run: test -s web/index.html || { echo "::error::render produced no web/index.html (deploy guard?)"; exit 1; }
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -87,7 +87,7 @@ def openrouter_call(
             headers={
                 "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://openclawstatus.io",
+                "HTTP-Referer": "https://clawstat.us",
             },
         )
         start = time.time()

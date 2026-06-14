@@ -6,7 +6,7 @@
 #
 # Run it FROM INSIDE the cloned repo, as root:
 #     cd /opt/openclaw_status_app
-#     sudo deploy/provision.sh openclawstatus.io
+#     sudo deploy/provision.sh clawstat.us
 #
 set -euo pipefail
 

@@ -201,6 +201,19 @@ def test_archived_versions_empty_when_dir_missing(tmp_path, monkeypatch):
     assert render._archived_versions() == []
 
 
+# ── latest.json (runtime-fetch payload) ─────────────────────────────────────
+
+def test_write_latest_json_sibling_of_page(tmp_path):
+    import json
+    out = tmp_path / "index.html"
+    data = {"version": "2026.6.6", "recommendation": "⏸️", "thesis": "x </script> y"}
+    render._write_latest_json(data, str(out))
+    sibling = tmp_path / "latest.json"
+    assert sibling.exists()
+    # Round-trips exactly (no </ escaping — it's a real .json file, not inlined HTML).
+    assert json.loads(sibling.read_text()) == data
+
+
 def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
     arch = tmp_path / "archive"
     arch.mkdir()

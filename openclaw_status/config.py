@@ -92,6 +92,10 @@ GITHUB_RAW_URL = "https://raw.githubusercontent.com"
 # <script id="assessment-data"> JSON contract and writes the public page to OUTPUT_HTML.
 TEMPLATE_FILE = WEB_DIR / "template.html"
 OUTPUT_HTML = WEB_DIR / "index.html"
+# Same payload as the page's inlined data, written as a sibling file. The page
+# `fetch()`es this at runtime (falling back to the inlined copy) so the data can
+# refresh without re-rendering the whole HTML. Generated; gitignored.
+LATEST_JSON = WEB_DIR / "latest.json"
 
 # Browsable per-version snapshots of past pages. On each render the outgoing page
 # is copied to ARCHIVE_DIR/<version>.html (recycling the old single .prev backup)
