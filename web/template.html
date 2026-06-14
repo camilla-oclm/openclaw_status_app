@@ -240,6 +240,16 @@ body::after{
 .sec-count{font-family:var(--mono); font-size:.78rem; color:var(--accent); font-weight:700; padding:.1rem .5rem; border:1px solid var(--border2); border-radius:999px; background:var(--card)}
 .sec-note{font-size:.8rem; color:var(--muted); margin-left:auto; font-weight:500}
 
+/* permalinks: anchorable section headers + deep-link target highlight */
+.sec-head{position:relative}
+.sec-anchor{position:absolute; left:-1.15em; top:0; font-family:var(--mono); font-weight:700; color:var(--faint); text-decoration:none; opacity:0; transition:opacity .15s var(--ease)}
+.sec-head:hover .sec-anchor, .sec-anchor:focus-visible, .sec-anchor.copied{opacity:1}
+.sec-anchor:hover{color:var(--accent)}
+.sec-anchor.copied{color:var(--good)}
+.section{scroll-margin-top:74px}
+.section:target .sec-title, .section.tgt .sec-title{color:var(--accent)}
+.section:target .sec-head, .section.tgt .sec-head{border-bottom-color:var(--accent)}
+
 .prose{
   background:var(--card); border:1px solid var(--border); border-radius:var(--r-md);
   padding:1.2rem 1.3rem; font-size:.97rem; color:var(--text); box-shadow:var(--shadow-1);
@@ -1647,6 +1657,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
     revealOn();
+    addAnchors();
   }
   function revealOn(){
     if (!("IntersectionObserver" in window)) return;
@@ -1656,10 +1667,43 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     app.querySelectorAll(".section, .stats, .bestver").forEach(function(n){ n.classList.add("reveal"); io.observe(n); });
   }
 
+  // ── permalinks: give each section a stable #id, an anchorable header, and
+  // honor a deep-link hash once render() has built the sections. ───────────────
+  function slugify(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"") || "section"; }
+  function addAnchors(){
+    app.querySelectorAll(".section").forEach(function(sec){
+      var head = sec.querySelector(".sec-head"), title = sec.querySelector(".sec-title");
+      if (!head || !title) return;
+      var id = sec.id || slugify(title.textContent);
+      sec.id = id;
+      if (head.querySelector(".sec-anchor")) return;
+      var a = el("a",{"class":"sec-anchor", title:"Copy link to this section",
+                      "aria-label":"Permalink: "+title.textContent}, "#");
+      a.setAttribute("href", "#"+id);   // in-page anchor — bypass el()'s external target=_blank
+      a.addEventListener("click", function(){
+        var url = location.origin + location.pathname + "#" + id;
+        try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url); } catch(e){}
+        a.classList.add("copied"); a.textContent = "✓";
+        setTimeout(function(){ a.classList.remove("copied"); a.textContent = "#"; }, 1200);
+      });
+      head.insertBefore(a, head.firstChild);
+    });
+  }
+  function scrollToHash(){
+    if (!location.hash || location.hash.length < 2) return;
+    var t = null;
+    try { t = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch(e){}
+    if (t){
+      t.scrollIntoView({behavior:"smooth", block:"start"});
+      t.classList.add("tgt"); setTimeout(function(){ t.classList.remove("tgt"); }, 1800);
+    }
+  }
+
   // ── boot ──────────────────────────────────────────────────────────────────
   initTheme();
   DATA = parseInline();   // build-time copy: always present, renders instantly
   render();
+  if (location.hash) setTimeout(scrollToHash, 60);   // honor a deep-link on load
 
   // Progressive enhancement: when latest.json is reachable (served pages, not
   // file://), refresh from it and re-render. Pure addition — any failure leaves
@@ -1667,7 +1711,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   if (window.fetch){
     fetch("latest.json", {cache:"no-store"})
       .then(function(r){ if (!r.ok) throw new Error("http "+r.status); return r.json(); })
-      .then(function(d){ if (d && d.recommendation){ DATA = d; render(); } })
+      .then(function(d){ if (d && d.recommendation){ DATA = d; render(); if (location.hash) setTimeout(scrollToHash, 60); } })
       .catch(function(){ /* keep the inlined data */ });
   }
 })();
