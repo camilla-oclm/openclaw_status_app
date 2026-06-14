@@ -241,6 +241,12 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             version_history = load_json(config.HISTORY_FILE)
         except Exception:
             pass
+    # Run cost is internal — keep it out of the public payload (page source / latest.json).
+    if isinstance(version_history, list):
+        version_history = [
+            {k: v for k, v in h.items() if k != "cost_usd"}
+            for h in version_history if isinstance(h, dict)
+        ]
 
     # Known issues with clawsweeper metadata
     raw_issues = {i["number"]: i for i in sources.get("github_issues", []) if isinstance(i, dict)}
@@ -278,7 +284,7 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "changes": a.get("changes", {"breaking": [], "fixes": [], "features": []}),
         "sentiment_summary": a.get("sentiment_summary", ""),
         "platform_impact": a.get("platform_impact", {}),
-        "usage": assessment_raw.get("usage", {}),
+        "usage": {k: v for k, v in (assessment_raw.get("usage") or {}).items() if k != "cost_usd"},
         "version_history": version_history,
         "npm": sources.get("npm", {}),
         "latest_release": {

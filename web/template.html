@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark light">
-<title>OpenClaw Status — Should you update?</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+<title>ClawStat.us — Should you update OpenClaw?</title>
 <style>
 :root{
   --bg:#0a0c10; --bg2:#0d1117; --card:#161b22; --card2:#1c2230;
@@ -231,13 +232,14 @@ details.triage summary{cursor:pointer; padding:.9rem 1.15rem; font-weight:600; f
 details.triage summary::-webkit-details-marker{display:none}
 details.triage summary .caret{color:var(--muted); transition:.2s; font-size:.8rem}
 details.triage[open] summary .caret{transform:rotate(90deg)}
-.triage-body{padding:0 1.15rem 1.1rem; display:grid; grid-template-columns:1fr 1fr; gap:1.2rem}
+.triage-body{padding:0 1.15rem 1.1rem; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1.2rem}
 @media(max-width:680px){.triage-body{grid-template-columns:1fr}}
+.triage-col{min-width:0}
 .triage-col h4{font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:.4rem 0 .6rem}
 .trow{font-size:.83rem; padding:.4rem 0; border-bottom:1px solid var(--border); display:flex; gap:.5rem; align-items:baseline}
 .trow:last-child{border-bottom:none}
 .trow .tn{font-family:var(--mono); color:var(--accent); text-decoration:none; font-weight:600; white-space:nowrap}
-.trow .tt{color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.trow .tt{color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 /* history timeline */
 .timeline{display:flex; flex-direction:column; gap:0}
@@ -249,7 +251,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .tl .tlv .cur{font-size:.66rem; font-weight:700; color:var(--accent); margin-left:.4rem; vertical-align:middle}
 .tl .tlv a.snap{color:inherit; text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px; text-decoration-color:var(--tone)}
 .tl .tlv a.snap:hover{text-decoration-style:solid}
-.tl .tlr{font-size:.84rem; color:var(--muted); margin-top:.1rem}
+.tl .tlr{font-size:.84rem; color:var(--muted); margin-top:.1rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .tl .tld{font-size:.74rem; color:var(--faint); margin-top:.1rem}
 
 /* footer */
@@ -268,7 +270,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 <body>
 
 <header class="topbar tone-muted">
-  <div class="brand"><span class="logo">🦞</span> OpenClaw <span class="dim">Status</span></div>
+  <div class="brand"><span class="logo">🦞</span> ClawStat<span class="dim">.us</span></div>
   <div class="bar-right">
     <span id="fresh" class="fresh tone-muted" hidden><span class="dot"></span><span id="fresh-text"></span></span>
     <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle theme" title="Toggle light/dark">🌙</button>
@@ -1070,7 +1072,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         el("div",{"class":"marker"}, e.recommendation||"?"),
         el("div",{"class":"tlb"},[
           el("div",{"class":"tlv"},[vlabel, isCur?el("span",{"class":"cur"},"● CURRENT"):null]),
-          el("div",{"class":"tlr"}, e.reason || e.headline || ""),
+          el("div",{"class":"tlr"}, e.headline || e.reason || ""),
           el("div",{"class":"tld"}, cap(e.confidence||"")+" confidence · "+fmtDate(e.assessed_at))
         ])
       ]));
@@ -1083,7 +1085,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var u = DATA.usage || {};
     var meta = [];
     if (DATA.assessed_at) meta.push(el("span",null,["Assessed ", el("code",null,fmtDate(DATA.assessed_at))]));
-    if (u.cost_usd != null) meta.push(el("span",null,["Cost ", el("code",null,"$"+Number(u.cost_usd).toFixed(4))]));
     if (u.api_calls) meta.push(el("span",null,["Pipeline ", el("code",null,u.api_calls+" model calls")]));
     if (u.tokens_in) meta.push(el("span",null,["Tokens ", el("code",null,(u.tokens_in)+"→"+(u.tokens_out||0))]));
 
@@ -1139,7 +1140,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       return;
     }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
-    document.title = "OpenClaw v" + (DATA.version||"") + " — " + v.label;
+    document.title = "ClawStat.us — OpenClaw v" + (DATA.version||"") + ": " + v.label;
     [ lowConfBanner(), hero(v), stats(), thesis(), evidence(), issues(),
       changes(), platforms(), sentiment(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });

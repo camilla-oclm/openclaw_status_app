@@ -235,3 +235,23 @@ def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
 
     data = render._build_assessment_data({"assessment": {}, "version": "2026.6.6"}, {"sources": {}})
     assert sorted(data["archived_versions"]) == ["2026.5.28", "2026.6.1"]
+
+
+def test_build_data_strips_cost_from_public_payload(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    (tmp_path / "history.json").write_text(json.dumps(
+        [{"version": "2026.6.1", "headline": "h", "reason": "r", "cost_usd": 0.02}]
+    ))
+
+    data = render._build_assessment_data(
+        {"assessment": {}, "version": "2026.6.6", "usage": {"cost_usd": 0.03, "api_calls": 2}},
+        {"sources": {}},
+    )
+    # Run cost must not surface on the public frontend...
+    assert "cost_usd" not in data["usage"]
+    assert all("cost_usd" not in h for h in data["version_history"])
+    # ...but the rest of the usage/history payload is untouched.
+    assert data["usage"]["api_calls"] == 2
+    assert data["version_history"][0]["headline"] == "h"
