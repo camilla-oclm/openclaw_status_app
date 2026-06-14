@@ -150,7 +150,8 @@ body{
 .ev-card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:1.05rem 1.15rem; box-shadow:var(--shadow)}
 .ev-card h3{font-size:.82rem; text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:.45rem; margin-bottom:.7rem}
 .ev-for h3{color:var(--good)} .ev-against h3{color:var(--bad)} .ev-neutral h3{color:var(--muted)}
-.ev-card ul{list-style:none; display:flex; flex-direction:column; gap:.6rem}
+.ev-card ul{list-style:none; display:flex; flex-direction:column; gap:.6rem; max-height:17rem; overflow-y:auto; padding-right:.4rem}
+.ev-card ul::-webkit-scrollbar{width:8px} .ev-card ul::-webkit-scrollbar-thumb{background:var(--border2); border-radius:8px}
 .ev-card li{position:relative; padding-left:1.1rem; font-size:.9rem; color:var(--text)}
 .ev-card li::before{content:""; position:absolute; left:0; top:.55em; width:7px; height:7px; border-radius:50%}
 .ev-for li::before{background:var(--good)} .ev-against li::before{background:var(--bad)} .ev-neutral li::before{background:var(--gray)}
@@ -201,20 +202,24 @@ html[data-theme="light"] .fbtn[aria-pressed="true"]{color:#fff}
 .tab[aria-selected="true"]{background:var(--card2); color:var(--text); border-color:var(--accent)}
 .tab .cnt{font-family:var(--mono); font-size:.75rem; background:var(--bg2); padding:.05rem .4rem; border-radius:6px; color:var(--muted)}
 .change{
-  background:var(--card); border:1px solid var(--border); border-radius:12px;
-  padding:.75rem .95rem; margin-bottom:.55rem; box-shadow:var(--shadow);
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:.55rem .8rem; margin-bottom:.4rem; box-shadow:var(--shadow);
 }
-.change .ct{font-weight:600; font-size:.92rem}
+.change .ct{font-weight:600; font-size:.88rem}
+.panel{max-height:21rem; overflow-y:auto; padding-right:.3rem}
+.panel::-webkit-scrollbar{width:8px} .panel::-webkit-scrollbar-thumb{background:var(--border2); border-radius:8px}
 .change .cm{font-size:.82rem; color:var(--muted); margin-top:.25rem}
 .empty{color:var(--faint); font-size:.88rem; padding:.6rem 0}
 
 /* platform grid */
-.plat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:.7rem}
+.plat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.7rem}
 .plat{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:.8rem .9rem; box-shadow:var(--shadow)}
-.plat .ph{display:flex; align-items:center; justify-content:space-between; gap:.5rem}
-.plat .pn{font-weight:600; font-size:.88rem; display:flex; align-items:center; gap:.4rem}
-.plat .pl{font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em}
-.plat .track{height:6px; border-radius:999px; background:var(--bg2); margin-top:.6rem; overflow:hidden}
+.plat .ph{display:flex; align-items:center; gap:.35rem; min-width:0}
+.plat .pn{font-weight:600; font-size:.88rem; display:flex; align-items:center; gap:.3rem; min-width:0}
+.plat .pname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.plat .pbar{display:flex; align-items:center; gap:.6rem; margin-top:.6rem}
+.plat .pl{flex:none; white-space:nowrap; font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; min-width:3.6rem}
+.plat .track{flex:1; height:6px; border-radius:999px; background:var(--bg2); overflow:hidden}
 .plat .fill{height:100%; border-radius:999px}
 .imp-none{--ic:var(--good)} .imp-low{--ic:var(--info)} .imp-medium{--ic:var(--warn)} .imp-high{--ic:var(--bad)}
 .plat .pl{color:var(--ic)} .plat .fill{background:var(--ic)}
@@ -273,7 +278,22 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .issue.mine{border-color:var(--info-bd); box-shadow:0 0 0 1px var(--info-bd), var(--shadow)}
 .tag.t-me{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
 .plat.you{outline:2px solid var(--accent); outline-offset:2px}
-.plat .me{font-size:.64rem; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; margin-left:.35rem}
+.plat .me{flex:none; white-space:nowrap; font-size:.6rem; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.04em}
+
+/* personalized per-platform insight (Your setup) */
+.risk .prow-list{margin-top:.8rem; display:flex; flex-direction:column; gap:.45rem}
+.risk .prow{display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; font-size:.85rem}
+.risk .ppn{font-weight:600; min-width:7rem}
+.pbadge{flex:none; font-size:.64rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:.12rem .5rem; border-radius:999px; border:1px solid var(--ic); color:var(--ic)}
+.risk .pdetail{color:var(--muted); font-size:.82rem}
+.risk .pdetail.muted2{color:var(--faint); font-style:italic}
+
+/* issue-triage scroll columns */
+.tscroll{max-height:260px; overflow-y:auto; padding-right:.35rem}
+.tscroll::-webkit-scrollbar{width:8px} .tscroll::-webkit-scrollbar-thumb{background:var(--border2); border-radius:8px}
+
+/* sentiment source note */
+.quote .qsrc{margin-top:.7rem; padding-top:.6rem; border-top:1px solid var(--border); font-size:.74rem; color:var(--faint)}
 
 /* release-health trend */
 .trend{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:1.15rem 1.25rem .95rem; box-shadow:var(--shadow)}
@@ -1022,22 +1042,23 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
   function changes(){
     var ch = DATA.changes || {};
+    // Features first (the reason a release exists); only keep categories that have items
+    // so an empty "Breaking" tab never shows.
     var groups = [
-      {key:"fixes",    icon:"✓", label:"Fixes",    items:ch.fixes||[],    sub:function(x){return x.verified?"verified":"";}, field:"title"},
       {key:"features", icon:"✨", label:"Features", items:ch.features||[], sub:function(x){return x.value||"";}, field:"title"},
+      {key:"fixes",    icon:"✓", label:"Fixes",    items:ch.fixes||[],    sub:function(x){return x.verified?"verified":"";}, field:"title"},
       {key:"breaking", icon:"⚠", label:"Breaking", items:ch.breaking||[], sub:function(x){return x.impact||"";}, field:"title"}
-    ];
+    ].filter(function(g){ return g.items.length; });
+    if (!groups.length) return null;
     var total = groups.reduce(function(a,g){return a+g.items.length;},0);
-    if (!total) return null;
     var s = el("div",{"class":"section"});
-    s.appendChild(sectionHead("What's new in this release", total));
+    s.appendChild(sectionHead("What's new in this release", total, "from the release notes"));
 
     var tabs = el("div",{"class":"tabs", role:"tablist"});
     var panel = el("div",{"class":"panel"});
     groups.forEach(function(g, idx){
-      var tab = el("button",{"class":"tab", type:"button", role:"tab", "data-k":g.key, "aria-selected": idx===0?"true":"false"},
-        [document.createTextNode(g.icon+" "+g.label), el("span",{"class":"cnt"}, String(g.items.length))]);
-      tabs.appendChild(tab);
+      tabs.appendChild(el("button",{"class":"tab", type:"button", role:"tab", "data-k":g.key, "aria-selected": idx===0?"true":"false"},
+        [document.createTextNode(g.icon+" "+g.label), el("span",{"class":"cnt"}, String(g.items.length))]));
     });
     s.appendChild(tabs);
     s.appendChild(panel);
@@ -1045,7 +1066,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     function paint(key){
       panel.textContent = "";
       var g = groups.filter(function(x){return x.key===key;})[0];
-      if (!g.items.length){ panel.appendChild(el("div",{"class":"empty"},"Nothing in this category.")); return; }
       g.items.forEach(function(it){
         var sub = g.sub(it);
         panel.appendChild(el("div",{"class":"change"},[
@@ -1059,10 +1079,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       tabs.querySelectorAll(".tab").forEach(function(t){ t.setAttribute("aria-selected", t===tab?"true":"false"); });
       paint(tab.getAttribute("data-k"));
     });
-    // first non-empty tab
-    var first = groups.filter(function(g){return g.items.length;})[0] || groups[0];
-    tabs.querySelectorAll(".tab").forEach(function(t){ t.setAttribute("aria-selected", t.getAttribute("data-k")===first.key?"true":"false"); });
-    paint(first.key);
+    paint(groups[0].key);
     return s;
   }
 
@@ -1078,10 +1095,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var mine = !!STACK[p[0]];
       g.appendChild(el("div",{"class":"plat imp-"+lvl+(mine?" you":"")},[
         el("div",{"class":"ph"},[
-          el("span",{"class":"pn"}, [document.createTextNode(p[1]+" "+p[2]), mine?el("span",{"class":"me"},"you"):null]),
-          el("span",{"class":"pl"}, meta.label)
+          el("span",{"class":"pn"}, [document.createTextNode(p[1]+" "), el("span",{"class":"pname"}, p[2])]),
+          mine?el("span",{"class":"me"},"you"):null
         ]),
-        el("div",{"class":"track"},[ el("div",{"class":"fill", style:"width:"+meta.w+"%"}) ])
+        el("div",{"class":"pbar"},[
+          el("span",{"class":"pl"}, meta.label),
+          el("div",{"class":"track"},[ el("div",{"class":"fill", style:"width:"+meta.w+"%"}) ])
+        ])
       ]));
     });
     s.appendChild(g);
@@ -1091,10 +1111,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function sentiment(){
     if (!DATA.sentiment_summary) return null;
     var s = el("div",{"class":"section"});
-    s.appendChild(sectionHead("Community sentiment"));
+    s.appendChild(sectionHead("Community sentiment", null, "read from GitHub issue activity"));
     s.appendChild(el("div",{"class":"quote"},[
-      el("div",{"class":"qh"},"What users are saying"),
-      el("div", null, linkify(DATA.sentiment_summary))
+      el("div",{"class":"qh"},"Inferred from the issue tracker"),
+      el("div", null, linkify(DATA.sentiment_summary)),
+      el("div",{"class":"qsrc"},"Derived by the analyst from GitHub issue signals — reaction counts, comment volume and how fast regressions pile up. Not scraped from social media.")
     ]));
     return s;
   }
@@ -1105,12 +1126,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     function col(title, items, kind){
       var c = el("div",{"class":"triage-col"});
       c.appendChild(el("h4", null, title+" ("+items.length+")"));
-      items.slice(0,8).forEach(function(it){
-        c.appendChild(el("div",{"class":"trow"},[
+      var scroll = el("div",{"class":"tscroll"});
+      items.forEach(function(it){
+        scroll.appendChild(el("div",{"class":"trow"},[
           el("a",{"class":"tn", href:issueUrl(it.number)}, "#"+it.number),
           el("span",{"class":"tt"}, it.title||"")
         ]));
       });
+      c.appendChild(scroll);
       return c;
     }
     var s = el("div",{"class":"section"});
@@ -1229,21 +1252,59 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   }
   function personalRisk(){
     if (!stackActive()){
-      return el("div",{"class":"hint"}, "Pick your platforms and channels above — the issues that affect your stack get highlighted and the risk line is tuned to it (saved on this device).");
+      return el("div",{"class":"hint"}, "Pick your platforms and channels above — your stack's issues get highlighted and the read below is tuned to it (saved on this device).");
     }
     var pi = DATA.platform_impact || {};
+    var ki = DATA.known_issues || [];
     var keys = stackKeys();
-    var labelOf = {}; PLAT.forEach(function(p){ labelOf[p[0]] = p[2]; });
-    var W = {none:0,low:1,medium:2,high:3}, worst = 0;
-    keys.forEach(function(k){ var lv=String(pi[k]||"none").toLowerCase(); if ((W[lv]||0)>worst) worst=W[lv]||0; });
-    var hit = (DATA.known_issues||[]).filter(function(i){ return issueHitsStack(i.title); }).length;
-    var names = keys.map(function(k){ return labelOf[k]||k; }).join(" + ");
-    var tone, head, body;
-    if (worst>=3){ tone="tone-bad"; head="⚠️ High impact for your stack"; body=names+" are among the hardest-hit surfaces this release."; }
-    else if (worst===2){ tone="tone-warn"; head="Some risk for your stack"; body=names+" see medium impact this release."; }
-    else { tone="tone-good"; head="Your stack looks largely unaffected"; body="No high or medium platform impact reported for "+names+" this release."; }
-    if (hit) body += " "+hit+" open issue"+(hit===1?"":"s")+" mention your platforms (highlighted below).";
-    return el("div",{"class":"risk "+tone},[ el("div",{"class":"rh"}, head), el("div",null, body) ]);
+    var labelOf = {}, emojiOf = {};
+    PLAT.forEach(function(p){ labelOf[p[0]]=p[2]; emojiOf[p[0]]=p[1]; });
+    var W = {none:0,low:1,medium:2,high:3};
+    function issuesFor(k){
+      var re = STACK_MATCH[k]; if (!re) return [];
+      return ki.filter(function(i){ return re.test(String(i.title||"")); });
+    }
+    // One row per selected platform, worst impact first — the actual insight.
+    var rows = keys.map(function(k){
+      var lv = String(pi[k]||"none").toLowerCase();
+      return {k:k, lv:lv, w:(W[lv]||0), iss:issuesFor(k)};
+    }).sort(function(a,b){ return b.w-a.w || b.iss.length-a.iss.length; });
+
+    var worst = rows.length ? rows[0].w : 0;
+    var hot = rows.filter(function(r){ return r.w>=2; }).map(function(r){ return labelOf[r.k]; });
+    var verdict = (VERDICTS[DATA.recommendation]||{label:String(DATA.recommendation||"")}).label;
+    var tone, head;
+    if (worst>=3){ tone="tone-bad";
+      head = "Your stack takes the brunt — "+hot.join(", ")+" "+(hot.length>1?"are":"is")+" among the hardest hit, so the “"+verdict+"” verdict applies squarely to you."; }
+    else if (worst===2){ tone="tone-warn";
+      head = "Moderate risk for your stack — "+hot.join(", ")+" see medium impact; weigh the “"+verdict+"” verdict accordingly."; }
+    else { tone="tone-good";
+      head = "Your stack looks largely spared — the issues behind the “"+verdict+"” verdict mostly land elsewhere."; }
+
+    var list = el("div",{"class":"prow-list"});
+    rows.forEach(function(r){
+      var badge = el("span",{"class":"pbadge imp-"+r.lv}, (IMPACT[r.lv]||IMPACT.none).label);
+      var detail;
+      if (r.iss.length){
+        var kids = [];
+        r.iss.slice(0,5).forEach(function(it,idx){
+          if (idx) kids.push(document.createTextNode(", "));
+          kids.push(el("a",{"class":"ilink", href:issueUrl(it.number)}, "#"+it.number));
+        });
+        if (r.iss.length>5) kids.push(document.createTextNode(" +"+(r.iss.length-5)+" more"));
+        detail = el("span",{"class":"pdetail"}, kids);
+      } else if (r.w>=2){
+        detail = el("span",{"class":"pdetail muted2"}, "no issue names it directly — exposure is via shared/core regressions");
+      } else {
+        detail = el("span",{"class":"pdetail muted2"}, "clear this release");
+      }
+      list.appendChild(el("div",{"class":"prow"},[
+        el("span",{"class":"ppn"}, emojiOf[r.k]+" "+labelOf[r.k]),
+        badge, detail
+      ]));
+    });
+
+    return el("div",{"class":"risk "+tone},[ el("div",{"class":"rh"}, head), list ]);
   }
 
   // ── release-health trend (verdicts over time) ───────────────────────────────
@@ -1323,8 +1384,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
-    [ lowConfBanner(), hero(v), bestVersion(), stats(), personalize(), thesis(), evidence(), issues(),
-      changes(), platforms(), sentiment(), trend(), triage(), history(), footer()
+    [ lowConfBanner(), hero(v), bestVersion(), stats(), changes(), personalize(), thesis(), evidence(),
+      issues(), platforms(), sentiment(), trend(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
   }
