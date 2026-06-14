@@ -362,9 +362,11 @@ def append_history(version: str, assessment: dict, usage: dict):
         if len(reason) > 60:
             reason = reason[:57] + "..."
 
-    high_count = sum(1 for i in assessment.get("known_issues", []) if i.get("severity") == "high")
-    if not reason and assessment.get("known_issues"):
-        reason = f"{len(assessment['known_issues'])} issues, {high_count} high"
+    ki = assessment.get("known_issues", [])
+    high_count = sum(1 for i in ki if i.get("severity") == "high")
+    regressions = sum(1 for i in ki if i.get("category") == "regression")
+    if not reason and ki:
+        reason = f"{len(ki)} issues, {high_count} high"
 
     entry = {
         "version": version,
@@ -373,6 +375,10 @@ def append_history(version: str, assessment: dict, usage: dict):
         "confidence": assessment.get("confidence", "medium"),
         "headline": headline,
         "reason": reason,
+        # Per-release counts power the release-health trend chart on the frontend.
+        "issues": len(ki),
+        "regressions": regressions,
+        "high": high_count,
         "cost_usd": usage.get("cost_usd", 0),
     }
 

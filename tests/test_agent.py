@@ -247,6 +247,22 @@ def test_append_history_dedupes_same_version(tmp_path, monkeypatch):
     assert data[0]["recommendation"] == "⏸️"
 
 
+def test_append_history_records_issue_counts(tmp_path, monkeypatch):
+    # The per-release counts power the release-health trend chart on the frontend.
+    hist = tmp_path / "history.json"
+    monkeypatch.setattr(config, "HISTORY_FILE", hist)
+    a = _valid_assessment(known_issues=[
+        {"severity": "high", "category": "regression"},
+        {"severity": "medium", "category": "regression"},
+        {"severity": "low", "category": "active"},
+    ])
+    agent.append_history("1.0", a, {"cost_usd": 0.0})
+    e = json.loads(hist.read_text())[0]
+    assert e["issues"] == 3
+    assert e["regressions"] == 2
+    assert e["high"] == 1
+
+
 # ── budget gate ─────────────────────────────────────────────────────────────
 
 def test_budget_gate_aborts_without_spending(tmp_path, monkeypatch):

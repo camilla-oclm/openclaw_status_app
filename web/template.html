@@ -254,6 +254,41 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .tl .tlr{font-size:.84rem; color:var(--muted); margin-top:.1rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .tl .tld{font-size:.74rem; color:var(--faint); margin-top:.1rem}
 
+/* best version to run */
+.bestver{display:flex; gap:.7rem; align-items:flex-start; margin:0 0 1.7rem; padding:.8rem 1rem; border-radius:12px; background:var(--tone-bg); border:1px solid var(--tone-bd); color:var(--text); font-size:.9rem}
+.bestver .bi{font-size:1.05rem; line-height:1.3}
+.bestver a.snap{color:var(--accent); text-decoration:none; font-family:var(--mono); font-weight:700}
+.bestver a.snap:hover{text-decoration:underline}
+
+/* your setup / personalization */
+.setup .chips{display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:.85rem}
+.pick{font-size:.8rem; font-weight:600; padding:.34rem .8rem; border-radius:999px; cursor:pointer; background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s; display:inline-flex; align-items:center; gap:.4rem}
+.pick:hover{color:var(--text); border-color:var(--accent)}
+.pick[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff}
+.setup .risk{padding:.85rem 1rem; border-radius:12px; font-size:.9rem; color:var(--text); background:var(--tone-bg); border:1px solid var(--tone-bd)}
+.setup .risk .rh{font-weight:700; margin-bottom:.2rem}
+.setup .hint{color:var(--faint); font-size:.84rem}
+
+/* issue + platform personalization markers */
+.issue.mine{border-color:var(--info-bd); box-shadow:0 0 0 1px var(--info-bd), var(--shadow)}
+.tag.t-me{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
+.plat.you{outline:2px solid var(--accent); outline-offset:2px}
+.plat .me{font-size:.64rem; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; margin-left:.35rem}
+
+/* release-health trend */
+.trend{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:1.15rem 1.25rem .95rem; box-shadow:var(--shadow)}
+.trend .chart{display:flex; align-items:flex-end; gap:.5rem; height:140px}
+.trend .col{flex:1; min-width:0; display:flex; align-items:flex-end; justify-content:center; height:100%}
+.trend .bar{width:100%; max-width:44px; min-height:5px; border-radius:6px 6px 3px 3px; background:var(--tone); transition:filter .15s}
+.trend .col:hover .bar{filter:brightness(1.13)}
+.trend .xlabels{display:flex; gap:.5rem; margin-top:.5rem}
+.trend .xl{flex:1; min-width:0; text-align:center}
+.trend .xl .em{font-size:.95rem; display:block; line-height:1.2}
+.trend .xl .vv{font-family:var(--mono); color:var(--muted); font-size:.66rem; display:block; word-break:break-all}
+.trend .legend{display:flex; flex-wrap:wrap; gap:.45rem .9rem; margin-top:.95rem; padding-top:.7rem; border-top:1px solid var(--border); font-size:.74rem; color:var(--muted)}
+.trend .legend .k{display:inline-flex; align-items:center; gap:.35rem}
+.trend .legend .sw{width:11px; height:11px; border-radius:3px}
+
 /* footer */
 .foot{margin-top:2.6rem; padding-top:1.4rem; border-top:1px solid var(--border); color:var(--muted); font-size:.83rem}
 .foot .how{display:flex; gap:.6rem; align-items:flex-start; margin-bottom:1rem}
@@ -769,6 +804,39 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   ];
   var IMPACT = {none:{label:"None",w:10},low:{label:"Low",w:38},medium:{label:"Medium",w:68},high:{label:"High",w:100}};
 
+  // ── personalization: the user's platform/channel "stack" (localStorage) ──
+  // A plain { key:true } set; render() reads it so a re-render re-applies the
+  // highlights consistently. Toggling a chip just saves + re-renders.
+  var STACK = {};
+  (function(){
+    try {
+      var saved = JSON.parse(localStorage.getItem("oc-stack")) || [];
+      for (var i=0;i<saved.length;i++) STACK[saved[i]] = true;
+    } catch(e){}
+  })();
+  function stackKeys(){ var a=[]; for (var k in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k) && STACK[k]) a.push(k); } return a; }
+  function stackActive(){ return stackKeys().length > 0; }
+  function saveStack(){ try { localStorage.setItem("oc-stack", JSON.stringify(stackKeys())); } catch(e){} }
+  // Keyword match for "does this issue touch the user's stack" (heuristic, title-only).
+  var STACK_MATCH = {
+    windows:/windows|win32|\.exe|powershell/i,
+    macos:/macos|mac os|imessage|\bios\b|apple|darwin/i,
+    linux:/linux|docker|systemd|ubuntu|debian|cgroup/i,
+    discord:/discord/i,
+    slack:/slack/i,
+    telegram:/telegram/i
+  };
+  function issueHitsStack(title){
+    var keys = stackKeys();
+    for (var i=0;i<keys.length;i++){
+      var re = STACK_MATCH[keys[i]];
+      if (re && re.test(String(title||""))) return true;
+    }
+    return false;
+  }
+  // Risk height (%) per verdict for the release-health trend — taller = riskier.
+  var RISK = {"✅":18,"⚠️":52,"🔄":74,"⏸️":100};
+
   // ── sections ──────────────────────────────────────────────────────────────
   function sectionHead(title, count, note){
     return el("div",{"class":"sec-head"},[
@@ -877,6 +945,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
   function issueCard(i){
     var sev = String(i.severity||"medium");
+    var mine = stackActive() && issueHitsStack(i.title);
     var cat = CAT[i.category] || {icon:"📋",label:cap(i.category||"issue"),cls:""};
     var tags = [ el("span",{"class":"tag "+cat.cls},[cat.icon+" "+cat.label]) ];
     if (i.affects_version){
@@ -895,7 +964,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       tags.push(el("span",{"class":"tag"}, "👍 "+i.reactions));
     }
     tags.push(el("span",{"class":"tag"}, sev+" severity"));
-    return el("div",{"class":"issue sev-"+sev, "data-cat":i.category||"other"},[
+    if (mine) tags.unshift(el("span",{"class":"tag t-me"}, "★ your stack"));
+    return el("div",{"class":"issue sev-"+sev+(mine?" mine":""), "data-cat":i.category||"other", "data-mine":mine?"1":"0"},[
       el("a",{"class":"num", href:issueUrl(i.number)}, "#"+i.number),
       el("div",{"class":"body"},[
         el("div",{"class":"title"}, i.title||"(untitled)"),
@@ -926,6 +996,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var meta = CAT[c]||{icon:"📋",label:cap(c)};
       filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":c}, meta.icon+" "+meta.label+" ("+cats[c]+")"));
     });
+    if (stackActive()){
+      var mineN = ki.filter(function(i){ return issueHitsStack(i.title); }).length;
+      filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":"mine"}, "★ My stack ("+mineN+")"));
+    }
     s.appendChild(filters);
 
     var list = el("div",{"class":"issue-list"});
@@ -937,7 +1011,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var f = btn.getAttribute("data-f");
       filters.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b===btn?"true":"false"); });
       list.querySelectorAll(".issue").forEach(function(row){
-        row.style.display = (f==="all" || row.getAttribute("data-cat")===f) ? "" : "none";
+        var show = (f==="all") ? true
+                 : (f==="mine") ? row.getAttribute("data-mine")==="1"
+                 : row.getAttribute("data-cat")===f;
+        row.style.display = show ? "" : "none";
       });
     });
     return s;
@@ -998,9 +1075,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     PLAT.forEach(function(p){
       var lvl = String(pi[p[0]]||"none").toLowerCase();
       var meta = IMPACT[lvl] || IMPACT.none;
-      g.appendChild(el("div",{"class":"plat imp-"+lvl},[
+      var mine = !!STACK[p[0]];
+      g.appendChild(el("div",{"class":"plat imp-"+lvl+(mine?" you":"")},[
         el("div",{"class":"ph"},[
-          el("span",{"class":"pn"}, p[1]+" "+p[2]),
+          el("span",{"class":"pn"}, [document.createTextNode(p[1]+" "+p[2]), mine?el("span",{"class":"me"},"you"):null]),
           el("span",{"class":"pl"}, meta.label)
         ]),
         el("div",{"class":"track"},[ el("div",{"class":"fill", style:"width:"+meta.w+"%"}) ])
@@ -1099,6 +1177,110 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ]);
   }
 
+  // ── best version to run (from the verdict history) ──────────────────────────
+  function bestVersion(){
+    var h = (DATA.version_history||[]).slice();
+    if (!h.length) return null;
+    h.sort(function(a,b){ return String(b.assessed_at).localeCompare(String(a.assessed_at)); });
+    var SAFE = {"✅":1,"⚠️":1};                 // "safe to run" verdicts
+    var curSafe = SAFE[DATA.recommendation];
+    var arch = {}; (DATA.archived_versions||[]).forEach(function(v){ arch[v]=1; });
+    var best = null;
+    for (var i=0;i<h.length;i++){ if (h[i].version!==DATA.version && SAFE[h[i].recommendation]){ best = h[i]; break; } }
+    var tone, bi, body;
+    if (curSafe){
+      tone="tone-good"; bi="✅";
+      body = [el("b",null,"You're on the safest version."),
+              document.createTextNode(" v"+(DATA.version||"")+" is the latest and it's cleared to run.")];
+    } else if (best){
+      tone="tone-info"; bi="↩️";
+      var vl = arch[best.version]
+        ? el("a",{"class":"snap", href:"archive/"+encodeURIComponent(best.version)+".html", title:"View the verdict for v"+best.version}, "v"+best.version)
+        : el("b",null,"v"+best.version);
+      var bl = (VERDICTS[best.recommendation]||{label:""}).label.toLowerCase();
+      body = [el("b",null,"Safest version to run now: "), vl,
+              document.createTextNode(" — the most recent release that was cleared"+(bl?(" ("+bl+")"):"")+". Hold here until the latest is fixed.")];
+    } else {
+      tone="tone-warn"; bi="⏳";
+      body = [el("b",null,"No recently-cleared version."),
+              document.createTextNode(" None of the tracked releases earned an update-now verdict yet — wait for a clean one.")];
+    }
+    return el("div",{"class":"bestver "+tone},[el("span",{"class":"bi"},bi), el("div",null,body)]);
+  }
+
+  // ── your setup (personalize the verdict to the user's stack) ────────────────
+  function personalize(){
+    var s = el("div",{"class":"section setup", id:"setup"});
+    s.appendChild(sectionHead("Your setup", null, "tailor the verdict to what you run"));
+    var chips = el("div",{"class":"chips"});
+    PLAT.forEach(function(p){
+      chips.appendChild(el("button",{"class":"pick", type:"button", "aria-pressed": STACK[p[0]]?"true":"false", "data-k":p[0]}, p[1]+" "+p[2]));
+    });
+    s.appendChild(chips);
+    s.appendChild(personalRisk());
+    chips.addEventListener("click", function(ev){
+      var b = ev.target.closest(".pick"); if(!b) return;
+      var k = b.getAttribute("data-k");
+      if (STACK[k]) delete STACK[k]; else STACK[k]=true;
+      saveStack();
+      render();   // re-render so issue highlights / platform marks / risk update in place
+    });
+    return s;
+  }
+  function personalRisk(){
+    if (!stackActive()){
+      return el("div",{"class":"hint"}, "Pick your platforms and channels above — the issues that affect your stack get highlighted and the risk line is tuned to it (saved on this device).");
+    }
+    var pi = DATA.platform_impact || {};
+    var keys = stackKeys();
+    var labelOf = {}; PLAT.forEach(function(p){ labelOf[p[0]] = p[2]; });
+    var W = {none:0,low:1,medium:2,high:3}, worst = 0;
+    keys.forEach(function(k){ var lv=String(pi[k]||"none").toLowerCase(); if ((W[lv]||0)>worst) worst=W[lv]||0; });
+    var hit = (DATA.known_issues||[]).filter(function(i){ return issueHitsStack(i.title); }).length;
+    var names = keys.map(function(k){ return labelOf[k]||k; }).join(" + ");
+    var tone, head, body;
+    if (worst>=3){ tone="tone-bad"; head="⚠️ High impact for your stack"; body=names+" are among the hardest-hit surfaces this release."; }
+    else if (worst===2){ tone="tone-warn"; head="Some risk for your stack"; body=names+" see medium impact this release."; }
+    else { tone="tone-good"; head="Your stack looks largely unaffected"; body="No high or medium platform impact reported for "+names+" this release."; }
+    if (hit) body += " "+hit+" open issue"+(hit===1?"":"s")+" mention your platforms (highlighted below).";
+    return el("div",{"class":"risk "+tone},[ el("div",{"class":"rh"}, head), el("div",null, body) ]);
+  }
+
+  // ── release-health trend (verdicts over time) ───────────────────────────────
+  function trend(){
+    var h = (DATA.version_history||[]).slice();
+    if (h.length < 2) return null;             // need a couple of points to be a trend
+    h.sort(function(a,b){ return String(a.assessed_at).localeCompare(String(b.assessed_at)); });
+    h = h.slice(-10);
+    var s = el("div",{"class":"section", id:"trend"});
+    s.appendChild(sectionHead("Release health trend", null, "taller = riskier verdict · newest at right"));
+    var card = el("div",{"class":"trend"});
+    var chart = el("div",{"class":"chart"});
+    var xl = el("div",{"class":"xlabels"});
+    h.forEach(function(e){
+      var v = VERDICTS[e.recommendation] || {tone:"tone-muted", label:String(e.recommendation||"?")};
+      var pct = RISK[e.recommendation] || 30;
+      var bits = ["v"+e.version, v.label||e.recommendation];
+      if (e.issues != null) bits.push(e.issues+" issues");
+      if (e.regressions != null) bits.push(e.regressions+" regressions");
+      var title = bits.join(" · ");
+      chart.appendChild(el("div",{"class":"col "+v.tone, title:title},[ el("div",{"class":"bar", style:"height:"+pct+"%"}, null) ]));
+      xl.appendChild(el("div",{"class":"xl "+v.tone, title:title},[
+        el("span",{"class":"em"}, e.recommendation||"?"),
+        el("span",{"class":"vv"}, e.version)
+      ]));
+    });
+    card.appendChild(chart);
+    card.appendChild(xl);
+    var legend = el("div",{"class":"legend"});
+    [["tone-good","✅ Update now"],["tone-warn","⚠️ Precautions"],["tone-info","🔄 Wait"],["tone-bad","⏸️ Skip"]].forEach(function(p){
+      legend.appendChild(el("span",{"class":"k "+p[0]},[ el("span",{"class":"sw", style:"background:var(--tone)"}, null), document.createTextNode(p[1]) ]));
+    });
+    card.appendChild(legend);
+    s.appendChild(card);
+    return s;
+  }
+
   // ── theme toggle ──────────────────────────────────────────────────────────
   function initTheme(){
     var btn = document.getElementById("theme-toggle");
@@ -1141,8 +1323,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
-    [ lowConfBanner(), hero(v), stats(), thesis(), evidence(), issues(),
-      changes(), platforms(), sentiment(), triage(), history(), footer()
+    [ lowConfBanner(), hero(v), bestVersion(), stats(), personalize(), thesis(), evidence(), issues(),
+      changes(), platforms(), sentiment(), trend(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
   }
