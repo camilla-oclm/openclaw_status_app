@@ -6,6 +6,8 @@
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
 <title>ClawStat.us — Should you update OpenClaw?</title>
+<link rel="alternate" type="text/markdown" href="llms-full.txt" title="Full verdict as markdown (for LLMs / agents)">
+<link rel="alternate" type="application/json" href="latest.json" title="Assessment JSON API">
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
    ClawStat.us — "status board / data-viz" design system
@@ -1402,7 +1404,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         el("span",null,"This verdict is generated automatically: a data collector pulls GitHub releases, post-release bug reports, Clawsweeper triage and community chatter, then a two-model LLM pipeline (analyst + validator) weighs the evidence. No human edits the result — always sanity-check against the linked issues.")
       ]),
       el("div",{"class":"meta"}, meta.concat([
-        el("a",{href:"https://github.com/openclaw/openclaw/releases"}, "Releases ↗")
+        el("a",{href:"https://github.com/openclaw/openclaw/releases"}, "Releases ↗"),
+        el("a",{href:"latest.json"}, "JSON API ↗"),
+        el("a",{href:"llms.txt"}, "llms.txt (for AI agents) ↗")
       ]))
     ]);
   }

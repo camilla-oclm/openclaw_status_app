@@ -269,6 +269,34 @@ def test_write_badge_emits_svg(tmp_path):
     assert "#e05d44" in svg   # red for skip
 
 
+def test_write_llms_emits_agent_layer(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    data = {
+        "version": "2.0", "recommendation": "⏸️", "confidence": "high",
+        "assessed_at": "2026-06-14T00:00:00+00:00",
+        "headline": "Skip it for now.", "thesis": "Multiple regressions.",
+        "evidence": {"against_updating": ["build breaks #123"]},
+        "known_issues": [{"number": 123, "title": "Build fails", "severity": "high",
+                          "category": "regression", "reactions": 9}],
+        "changes": {"features": [{"title": "New GUI"}], "fixes": [], "breaking": []},
+        "platform_impact": {"windows": "high"}, "sentiment_summary": "grumpy",
+    }
+    render._write_llms(data, str(out))
+
+    txt = (tmp_path / "llms.txt").read_text()
+    assert txt.startswith("# ClawStat.us")
+    assert "Skip this version" in txt and "OpenClaw v2.0" in txt
+    assert "https://example.test/llms-full.txt" in txt and "https://example.test/latest.json" in txt
+    assert (tmp_path / "llms.txt").stat().st_mode & 0o004   # world-readable for Caddy
+
+    full = (tmp_path / "llms-full.txt").read_text()
+    assert "# ClawStat.us — OpenClaw v2.0" in full
+    assert "## Why this verdict" in full and "Multiple regressions." in full
+    assert "#123" in full and "Build fails" in full and "unfixed" in full   # regression w/o fix
+    assert "New GUI" in full and "windows: high" in full
+
+
 def test_build_data_extracts_stable_release_history(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
     monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")

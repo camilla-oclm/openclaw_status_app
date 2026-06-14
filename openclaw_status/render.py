@@ -514,6 +514,155 @@ def _write_badge(data: dict, output_path: str) -> None:
     _atomic_write_text(dest, _badge_svg(label, msg, color))
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Agent-readable layer: llms.txt + a full markdown mirror of the verdict
+#  (the LLM/agent counterpart to the human page — same data, no HTML/JS to parse)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Human-readable verdict labels (match the page's VERDICTS map).
+_VERDICT_LABEL = {
+    "✅": "Update now",
+    "⚠️": "Update with precautions",
+    "⏸️": "Skip this version",
+    "🔄": "Wait for next release",
+}
+
+
+def _verdict_phrase(rec: str) -> str:
+    return _VERDICT_LABEL.get(rec, "Assessed")
+
+
+def _md_issue_line(i: dict) -> str:
+    """One known-issue as a markdown bullet: `- #N [sev · category · status] title — 👍`."""
+    cat = (i.get("category") or "").strip()
+    if i.get("fixed_in"):
+        status = f"fixed in {i['fixed_in']}"
+    elif cat == "regression":
+        status = "unfixed"
+    else:
+        status = "open"
+    meta = " · ".join(x for x in [i.get("severity") or "?", cat, status] if x)
+    line = f"- #{i.get('number')} [{meta}] {(i.get('title') or '').strip()}"
+    if i.get("reactions"):
+        line += f" — {i['reactions']} 👍"
+    return line
+
+
+def _llms_txt(data: dict) -> str:
+    """Concise /llms.txt (llmstxt.org): what the site is + the current verdict + resource links."""
+    site = config.SITE_URL.rstrip("/")
+    ver = data.get("version", "")
+    rec = data.get("recommendation", "")
+    L = [
+        "# ClawStat.us",
+        "",
+        "> Should you update to the latest OpenClaw release? ClawStat.us publishes an automated, "
+        "evidence-backed verdict for each OpenClaw release — scouted from post-release bug reports "
+        "and weighed by an independent multi-model LLM pipeline.",
+        "",
+        "## Current verdict",
+        "",
+        f"- Subject: OpenClaw v{ver}",
+        f"- Recommendation: {rec} {_verdict_phrase(rec)}",
+        f"- Confidence: {data.get('confidence', '')}",
+        f"- Assessed: {(data.get('assessed_at', '') or '')[:10]}",
+    ]
+    if data.get("headline"):
+        L.append(f"- Summary: {data['headline'].strip()}")
+    L += [
+        "",
+        "## Resources",
+        "",
+        f"- [Full assessment (markdown)]({site}/llms-full.txt): the complete current verdict — "
+        "thesis, known issues, what's new, platform impact.",
+        f"- [Full assessment (JSON API)]({site}/latest.json): the same payload as structured JSON.",
+        f"- [RSS feed of verdicts]({site}/feed.xml): one item per assessed version.",
+        f"- [Status badge (SVG)]({site}/badge.svg)",
+        f"- [Human page]({site}/)",
+        "",
+    ]
+    return "\n".join(L)
+
+
+def _llms_full_md(data: dict) -> str:
+    """Full /llms-full.txt: the entire current assessment as clean, parseable markdown."""
+    site = config.SITE_URL.rstrip("/")
+    ver = data.get("version", "")
+    rec = data.get("recommendation", "")
+    phrase = _verdict_phrase(rec)
+    L = [
+        f"# ClawStat.us — OpenClaw v{ver}",
+        "",
+        f"> Should you update to OpenClaw v{ver}? Verdict: {rec} {phrase} "
+        f"({data.get('confidence', '')} confidence). Assessed {(data.get('assessed_at','') or '')[:10]}.",
+        "",
+    ]
+    if data.get("headline"):
+        L += [data["headline"].strip(), ""]
+
+    L += ["## Verdict", "",
+          f"- Subject: OpenClaw v{ver}",
+          f"- Recommendation: {rec} {phrase}",
+          f"- Confidence: {data.get('confidence', '')}",
+          f"- Assessed at: {data.get('assessed_at', '')}"]
+    lr = data.get("latest_release") or {}
+    if lr.get("tag"):
+        pub = f" (published {lr.get('published_at')})" if lr.get("published_at") else ""
+        L.append(f"- Latest release: {lr['tag']}{pub}")
+    lpr = data.get("latest_prerelease") or {}
+    if lpr.get("tag"):
+        L.append(f"- Latest pre-release: {lpr['tag']}")
+    npm = data.get("npm") or {}
+    if npm.get("version"):
+        L.append(f"- npm: {npm['version']}")
+    L.append("")
+
+    if data.get("thesis"):
+        L += ["## Why this verdict", "", data["thesis"].strip(), ""]
+
+    ev = data.get("evidence") or {}
+    for title, key in [("Reasons to update", "for_updating"),
+                       ("Reasons to hold off", "against_updating"),
+                       ("Context", "neutral")]:
+        items = ev.get(key) or []
+        if items:
+            L += [f"## {title}", ""] + [f"- {str(it).strip()}" for it in items] + [""]
+
+    ki = data.get("known_issues") or []
+    if ki:
+        L += [f"## Known issues ({len(ki)})", ""] + [_md_issue_line(i) for i in ki] + [""]
+
+    ch = data.get("changes") or {}
+    change_lines = []
+    for label, key in [("Features", "features"), ("Fixes", "fixes"), ("Breaking", "breaking")]:
+        items = ch.get(key) or []
+        if items:
+            change_lines += [f"### {label}", ""] + [f"- {(it.get('title') or '').strip()}" for it in items] + [""]
+    if change_lines:
+        L += ["## What's new", ""] + change_lines
+
+    pi = data.get("platform_impact") or {}
+    if pi:
+        L += ["## Platform impact", ""] + [f"- {k}: {v}" for k, v in pi.items()] + [""]
+
+    if data.get("sentiment_summary"):
+        L += ["## Community sentiment", "", data["sentiment_summary"].strip(), ""]
+
+    L += ["---",
+          f"Machine-readable JSON: {site}/latest.json · RSS: {site}/feed.xml · Human page: {site}/",
+          "Generated automatically by ClawStat.us — every field is an automated assessment; "
+          "verify against the linked GitHub issues.",
+          ""]
+    return "\n".join(L)
+
+
+def _write_llms(data: dict, output_path: str) -> None:
+    """Write the agent-readable layer beside the page: llms.txt + llms-full.txt."""
+    base = Path(output_path)
+    _atomic_write_text(base.with_name("llms.txt"), _llms_txt(data))
+    _atomic_write_text(base.with_name("llms-full.txt"), _llms_full_md(data))
+
+
 def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output_path: str = None) -> str:
     """Build the public assessment page by injecting pipeline data into the template.
 
@@ -585,6 +734,8 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
     # Shareable static artifacts: an RSS feed of verdicts and an embeddable badge.
     _write_feed(data, out)
     _write_badge(data, out)
+    # Agent-readable layer: llms.txt + a full markdown mirror of the verdict.
+    _write_llms(data, out)
 
     # Set can_deploy flag in assessment_raw for downstream
     if assessment_raw is not None:
