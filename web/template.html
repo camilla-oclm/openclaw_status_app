@@ -310,6 +310,25 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .trend .legend .k{display:inline-flex; align-items:center; gap:.35rem}
 .trend .legend .sw{width:11px; height:11px; border-radius:3px}
 
+/* catching up — cumulative changelog */
+.catchup{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:1.1rem 1.2rem; box-shadow:var(--shadow)}
+.catchup .cu-row{display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.95rem}
+.catchup .cu-label{font-size:.9rem; color:var(--muted)}
+.cu-select{font-size:.9rem; font-weight:600; padding:.4rem .7rem; border-radius:9px; background:var(--card2); color:var(--text); border:1px solid var(--border2); cursor:pointer}
+.cu-sum{font-size:.85rem; color:var(--muted); font-weight:600; margin-bottom:.9rem}
+.cu-out{max-height:24rem; overflow-y:auto; padding-right:.3rem}
+.cu-out::-webkit-scrollbar{width:8px} .cu-out::-webkit-scrollbar-thumb{background:var(--border2); border-radius:8px}
+.cu-rel{padding:.7rem 0; border-top:1px solid var(--border)}
+.cu-rel:first-child{border-top:none; padding-top:0}
+.cu-rh{display:flex; align-items:baseline; gap:.6rem; margin-bottom:.45rem}
+.cu-ver{font-family:var(--mono); font-weight:700; color:var(--accent); font-size:.92rem}
+.cu-date{font-size:.76rem; color:var(--faint)}
+.cu-list{list-style:none; display:flex; flex-direction:column; gap:.4rem}
+.cu-list li{position:relative; padding-left:1.1rem; font-size:.88rem; color:var(--text)}
+.cu-list li::before{content:""; position:absolute; left:0; top:.55em; width:6px; height:6px; border-radius:50%; background:var(--accent)}
+.cu-list li.empty{color:var(--faint); padding-left:0}
+.cu-list li.empty::before{display:none}
+
 /* footer */
 .foot{margin-top:2.6rem; padding-top:1.4rem; border-top:1px solid var(--border); color:var(--muted); font-size:.83rem}
 .foot .how{display:flex; gap:.6rem; align-items:flex-start; margin-bottom:1rem}
@@ -986,7 +1005,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var sevCls = (sev==="critical"||sev==="high")?"t-bad":(sev==="medium"?"t-warn":"");
     tags.push(el("span",{"class":"tag "+sevCls}, sev+" severity"));
+    if (i.first_seen) tags.push(el("span",{"class":"tag"}, "tracked "+timeAgo(i.first_seen)));
     if (mine) tags.unshift(el("span",{"class":"tag t-me"}, "★ your stack"));
+    if (i.is_new) tags.unshift(el("span",{"class":"tag t-good"}, "🆕 new"));
     return el("div",{"class":"issue sev-"+sev+(mine?" mine":""), "data-cat":i.category||"other", "data-mine":mine?"1":"0"},[
       el("a",{"class":"num", href:issueUrl(i.number)}, "#"+i.number),
       el("div",{"class":"body"},[
@@ -1007,7 +1028,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       return rank(catOrder,a.category) - rank(catOrder,b.category);
     });
     var s = el("div",{"class":"section", id:"issues"});
-    s.appendChild(sectionHead("Known issues", ki.length, "newest regressions first"));
+    var newCount = ki.filter(function(i){return i.is_new;}).length;
+    s.appendChild(sectionHead("Known issues", ki.length,
+      (newCount ? ("🆕 "+newCount+" new since last run · ") : "")+"critical first"));
 
     var cats = {};
     ki.forEach(function(i){ if(i.category) cats[i.category]=(cats[i.category]||0)+1; });
@@ -1344,6 +1367,50 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return s;
   }
 
+  // ── catching up: cumulative changelog since the user's version ──────────────
+  function catchingUp(){
+    var rh = (DATA.release_history || []).filter(function(r){ return r.version; });
+    if (rh.length < 2) return null;
+    rh.sort(function(a,b){ return String(b.published_at).localeCompare(String(a.published_at)); }); // newest first
+    var s = el("div",{"class":"section", id:"catchup"});
+    s.appendChild(sectionHead("Catching up?", null, "what's changed since your version"));
+    var card = el("div",{"class":"catchup"});
+    var sel = el("select",{"class":"cu-select", "aria-label":"your current version"});
+    rh.forEach(function(r, idx){
+      if (idx === 0) return;  // can't catch up FROM the newest release
+      sel.appendChild(el("option",{value:r.version}, "v"+r.version));
+    });
+    card.appendChild(el("div",{"class":"cu-row"},[
+      el("span",{"class":"cu-label"}, "I'm currently on"), sel
+    ]));
+    var out = el("div",{"class":"cu-out"});
+    card.appendChild(out);
+
+    function paint(fromVer){
+      out.textContent = "";
+      var fromIdx = rh.length;
+      for (var k=0;k<rh.length;k++){ if (rh[k].version === fromVer){ fromIdx = k; break; } }
+      var newer = rh.slice(0, fromIdx);   // every stable release newer than fromVer
+      if (!newer.length){ out.appendChild(el("div",{"class":"empty"}, "You're on the latest stable — nothing to catch up on.")); return; }
+      var totalH = newer.reduce(function(a,r){ return a + (r.highlights||[]).length; }, 0);
+      out.appendChild(el("div",{"class":"cu-sum"},
+        newer.length+" release"+(newer.length>1?"s":"")+" ahead · "+totalH+" highlight"+(totalH===1?"":"s")+" since v"+fromVer));
+      newer.forEach(function(r){
+        var ul = el("ul",{"class":"cu-list"});
+        (r.highlights||[]).forEach(function(h){ ul.appendChild(el("li", null, linkify(h))); });
+        if (!(r.highlights||[]).length) ul.appendChild(el("li",{"class":"empty"}, "(no highlights parsed for this release)"));
+        out.appendChild(el("div",{"class":"cu-rel"},[
+          el("div",{"class":"cu-rh"},[ el("span",{"class":"cu-ver"}, "v"+r.version), el("span",{"class":"cu-date"}, r.published_at) ]),
+          ul
+        ]));
+      });
+    }
+    sel.addEventListener("change", function(){ paint(sel.value); });
+    paint(rh[1] && rh[1].version);   // default: everything since the release before the latest
+    s.appendChild(card);
+    return s;
+  }
+
   // ── theme toggle ──────────────────────────────────────────────────────────
   function initTheme(){
     var btn = document.getElementById("theme-toggle");
@@ -1386,7 +1453,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
-    [ lowConfBanner(), hero(v), bestVersion(), stats(), changes(), personalize(), thesis(), evidence(),
+    [ lowConfBanner(), hero(v), bestVersion(), stats(), changes(), catchingUp(), personalize(), thesis(), evidence(),
       issues(), platforms(), sentiment(), trend(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();

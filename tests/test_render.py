@@ -237,6 +237,53 @@ def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
     assert sorted(data["archived_versions"]) == ["2026.5.28", "2026.6.1"]
 
 
+# ── shareable artifacts + changelog ──────────────────────────────────────────
+
+def test_extract_highlights_pulls_bullets():
+    body = "intro\n### Highlights\n- First thing (#1)\n- Second thing\n### Fixes\n- not this\n"
+    hl = render._extract_highlights(body)
+    assert hl[0].startswith("First thing")
+    assert "Second thing" in hl
+    assert all("not this" not in h for h in hl)
+
+
+def test_write_feed_emits_rss(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    data = {"version": "2.0", "recommendation": "🔄", "archived_versions": [],
+            "version_history": [{"version": "2.0", "recommendation": "🔄", "headline": "wait",
+                                 "assessed_at": "2026-06-14T00:00:00+00:00"}]}
+    render._write_feed(data, str(out))
+    feed = (tmp_path / "feed.xml").read_text()
+    assert "<rss" in feed and "<item>" in feed
+    assert "OpenClaw v2.0: wait for next" in feed
+    assert (tmp_path / "feed.xml").stat().st_mode & 0o004   # world-readable for Caddy
+
+
+def test_write_badge_emits_svg(tmp_path):
+    out = tmp_path / "index.html"
+    render._write_badge({"version": "2.0", "recommendation": "⏸️"}, str(out))
+    svg = (tmp_path / "badge.svg").read_text()
+    assert svg.startswith("<svg")
+    assert "OpenClaw v2.0" in svg and "skip this version" in svg
+    assert "#e05d44" in svg   # red for skip
+
+
+def test_build_data_extracts_stable_release_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    raw = {"sources": {"release_history": [
+        {"tag": "v2.0", "published_at": "2026-06-10T00:00:00Z", "prerelease": False,
+         "body": "### Highlights\n- New thing\n- Another\n"},
+        {"tag": "v2.1-beta.1", "published_at": "2026-06-11T00:00:00Z", "prerelease": True,
+         "body": "### Highlights\n- beta only\n"},
+    ]}}
+    rh = render._build_assessment_data({"assessment": {}, "version": "2.0"}, raw)["release_history"]
+    assert len(rh) == 1                       # pre-release excluded
+    assert rh[0]["version"] == "2.0"
+    assert "New thing" in rh[0]["highlights"][0]
+
+
 def test_build_data_strips_cost_from_public_payload(tmp_path, monkeypatch):
     import json
     monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")

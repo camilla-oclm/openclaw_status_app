@@ -108,6 +108,15 @@ OUTPUT_HTML = WEB_DIR / "index.html"
 # refresh without re-rendering the whole HTML. Generated; gitignored.
 LATEST_JSON = WEB_DIR / "latest.json"
 
+# Public base URL of the deployed site — used in the RSS feed item links.
+SITE_URL = "https://clawstat.us"
+# Shareable static artifacts written next to the page on each render (Caddy serves web/):
+#   feed.xml  — RSS of verdicts (subscribe with no account)
+#   badge.svg — embeddable shields-style status badge ("OpenClaw vX: wait for next")
+# Both generated; gitignored.
+FEED_XML = WEB_DIR / "feed.xml"
+BADGE_SVG = WEB_DIR / "badge.svg"
+
 # Browsable per-version snapshots of past pages. On each render the outgoing page
 # is copied to ARCHIVE_DIR/<version>.html (recycling the old single .prev backup)
 # and the history section links to it. Caddy serves web/, so /archive/<v>.html is

@@ -2,6 +2,8 @@
 
 **Should you update to the latest OpenClaw release?** This tool answers that.
 
+[![OpenClaw release status](https://clawstat.us/badge.svg)](https://clawstat.us)
+
 <p align="center">
   <img src="docs/hero-dark.png" alt="The OpenClaw Status decision page: a Skip-this-version verdict for v2026.6.6, with stats and an evidence-backed thesis" width="820">
   <br>
@@ -151,6 +153,15 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   timeline links every entry that has a snapshot. Retention is capped (`config.ARCHIVE_KEEP`,
   default 30); if a page's version can't be read, it falls back to a single `*.html.prev`
   rollback copy. Caddy already serves `web/`, so the archive is reachable with no extra config.
+- **Shareable artifacts.** Each render also writes an RSS feed and an embeddable badge next to the
+  page (all static, served by Caddy):
+  - **`web/feed.xml`** — an RSS feed of verdicts (one item per tracked version). Subscribe at
+    `https://clawstat.us/feed.xml`.
+  - **`web/badge.svg`** — a self-contained shields-style status badge. Embed the live verdict in a
+    README: `[![OpenClaw status](https://clawstat.us/badge.svg)](https://clawstat.us)`.
+  - **`web/latest.json`** is also a documented public **JSON API** — the full assessment payload
+    (`version`, `recommendation`, `confidence`, `thesis`, `known_issues`, `changes`, …). Poll it
+    instead of scraping the page.
 
 ---
 

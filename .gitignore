@@ -10,6 +10,8 @@ data/
 # Generated frontend output + rollback backups + per-version snapshots
 web/index.html
 web/latest.json
+web/feed.xml
+web/badge.svg
 web/*.html.prev
 web/archive/
 

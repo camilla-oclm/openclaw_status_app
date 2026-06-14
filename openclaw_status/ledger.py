@@ -99,6 +99,7 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None) ->
     now = now or now_iso()
     ledger = load_ledger()
     entry = ledger.setdefault(version, {"first_seen": now, "issues": {}})
+    prev_run = entry.get("last_seen")   # previous run's timestamp (None on the first run)
     store = entry["issues"]
 
     for it in scouted:
@@ -121,7 +122,9 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None) ->
 
     _prune_versions(ledger)
     save_json(config.ISSUE_LEDGER_FILE, ledger)
-    return items
+
+    # Return copies flagged "new since the previous run" (transient — never persisted).
+    return [dict(it, is_new=bool(prev_run and it.get("first_seen", "") > prev_run)) for it in items]
 
 
 def _prune_versions(ledger: dict) -> None:
@@ -162,5 +165,7 @@ def display_known_issues(accumulated: list) -> list:
             "reactions": it.get("reactions", 0),
             "impact": it.get("impact"),
             "affects_version": bool(it.get("affects_version")),
+            "first_seen": it.get("first_seen"),
+            "is_new": bool(it.get("is_new")),
         })
     return out

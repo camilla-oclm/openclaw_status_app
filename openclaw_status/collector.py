@@ -230,9 +230,11 @@ def collect(output_path=None) -> dict:
             print(f"📌 Pre-release: {prerelease['tag']} (fixes pending in stable)")
         print()
 
-        # 4. Release history (for the timeline / highlights)
+        # 4. Release history (for the timeline / highlights + the "catching up" changelog).
+        # Keep a wide window so enough STABLE releases survive (the recent list is often
+        # dominated by beta pre-releases, which the changelog section filters out).
         release_history = []
-        for r in all_releases[:12]:
+        for r in all_releases[:24]:
             release_history.append({
                 "tag": r["tag"], "published_at": r["published_at"],
                 "prerelease": r["prerelease"], "body": (r.get("body") or "")[:2500],
