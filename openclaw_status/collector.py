@@ -318,6 +318,16 @@ def collect(output_path=None) -> dict:
         print(f"  🔄 Deduplicated issues: {len(issues)} → {len(seen_issues)}")
     issues = list(seen_issues.values())
 
+    # ── Per-version issue ledger ──
+    # A released version is immutable, so its known-issue set only grows. Upsert the
+    # version-relevant issues into the ledger and use the accumulated, ranked set as
+    # github_issues — so the known-issues list and the verdict stop flip-flopping
+    # run-to-run (see openclaw_status/ledger.py).
+    from openclaw_status import ledger
+    before = len(issues)
+    issues = ledger.merge_version_issues(version, issues, now)
+    print(f"  📒 Ledger: {before} scouted → {len(issues)} accumulated for v{version or '?'}")
+
     def _counts(items, key):
         counts = {}
         for item in items:
