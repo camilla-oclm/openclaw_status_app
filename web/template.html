@@ -431,6 +431,22 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .trend .legend .k{display:inline-flex; align-items:center; gap:.35rem}
 .trend .legend .sw{width:11px; height:11px; border-radius:3px}
 
+/* ── Trends: 2×2 time-series charts ──────────────────────────────────────── */
+.trends-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem}
+@media(max-width:680px){.trends-grid{grid-template-columns:1fr}}
+.tcard{background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--border); border-radius:var(--r-md); padding:.95rem 1.05rem; box-shadow:var(--shadow-1)}
+.tc-h{display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem}
+.tc-t{font-weight:700; font-size:.92rem}
+.tc-s{font-size:.72rem; color:var(--muted)}
+.tcard .chartwrap{position:relative}
+.tcard svg.tchart2{width:100%; height:auto; display:block; overflow:visible}
+.tcard .tgrid line{stroke:var(--border); stroke-width:1; stroke-dasharray:3 4; opacity:.55}
+.tcard .taxis2{font-family:var(--mono); font-size:8px; fill:var(--faint)}
+.tc-legend{display:flex; flex-wrap:wrap; gap:.35rem .8rem; margin-top:.6rem; font-size:.72rem; color:var(--muted)}
+.tc-k{display:inline-flex; align-items:center; gap:.3rem}
+.tc-sw{width:12px; height:4px; border-radius:2px; display:inline-block}
+.tc-empty{color:var(--faint); font-size:.82rem; font-style:italic; padding:2.6rem 0; text-align:center}
+
 /* ── catching up ───────────────────────────────────────────────────────── */
 .catchup{background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:1.15rem 1.25rem; box-shadow:var(--shadow-1)}
 .catchup .cu-row{display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.95rem}
@@ -1774,54 +1790,109 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   }
 
   // ── release-health trend (verdicts over time) ───────────────────────────────
-  function trend(){
-    var h = (DATA.version_history||[]).slice();
-    if (h.length < 2) return null;             // need a couple of points to be a trend
-    h.sort(function(a,b){ return String(a.assessed_at).localeCompare(String(b.assessed_at)); });
-    h = h.slice(-10);
-    var s = el("div",{"class":"section", id:"trend"});
-    s.appendChild(sectionHead("Release health trend", null, "higher = riskier verdict · newest at right"));
-    var card = el("div",{"class":"trend"});
+  // ── Trends: 2×2 time-series charts from DATA.timeline (one point per ~6h run) ──
+  // Shared SVG scaffold (viewBox coords; CSS scales width, height auto → no distortion).
+  function chartSVG(){
+    var W=340,H=150,r=10,b=24;
+    return {svg:svgEl("svg",{"class":"tchart2", viewBox:"0 0 "+W+" "+H}), W:W,H:H, l:30,t:12,r:W-r,b:H-b};
+  }
+  function px(c,i,n){ return c.l+(c.r-c.l)*(n<=1?0.5:i/(n-1)); }
+  function py(c,v,vmax){ return c.b-(c.b-c.t)*Math.min(v,vmax)/(vmax||1); }
+  function gridY(c,vmax,ticks,unit){
+    var g=svgEl("g",{"class":"tgrid"});
+    for (var i=0;i<=ticks;i++){
+      var v=vmax*i/ticks, y=c.b-(c.b-c.t)*i/ticks;
+      g.appendChild(svgEl("line",{x1:c.l,x2:c.r,y1:y,y2:y}));
+      var lab=svgEl("text",{"class":"taxis2", x:c.l-4, y:y+3, "text-anchor":"end"});
+      lab.textContent = unit==="$" ? ("$"+v.toFixed(2)) : (unit==="s" ? (Math.round(v)+"s") : String(Math.round(v)));
+      g.appendChild(lab);
+    }
+    c.svg.appendChild(g);
+  }
+  function plotLine(c,series,vmax,n,stroke,wd,fillArea,dash){
+    var pts=series.map(function(v,i){ return px(c,i,n)+","+py(c,v,vmax); });
+    if (fillArea) c.svg.appendChild(svgEl("polygon",{points:px(c,0,n)+","+c.b+" "+pts.join(" ")+" "+px(c,n-1,n)+","+c.b, fill:stroke, opacity:"0.13"}));
+    var pl=svgEl("polyline",{points:pts.join(" "), fill:"none", stroke:stroke, "stroke-width":wd||2, "stroke-linejoin":"round","stroke-linecap":"round"});
+    if (dash) pl.setAttribute("stroke-dasharray", dash);
+    c.svg.appendChild(pl);
+    c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,series[n-1],vmax), r:"3", fill:stroke}));
+  }
+  function tLegend(items){
+    var lg=el("div",{"class":"tc-legend"});
+    items.forEach(function(it){ lg.appendChild(el("span",{"class":"tc-k"},[ el("span",{"class":"tc-sw", style:"background:"+it[1]}), document.createTextNode(it[0]) ])); });
+    return lg;
+  }
+  function tCard(title,sub,body){
+    return el("div",{"class":"tcard"},[ el("div",{"class":"tc-h"},[ el("span",{"class":"tc-t"},title), el("span",{"class":"tc-s"},sub) ]), body ]);
+  }
+  function tEmpty(){ return el("div",{"class":"tc-empty"}, "Collecting — fills in as runs accumulate"); }
+  function wrapChart(c,legend){ return el("div",null,[ el("div",{"class":"chartwrap"}, c.svg), legend ]); }
+  function maxOf(a){ return a.reduce(function(m,v){ return v>m?v:m; }, 0); }
 
-    var W=720, H=170, padL=10, padR=10, padT=18, padB=34, n=h.length;
-    var plotW=W-padL-padR, plotH=H-padT-padB;
-    var xs=function(i){ return padL + (n===1?plotW/2:i*(plotW/(n-1))); };
-    var ys=function(r){ return padT + (1-r/100)*plotH; };
-    var svg=svgEl("svg",{"class":"tchart", viewBox:"0 0 "+W+" "+H, preserveAspectRatio:"none"});
-
-    var grid=svgEl("g",{"class":"tgrid"});
-    [0,25,50,75,100].forEach(function(r){
-      grid.appendChild(svgEl("line",{x1:padL, x2:W-padR, y1:ys(r), y2:ys(r)}));
+  function issuePressureChart(tl){
+    var p=tl.filter(function(r){ return !(r.approx && !r.issues); });
+    if (p.length<2) return tEmpty();
+    var iss=p.map(function(r){return r.issues||0;}), reg=p.map(function(r){return r.regressions||0;});
+    var vmax=Math.max(maxOf(iss.concat(reg))*1.15, 4), c=chartSVG(), n=p.length;
+    gridY(c,vmax,3); plotLine(c,iss,vmax,n,"var(--accent)",2.5,true); plotLine(c,reg,vmax,n,"var(--orange)",2);
+    return wrapChart(c, tLegend([["known issues","var(--accent)"],["regressions","var(--orange)"]]));
+  }
+  function severityChart(tl){
+    var p=tl.filter(function(r){ return !(r.approx && !r.issues); });
+    if (p.length<2) return tEmpty();
+    var n=p.length, bands=[["low","var(--gray)"],["medium","var(--warn)"],["high","var(--orange)"],["critical","var(--bad)"]];
+    var vmax=Math.max(maxOf(p.map(function(r){ return r.issues || (r.critical+r.high+r.medium+r.low); }))*1.1, 4);
+    var c=chartSVG(); gridY(c,vmax,3);
+    var cum=p.map(function(){return 0;});
+    bands.forEach(function(band){
+      var top=p.map(function(r,i){ return cum[i]+(r[band[0]]||0); });
+      var up=top.map(function(v,i){ return px(c,i,n)+","+py(c,v,vmax); });
+      var dn=cum.map(function(v,i){ return px(c,i,n)+","+py(c,v,vmax); }).reverse();
+      c.svg.appendChild(svgEl("polygon",{points:up.concat(dn).join(" "), fill:band[1], opacity:"0.55"}));
+      cum=top;
     });
-    svg.appendChild(grid);
-
-    var pts=h.map(function(e,i){ return xs(i)+","+ys(RISK[e.recommendation]||30); });
-    svg.appendChild(svgEl("polygon",{points: xs(0)+","+ys(0)+" "+pts.join(" ")+" "+xs(n-1)+","+ys(0), fill:"var(--accent)", opacity:"0.10"}));
-    svg.appendChild(svgEl("polyline",{points: pts.join(" "), fill:"none", stroke:"var(--accent)", "stroke-width":"2.5", "stroke-linejoin":"round", "stroke-linecap":"round"}));
-
-    var TONE_COL={"tone-good":"var(--good)","tone-warn":"var(--warn)","tone-info":"var(--info)","tone-bad":"var(--bad)","tone-muted":"var(--gray)"};
-    h.forEach(function(e,i){
-      var v=VERDICTS[e.recommendation]||{tone:"tone-muted",label:String(e.recommendation||"?")};
-      var col=TONE_COL[v.tone]||"var(--gray)";
-      var x=xs(i), y=ys(RISK[e.recommendation]||30);
-      var dot=svgEl("circle",{"class":"tdot", cx:x, cy:y, r:"4.5", fill:col});
-      var bits=["v"+e.version, v.label||e.recommendation];
-      if (e.issues!=null) bits.push(e.issues+" issues");
-      if (e.regressions!=null) bits.push(e.regressions+" regressions");
-      var title=svgEl("title"); title.textContent=bits.join(" · "); dot.appendChild(title);
-      svg.appendChild(dot);
-      var emo=svgEl("text",{"class":"temoji", x:x, y:H-padB+16}); emo.textContent=e.recommendation||"?"; svg.appendChild(emo);
-      var ver=svgEl("text",{"class":"tver", x:x, y:H-padB+27}); ver.textContent=e.version; svg.appendChild(ver);
+    return wrapChart(c, tLegend([["critical","var(--bad)"],["high","var(--orange)"],["medium","var(--warn)"],["low","var(--gray)"]]));
+  }
+  function verdictChart(tl){
+    var n=tl.length, c=chartSVG();
+    [[0,35,"var(--good)","update"],[35,63,"var(--warn)","care"],[63,88,"var(--info)","wait"],[88,100,"var(--bad)","skip"]].forEach(function(bd){
+      var y1=py(c,bd[1],100), y2=py(c,bd[0],100);
+      c.svg.appendChild(svgEl("rect",{x:c.l,y:y1,width:c.r-c.l,height:(y2-y1),fill:bd[2],opacity:"0.10"}));
+      var lab=svgEl("text",{"class":"taxis2", x:c.r-2, y:(y1+y2)/2+3, "text-anchor":"end", fill:bd[2]}); lab.textContent=bd[3]; c.svg.appendChild(lab);
     });
-    var wrap=el("div",{"class":"chartwrap"}); wrap.appendChild(svg);
-    card.appendChild(wrap);
-
-    var legend = el("div",{"class":"legend"});
-    [["tone-good","✅ Update now"],["tone-warn","⚠️ Precautions"],["tone-info","🔄 Wait"],["tone-bad","⏸️ Skip"]].forEach(function(p){
-      legend.appendChild(el("span",{"class":"k "+p[0]},[ el("span",{"class":"sw", style:"background:var(--tone)"}, null), document.createTextNode(p[1]) ]));
-    });
-    card.appendChild(legend);
-    s.appendChild(card);
+    var risk=tl.map(function(r){ return RISK[r.recommendation]||30; }), seq=[];
+    for (var i=0;i<n;i++){ if(i) seq.push(px(c,i,n)+","+py(c,risk[i-1],100)); seq.push(px(c,i,n)+","+py(c,risk[i],100)); }
+    c.svg.appendChild(svgEl("polyline",{points:seq.join(" "), fill:"none", stroke:"var(--accent)","stroke-width":2.5,"stroke-linejoin":"round","stroke-linecap":"round"}));
+    for (var j=1;j<n;j++){ if (tl[j].version!==tl[j-1].version){ var mx=px(c,j,n); c.svg.appendChild(svgEl("line",{x1:mx,x2:mx,y1:c.t,y2:c.b,stroke:"var(--accent2)","stroke-width":1,"stroke-dasharray":"2 3",opacity:"0.7"})); } }
+    c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,risk[n-1],100), r:"3", fill:"var(--accent)"}));
+    return wrapChart(c, tLegend([["risk per run","var(--accent)"],["new version","var(--accent2)"]]));
+  }
+  function costChart(tl){
+    var p=tl.filter(function(r){ return (r.cost_usd||0)>0; });
+    if (p.length<2) return tEmpty();
+    var n=p.length, cost=p.map(function(r){return r.cost_usd||0;}), lat=p.map(function(r){return (r.latency_ms||0)/1000;});
+    var c=chartSVG(); gridY(c,Math.max(maxOf(cost)*1.2, 0.02),3,"$");
+    plotLine(c,cost,Math.max(maxOf(cost)*1.2,0.02),n,"var(--accent)",2.5,true);
+    var legend=[["cost $"+cost[n-1].toFixed(3),"var(--accent)"]];
+    if (maxOf(lat)>0){   // latency only once real per-run timing exists (fallback rows have none)
+      plotLine(c,lat,Math.max(maxOf(lat)*1.2,1),n,"var(--accent2)",2,false,"4 3");
+      legend.push(["latency "+Math.round(lat[n-1])+"s","var(--accent2)"]);
+    }
+    return wrapChart(c, tLegend(legend));
+  }
+  function trends(){
+    var tl=(DATA.timeline||[]).slice();
+    if (tl.length<2) return null;
+    tl.sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
+    tl = tl.slice(-30);
+    var s=el("div",{"class":"section", id:"trends"});
+    s.appendChild(sectionHead("Trends", null, "tracked every run · about every 6 hours"));
+    var grid=el("div",{"class":"trends-grid"});
+    grid.appendChild(tCard("Issue pressure","open issues & regressions per run", issuePressureChart(tl)));
+    grid.appendChild(tCard("Severity mix","make-up of known issues", severityChart(tl)));
+    grid.appendChild(tCard("Verdict","risk per run · higher = riskier", verdictChart(tl)));
+    grid.appendChild(tCard("Pipeline cost & speed","spend & wall-time per run", costChart(tl)));
+    s.appendChild(grid);
     return s;
   }
 
@@ -1912,7 +1983,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
     [ lowConfBanner(), hero(v), bestVersion(), stats(), platforms(), componentHealth(), changes(), catchingUp(),
-      personalize(), thesis(), evidence(), issues(), sentiment(), trend(), triage(), history(), footer()
+      personalize(), thesis(), evidence(), issues(), sentiment(), trends(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
     revealOn();

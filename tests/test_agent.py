@@ -285,6 +285,38 @@ def test_append_history_records_issue_counts(tmp_path, monkeypatch):
     assert e["high"] == 1
 
 
+# ── append_timeline (per-run series for the Trends charts) ───────────────────
+
+def test_append_timeline_appends_every_run(tmp_path, monkeypatch):
+    tl = tmp_path / "timeline.json"
+    monkeypatch.setattr(config, "TIMELINE_FILE", tl)
+    a = _valid_assessment(known_issues=[
+        {"severity": "critical", "category": "regression"},
+        {"severity": "high", "category": "regression"},
+        {"severity": "medium", "category": "active"},
+        {"severity": "low", "category": "active"},
+    ])
+    # Same version twice — unlike append_history this must NOT dedupe (it's a time series).
+    agent.append_timeline("1.0", a, {"cost_usd": 0.02, "latency_ms": 120000})
+    agent.append_timeline("1.0", a, {"cost_usd": 0.03, "latency_ms": 90000})
+    rows = json.loads(tl.read_text())
+    assert len(rows) == 2                          # appended, not deduped
+    e = rows[0]
+    assert e["version"] == "1.0" and e["issues"] == 4 and e["regressions"] == 2
+    assert e["critical"] == 1 and e["high"] == 1 and e["medium"] == 1 and e["low"] == 1
+    assert e["cost_usd"] == 0.02 and e["latency_ms"] == 120000
+    assert "t" in e
+
+
+def test_append_timeline_prunes_to_keep(tmp_path, monkeypatch):
+    tl = tmp_path / "timeline.json"
+    monkeypatch.setattr(config, "TIMELINE_FILE", tl)
+    monkeypatch.setattr(config, "TIMELINE_KEEP", 5)
+    for _ in range(8):
+        agent.append_timeline("1.0", _valid_assessment(), {"cost_usd": 0.01, "latency_ms": 1000})
+    assert len(json.loads(tl.read_text())) == 5
+
+
 # ── budget gate ─────────────────────────────────────────────────────────────
 
 def test_budget_gate_aborts_without_spending(tmp_path, monkeypatch):

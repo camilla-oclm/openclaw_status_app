@@ -77,6 +77,10 @@ RAW_DATA_FILE = DATA_DIR / "raw-data.json"
 ASSESSMENT_FILE = DATA_DIR / "assessment.json"
 USAGE_LOG_FILE = DATA_DIR / "usage.json"
 HISTORY_FILE = DATA_DIR / "history.json"
+# Per-RUN metric snapshots (append-only, not deduped by version) — the time series
+# behind the "Trends" charts. One row every run, even when the version is unchanged.
+TIMELINE_FILE = DATA_DIR / "timeline.json"
+TIMELINE_KEEP = 240        # ~60 days at 4 runs/day
 # ETag cache for GitHub REST responses (conditional requests → 304s don't re-download
 # or count against the rate limit). Runtime state; gitignored.
 ETAG_CACHE_FILE = DATA_DIR / "etag-cache.json"

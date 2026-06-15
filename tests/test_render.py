@@ -468,6 +468,16 @@ def test_archive_self_canonicalizes_past_versions(tmp_path, monkeypatch):
     assert '<link rel="canonical" href="https://example.test/">' in arch2
 
 
+def test_timeline_from_history_maps_fields():
+    h = {"version": "2.0", "assessed_at": "2026-06-14T00:00:00+00:00", "recommendation": "⏸️",
+         "confidence": "high", "issues": 10, "regressions": 7, "high": 6, "cost_usd": 0.05}
+    r = render._timeline_from_history(h)
+    assert r["version"] == "2.0" and r["issues"] == 10 and r["regressions"] == 7
+    # history only stores combined high+critical, no med/low split → approximate
+    assert r["high"] == 6 and r["low"] == 4 and r["critical"] == 0 and r["medium"] == 0
+    assert r["cost_usd"] == 0.05 and r["approx"] is True
+
+
 def test_write_sitemap_and_robots(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SITE_URL", "https://example.test")
     out = tmp_path / "index.html"
