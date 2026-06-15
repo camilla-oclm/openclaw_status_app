@@ -314,6 +314,35 @@ def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
     return []
 
 
+_PLATFORM_IMPACT_KEYS = ("windows", "macos", "linux", "discord", "slack", "telegram")
+_SEVERITY_WEIGHT = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
+
+def _derive_platform_impact(known_issues: list) -> dict:
+    """Per-platform impact level derived from the issues' resolved `platforms` tags.
+    A platform's level is the worst severity among the issues that hit it (its own tag
+    or a cross-cutting "all"). Evidence-grounded — supersedes the analyst's free-text
+    `platform_impact`, which tends to saturate at "high". Returns {} when no issue
+    carries any platform tag, so the caller can fall back to the analyst's value."""
+    issues = known_issues or []
+    if not any((i.get("platforms") or []) for i in issues):
+        return {}
+    out = {}
+    for k in _PLATFORM_IMPACT_KEYS:
+        worst = 0
+        for i in issues:
+            plats = [str(p).lower() for p in (i.get("platforms") or [])]
+            if k in plats or "all" in plats:
+                worst = max(worst, _SEVERITY_WEIGHT.get(str(i.get("severity", "")).lower(), 0))
+        if worst >= 3:
+            out[k] = "high"
+        elif worst == 2:
+            out[k] = "medium"
+        elif worst == 1:
+            out[k] = "low"
+    return out
+
+
 # ── Component (subsystem) taxonomy — *what part of OpenClaw* an issue touches ──
 # Orthogonal to platforms ("where it runs / who's hit"). Repo labels are
 # authoritative; a keyword pass over title+body+labels is the fallback.
@@ -442,7 +471,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "known_issues": known_issues,
         "changes": a.get("changes", {"breaking": [], "fixes": [], "features": []}),
         "sentiment_summary": a.get("sentiment_summary", ""),
-        "platform_impact": a.get("platform_impact", {}),
+        # Evidence-grounded per-platform impact (worst severity per surface from the
+        # issue tags); the analyst's free-text value is only a fallback (it saturates).
+        "platform_impact": _derive_platform_impact(known_issues) or a.get("platform_impact", {}),
         "usage": {k: v for k, v in (assessment_raw.get("usage") or {}).items() if k != "cost_usd"},
         "version_history": version_history,
         # Stable-release changelog (newest first) with extracted Highlights — the

@@ -261,6 +261,24 @@ def test_derive_platforms_from_text():
     assert render._derive_platforms({"title": "typo in docs"}, severity="low") == []
 
 
+def test_derive_platform_impact_from_tags():
+    issues = [
+        {"platforms": ["linux"], "severity": "critical"},   # linux ← critical
+        {"platforms": ["all"], "severity": "high"},          # everyone ← high floor
+        {"platforms": ["discord"], "severity": "medium"},    # discord-specific medium
+    ]
+    pi = render._derive_platform_impact(issues)
+    assert pi["linux"] == "high"          # critical → "high" bucket
+    assert pi["discord"] == "high"        # max(medium-specific, high-from-all) → high
+    assert pi["windows"] == "high"        # inherits the cross-cutting "all" high
+    # worst-severity bucketing without an "all" floor
+    pi2 = render._derive_platform_impact([{"platforms": ["slack"], "severity": "low"}])
+    assert pi2 == {"slack": "low"}        # only slack hit, low; others absent
+    # no platform tags anywhere -> {} so the caller falls back to the analyst's value
+    assert render._derive_platform_impact([{"severity": "critical"}]) == {}
+    assert render._derive_platform_impact([]) == {}
+
+
 def test_build_derives_platforms_when_analyst_absent():
     raw = {"sources": {"github_issues": [
         {"number": 7, "title": "Docker build broken", "severity": "high", "category": "regression"}]}}
