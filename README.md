@@ -46,7 +46,7 @@ providers** argue it out before anything ships.
   `llms-full.txt`) — plus server-rendered HTML + JSON-LD so search engines and LLM agents can read
   the answer without executing JavaScript.
 - **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (~$0.02–0.05/run).
-- **Hermetic test suite.** 150+ network-free tests gate CI on every push.
+- **Hermetic test suite.** 165+ network-free tests gate CI on every push.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
 the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
@@ -70,7 +70,8 @@ through three stages: **collect → assess → render**.
         │                                    │
         ▼                                    ┘
  assess  ──► data/assessment.json   (OpenRouter LLM: analyst → validator → refine)
-        │            └─► data/history.json (past verdicts), data/usage.json (cost log)
+        │            └─► data/history.json (per-version verdicts), data/timeline.json
+        │                (per-run metric snapshots → Trends), data/usage.json (cost log)
         ▼
  render  ──► web/index.html         (public decision page)
 ```
@@ -147,14 +148,32 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   is a zero-dependency, dark/light, mobile-responsive page that builds its DOM with
   `textContent` (XSS-safe) and no inline handlers (CSP-clean). A deploy guard refuses to
   publish a low-confidence or invalid assessment, and a smoke test validates the HTML
-  before it overwrites the previous page.
+  before it overwrites the previous page. Beyond the verdict + key-metric tiles, the page
+  carries data-viz sections derived from the scored issues:
+  - **Platform impact** and **Component health** — per-surface (Windows/macOS/Linux/Discord/
+    Slack/Telegram) and per-subsystem (Gateway/Models/Memory/Sessions/Auth/Channels/Plugins/
+    Agents/Tasks/Tools/Build) meters, each encoding **issue volume** (bar length) × **worst
+    severity** (colour). Platform tags come from the analyst when present, else a deterministic
+    `render._derive_*` backfill.
+  - **Your setup** — pick the platforms, channels and components you run; the verdict is
+    re-scored to your stack and the matching issues highlighted (cross-cutting "all-platform"
+    issues shown once in a shared row).
+  - **Trends** — a 2×2 grid of time-series charts (issue pressure, severity mix, verdict, and
+    pipeline cost & speed) built from the per-run `timeline.json` (below).
 - **`web/latest.json`** — the same payload written as a sibling file. The page renders from the
   inlined copy instantly, then `fetch()`es `latest.json` and re-renders if it's fresher — so a
   data refresh doesn't need a full HTML rebuild, while `file://` / offline viewing still works
   from the inlined copy.
+- **Per-run time series.** `data/timeline.json` gets one append-only snapshot every run (version,
+  verdict, confidence, issue/regression/severity counts, cost, latency) — *not* deduped by version,
+  so a release re-assessed each 6h becomes a curve, not a point. It's the data behind the Trends
+  charts; until it has ≥2 points the charts fall back to a coarse per-version series from
+  `history.json`. (`history.json` stays one row per version — it powers "Past verdicts".)
 - **Browsable history.** Instead of discarding the outgoing page, each render snapshots it to
   `web/archive/<version>.html` (named from the version it was built for) and the "Past verdicts"
-  timeline links every entry that has a snapshot. Retention is capped (`config.ARCHIVE_KEEP`,
+  timeline links every entry that has a snapshot. Past-version snapshots **self-canonicalise** (so
+  each can be indexed for its own "openclaw vX" query); the snapshot of the current version keeps
+  `canonical → /` to avoid a homepage duplicate. Retention is capped (`config.ARCHIVE_KEEP`,
   default 30); if a page's version can't be read, it falls back to a single `*.html.prev`
   rollback copy. Caddy already serves `web/`, so the archive is reachable with no extra config.
 - **Shareable artifacts.** Each render also writes an RSS feed and an embeddable badge next to the
@@ -179,8 +198,9 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   - a **server-rendered answer** inside `#app` (a real `<h1>Should you update OpenClaw vX? — …</h1>`,
     the headline, why-this-verdict, and top issues) so the verdict is crawlable without running JS —
     the script clears `#app` and rebuilds the interactive page on load;
-  - **JSON-LD** structured data (`WebSite` + `WebPage` + a `FAQPage` answering "Should you update /
-    is OpenClaw vX safe to update?");
+  - **JSON-LD** structured data (`WebSite` + `WebPage` + a `FAQPage`) — version-specific questions
+    ("Should you update OpenClaw vX?") plus evergreen, version-agnostic ones ("Should I update
+    OpenClaw?" / "How do I know if a new release is safe to update to?") to match generic intent;
   - **`web/robots.txt`** + **`web/sitemap.xml`** (homepage + every archived version), emitted each
     render. Caddy serves unknown paths as real `404`s (no SPA fallback) to avoid soft-404 duplicates.
 
@@ -227,7 +247,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 130+ tests, hermetic (no network)
+python3 -m pytest        # 165+ tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
