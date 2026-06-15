@@ -37,6 +37,7 @@ _OUTPUT_SCHEMA = """{
     "severity": "high | medium | low",
     "category": "regression | diamond_lobster | active",
     "platforms": ["linux"],
+    "components": ["gateway"],
     "clawsweeper_decision": "keep_open | close | unknown",
     "fixed_in": "version or null if not fixed"
   }],
@@ -77,6 +78,7 @@ RULES:
    - Each item should have a concise `title` (1 line). Include the GitHub issue/PR number if referenced.
    - If the changelog only has a "### Highlights" section with bullet points, parse EACH bullet as a change. Categorize each bullet as a fix, feature, or breaking change based on its content. Include the PR/issue numbers listed in parentheses.
 10. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
+11. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
 
 RECOMMENDATION GUIDELINES:
 - ✅ Update now: critical fix or high-value feature, no risky bugs, no open regressions
@@ -749,10 +751,15 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         analyst_plat = {i.get("number"): i.get("platforms")
                         for i in (final_assessment.get("known_issues") or [])
                         if isinstance(i, dict) and i.get("platforms")}
+        analyst_comp = {i.get("number"): i.get("components")
+                        for i in (final_assessment.get("known_issues") or [])
+                        if isinstance(i, dict) and i.get("components")}
         ledger_issues = ledger.display_known_issues(accumulated)
         for it in ledger_issues:
             if it.get("number") in analyst_plat:
                 it["platforms"] = analyst_plat[it["number"]]
+            if it.get("number") in analyst_comp:
+                it["components"] = analyst_comp[it["number"]]
         final_assessment["known_issues"] = ledger_issues
 
     # ── Final output ──
