@@ -207,6 +207,7 @@ body::after{
 .sparkbar i{width:4px; border-radius:1px; background:var(--ic,var(--gray)); opacity:.3}
 .sparkbar i.on{opacity:1}
 .imp-none{--ic:var(--good)} .imp-low{--ic:var(--info)} .imp-medium{--ic:var(--warn)} .imp-high{--ic:var(--bad)}
+.cs-critical{--ic:var(--bad)} .cs-high{--ic:var(--bad)} .cs-medium{--ic:var(--warn)} .cs-low{--ic:var(--gray)}
 /* signal: risk sparkline */
 .sigtrend{display:flex; flex-direction:column; gap:.35rem}
 .sigtrend svg{width:100%; height:42px; display:block; overflow:visible}
@@ -1391,6 +1392,42 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return s;
   }
 
+  // Component health — which subsystems this release hits (count + worst severity).
+  function componentHealth(){
+    var ki = DATA.known_issues || [];
+    var SEVW = {critical:4, high:3, medium:2, low:1};
+    var agg = {};
+    ki.forEach(function(i){
+      var w = SEVW[String(i.severity||"medium").toLowerCase()] || 2;
+      issueComponents(i).forEach(function(c){
+        var a = agg[c] || (agg[c] = {count:0, worst:0, worstName:"low", regr:0});
+        a.count++;
+        if (i.category==="regression") a.regr++;
+        if (w > a.worst){ a.worst = w; a.worstName = String(i.severity||"medium").toLowerCase(); }
+      });
+    });
+    var keys = Object.keys(agg);
+    if (!keys.length) return null;
+    keys.sort(function(a,b){ return agg[b].worst-agg[a].worst || agg[b].count-agg[a].count; });
+    var s = el("div",{"class":"section", id:"components"});
+    s.appendChild(sectionHead("Component health", null, "which parts of OpenClaw this release hits"));
+    var g = el("div",{"class":"plat-grid"});
+    keys.forEach(function(k){
+      var a = agg[k], meta = COMP_LABEL[k] || ["📦", cap(k)];
+      var seg = el("div",{"class":"seg"});
+      for (var j=0;j<4;j++){ seg.appendChild(el("i",{"class": j<a.worst?"on":""}, null)); }
+      var sub = a.count + (a.count>1?" issues":" issue") + (a.regr? " · "+a.regr+" regr" : "");
+      g.appendChild(el("div",{"class":"plat cs-"+a.worstName},[
+        el("div",{"class":"ph"},[
+          el("span",{"class":"pn"}, [document.createTextNode(meta[0]+" "), el("span",{"class":"pname"}, meta[1])])
+        ]),
+        el("div",{"class":"pmeter"},[ seg, el("span",{"class":"pl"}, sub) ])
+      ]));
+    });
+    s.appendChild(g);
+    return s;
+  }
+
   function sentiment(){
     if (!DATA.sentiment_summary) return null;
     var s = el("div",{"class":"section"});
@@ -1781,7 +1818,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
     [ lowConfBanner(), hero(v), bestVersion(), stats(), changes(), catchingUp(), personalize(), thesis(), evidence(),
-      issues(), platforms(), sentiment(), trend(), triage(), history(), footer()
+      issues(), platforms(), componentHealth(), sentiment(), trend(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
     revealOn();
