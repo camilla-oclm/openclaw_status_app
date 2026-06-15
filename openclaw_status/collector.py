@@ -334,7 +334,8 @@ def collect(output_path=None) -> dict:
         (i for i in issues if not ledger.is_version_relevant(i)),
         key=github.rank_key,
     )[:12]
-    issues = ledger.merge_version_issues(version, issues, now)
+    issues = ledger.merge_version_issues(
+        version, issues, now, release_date=release.get("published_at", "") if release else "")
     print(f"  📒 Ledger: {before} scouted → {len(issues)} accumulated "
           f"(+{len(ongoing_majors)} ongoing majors as context) for v{version or '?'}")
 

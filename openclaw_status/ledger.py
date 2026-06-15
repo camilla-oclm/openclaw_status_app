@@ -70,7 +70,9 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         "reactions": max(int(it.get("reactions") or 0), int(prev.get("reactions") or 0)),
         "total_reactions": max(int(it.get("total_reactions") or 0), int(prev.get("total_reactions") or 0)),
         "created_at": it.get("created_at") or prev.get("created_at", ""),
-        "labels": (it.get("labels") or prev.get("labels") or [])[:6],
+        # Current scout's labels win when present (even if now empty — a removed label must
+        # propagate so severity/category can re-derive); fall back to prev only if absent.
+        "labels": (it["labels"] if "labels" in it else (prev.get("labels") or []))[:6],
         # Re-derived from the current scout (not OR'd with prev) so a tightened match
         # walks a stale "affects this version" back; falls back to prev only if absent.
         "affects_version": bool(it["affects_version"]) if "affects_version" in it
@@ -85,13 +87,35 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
     }
 
 
-def merge_version_issues(version: str, scouted: list, now: str | None = None) -> list:
+def _rederive_stored(store: dict, release_date: str) -> None:
+    """Re-derive the label-derived fields (severity, category) for EVERY accumulated
+    issue, not just the ones re-scouted this run, then drop any that fall out of
+    relevance. Severity/category are pure functions of the issue's labels/text — all of
+    which the ledger already stores — so recomputing them each run lets a scoring-formula
+    change or a maintainer re-label self-correct across the whole ledger, instead of
+    freezing on entries that happen not to surface in a given run's top-N scout.
+    """
+    for key in list(store.keys()):
+        rec = store[key]
+        labels = rec.get("labels") or []
+        rec["severity"] = github.derive_severity(
+            labels, rec.get("reactions", 0), rec.get("comments", 0))
+        rec["category"] = github.categorize(
+            rec.get("created_at", ""), labels, bool(rec.get("affects_version")),
+            rec.get("impact") or "low", release_date)
+        if not is_version_relevant(rec):
+            del store[key]   # no longer affects this release and isn't a regression
+
+
+def merge_version_issues(version: str, scouted: list, now: str | None = None,
+                         release_date: str = "") -> list:
     """Upsert the version-relevant scouted issues into the ledger for `version` and
     return the accumulated, ranked list (the new source of truth for known issues).
 
     Issues not surfaced by this run's scout are kept as-is (still open) — an immutable
     released version doesn't lose issues just because a later, noisier search didn't
-    return them in its top-N.
+    return them in its top-N. Their label-derived fields are still refreshed each run
+    (see `_rederive_stored`) so stale severities/categories can't linger.
     """
     if not version:
         return scouted
@@ -116,6 +140,7 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None) ->
         store[key] = _lean(it, now, store.get(key))
 
     entry["last_seen"] = now
+    _rederive_stored(store, release_date)   # self-correct the whole accumulated set
 
     # Cap per version (keep the highest-ranked) so the ledger / prompt can't grow without
     # bound, then prune to the most-recently-seen versions.
