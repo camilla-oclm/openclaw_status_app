@@ -157,7 +157,27 @@ def _archived_versions() -> list[str]:
     return sorted(p.stem for p in config.ARCHIVE_DIR.glob("*.html"))
 
 
-def _backup_existing(output_path: str) -> str | None:
+def _self_canonicalize(path: Path, version: str) -> None:
+    """Re-point an archived snapshot's canonical + og:url at its own archive URL.
+
+    Snapshots are frozen copies of a past homepage, so they inherit `canonical → /`.
+    Left as-is, Google treats every archived version as a duplicate of the homepage
+    and won't index it. Pointing each past-version page at itself lets it rank for
+    its own "openclaw vX …" queries (a growing library of long-tail pages)."""
+    site = config.SITE_URL.rstrip("/")
+    url = f"{site}/archive/{version}.html"
+    try:
+        html = path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    html = re.sub(r'(<link rel="canonical" href=")[^"]*(">)',
+                  lambda m: m.group(1) + url + m.group(2), html, count=1)
+    html = re.sub(r'(<meta property="og:url" content=")[^"]*(">)',
+                  lambda m: m.group(1) + url + m.group(2), html, count=1)
+    path.write_text(html, encoding="utf-8")
+
+
+def _backup_existing(output_path: str, new_version: str = "") -> str | None:
     """Snapshot the current page before it's overwritten.
 
     Recycles what used to be a single index.html.prev into a browsable, per-version
@@ -184,6 +204,11 @@ def _backup_existing(output_path: str) -> str | None:
     config.ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     dest = config.ARCHIVE_DIR / f"{version}.html"
     shutil.copy2(str(p), str(dest))
+    # A snapshot of the version we're *re-rendering* is identical to the new homepage,
+    # so it keeps canonical → "/" (avoid a duplicate). A snapshot of a now-superseded
+    # version self-canonicalises so it can be indexed on its own.
+    if version != new_version:
+        _self_canonicalize(dest, version)
     _make_world_readable(dest)
     _prune_archive()
     print(f"  📚 Archived previous page → {dest}")
@@ -898,6 +923,22 @@ def _json_ld(data: dict) -> str:
               "acceptedAnswer": {"@type": "Answer", "text": answer}},
              {"@type": "Question", "name": f"Is OpenClaw v{ver} safe to update?",
               "acceptedAnswer": {"@type": "Answer", "text": answer}},
+             # Evergreen (version-agnostic) Q&A so the page matches generic intent —
+             # "should I update OpenClaw", "is OpenClaw safe to update" — every release.
+             {"@type": "Question", "name": "Should I update OpenClaw?",
+              "acceptedAnswer": {"@type": "Answer", "text":
+               ("It depends on the release. ClawStat.us publishes a fresh, evidence-based verdict for "
+                "the latest OpenClaw version"
+                + (f" — currently {phrase} for v{ver}" if ver else "")
+                + ". It scouts the bugs people hit after a release, scores them by severity, and has "
+                "two independent AI models weigh the evidence before giving a clear answer: update "
+                "now, update with care, wait for the next release, or skip this version.")}},
+             {"@type": "Question", "name": "How do I know if a new OpenClaw release is safe to update to?",
+              "acceptedAnswer": {"@type": "Answer", "text":
+               ("Check ClawStat.us before you upgrade. For each OpenClaw release it gathers post-release "
+                "bug reports, scores them against the repository's own severity labels, and runs a "
+                "multi-model review to produce a single verdict on whether the update is safe. It "
+                "refreshes automatically every few hours.")}},
          ]},
     ]}
     # \u-escape `<` so the JSON can never break out of the <script> (and stays valid JSON-LD).
@@ -955,6 +996,12 @@ def _seo_body(data: dict) -> str:
             out.append(f"<li>#{e(i.get('number'))} ({e(i.get('severity') or '')}) "
                        f"{e((i.get('title') or '').strip())}</li>")
         out.append("</ul>")
+    # Evergreen, version-agnostic summary — matches generic search intent (whether you
+    # should update OpenClaw / is the latest update safe) on every release, not just this one.
+    out.append("<p>ClawStat.us gives an independent, evidence-based answer to whether you should "
+               "update OpenClaw — for every release. Is the latest OpenClaw update safe, or should "
+               "you wait for the next one? Each verdict is built from post-release bug reports and a "
+               "two-model review, refreshed every few hours.</p>")
     out.append('<p>Machine-readable: <a href="latest.json">JSON API</a> · '
                '<a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">full markdown</a></p>')
     out.append("</article>")
@@ -1030,7 +1077,7 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
         return ""
 
     # ── Rollback: backup existing page ──
-    _backup_existing(out)
+    _backup_existing(out, new_version=assessment_raw.get("version", ""))
 
     with open(config.TEMPLATE_FILE) as f:
         html = f.read()

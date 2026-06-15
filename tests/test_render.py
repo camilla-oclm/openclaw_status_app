@@ -429,6 +429,45 @@ def test_seo_escapes_untrusted_text():
     assert "\\u003c/script" in ld                      # the hostile one was \u-escaped
 
 
+def test_seo_includes_evergreen_targeting():
+    data = {"version": "2026.6.6", "recommendation": "🔄", "confidence": "medium",
+            "headline": "Wait for next release.", "known_issues": []}
+    # Evergreen, version-agnostic Q&A in the JSON-LD (matches generic search intent).
+    ld = render._json_ld(data)
+    assert "Should I update OpenClaw?" in ld
+    assert "How do I know if a new OpenClaw release is safe to update to?" in ld
+    assert "Should you update OpenClaw v2026.6.6?" in ld   # version-specific still present
+    # Evergreen copy in the crawlable server-rendered body.
+    body = render._seo_body(data)
+    assert "Is the latest OpenClaw update safe" in body
+    assert "whether you should update OpenClaw" in body and "wait for the next one" in body
+
+
+def test_archive_self_canonicalizes_past_versions(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "ARCHIVE_KEEP", 30)
+    out = tmp_path / "index.html"
+    # An existing page built for v1.9 with the usual homepage canonical/og:url.
+    page = ('<html><head><link rel="canonical" href="https://example.test/">'
+            '<meta property="og:url" content="https://example.test/">'
+            '<script id="assessment-data" type="application/json">{"version": "1.9"}</script>'
+            '</head><body></body></html>')
+    out.write_text(page)
+
+    # Rendering a *newer* version (2.0) archives v1.9 → it must self-canonicalise.
+    assert render._backup_existing(str(out), new_version="2.0") == "1.9"
+    arch = (tmp_path / "archive" / "1.9.html").read_text()
+    assert '<link rel="canonical" href="https://example.test/archive/1.9.html">' in arch
+    assert '<meta property="og:url" content="https://example.test/archive/1.9.html">' in arch
+
+    # Re-rendering the *same* version keeps canonical → "/" (snapshot == homepage).
+    out.write_text(page.replace('"1.9"', '"2.0"'))
+    assert render._backup_existing(str(out), new_version="2.0") == "2.0"
+    arch2 = (tmp_path / "archive" / "2.0.html").read_text()
+    assert '<link rel="canonical" href="https://example.test/">' in arch2
+
+
 def test_write_sitemap_and_robots(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SITE_URL", "https://example.test")
     out = tmp_path / "index.html"
