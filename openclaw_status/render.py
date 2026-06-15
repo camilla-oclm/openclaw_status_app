@@ -246,9 +246,30 @@ def _extract_highlights(body: str, limit: int = 6) -> list:
     for b in _BULLET_RE.findall(section):
         b = re.sub(r"\s+", " ", b).strip()
         if b:
-            out.append(b[:240])
+            if len(b) > 240:
+                # Cut on a word boundary (not mid-word) and signal there's more.
+                b = b[:240].rsplit(" ", 1)[0].rstrip(" ,.;:—-") + "…"
+            out.append(b)
         if len(out) >= limit:
             break
+    return out
+
+
+_PLATFORM_KEYS = {"windows", "macos", "linux", "discord", "slack", "telegram", "all"}
+_PLATFORM_ALIASES = {"win": "windows", "win32": "windows", "mac": "macos",
+                     "osx": "macos", "mac os": "macos", "darwin": "macos"}
+
+
+def _norm_platforms(value) -> list:
+    """Normalize the analyst's per-issue `platforms` to known tokens (drop junk)."""
+    if not isinstance(value, list):
+        return []
+    out = []
+    for p in value:
+        t = str(p or "").strip().lower()
+        t = _PLATFORM_ALIASES.get(t, t)
+        if t in _PLATFORM_KEYS and t not in out:
+            out.append(t)
     return out
 
 
@@ -291,6 +312,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "reactions": raw_i.get("reactions", 0),
             "impact": raw_i.get("impact"),
             "affects_version": raw_i.get("affects_version", False),
+            # Analyst-tagged surfaces this issue hits (falls back to a title
+            # keyword heuristic client-side when absent / pre-structured data).
+            "platforms": _norm_platforms(issue.get("platforms")),
             # Ledger-derived: "new since last run" badge + issue age.
             "is_new": bool(issue.get("is_new")),
             "first_seen": issue.get("first_seen") or raw_i.get("first_seen"),
