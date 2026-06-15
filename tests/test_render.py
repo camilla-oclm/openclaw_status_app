@@ -271,6 +271,36 @@ def test_build_derives_platforms_when_analyst_absent():
     assert ki["platforms"] == ["linux"]   # derived, no analyst tag present
 
 
+def test_derive_components_from_labels_and_keywords():
+    # authoritative repo label wins
+    assert "sessions" in render._derive_components({"title": "x", "labels": ["impact:session-state"]})
+    assert "auth" in render._derive_components({"title": "x", "labels": ["impact:auth-provider"]})
+    assert "channels" in render._derive_components({"title": "x", "labels": ["impact:message-loss"]})
+    # keyword detection
+    assert render._derive_components({"title": "Gateway worker memory leak"})[:2] == ["memory", "gateway"] or \
+        set(render._derive_components({"title": "Gateway worker memory leak"})) == {"memory", "gateway"}
+    assert "models" in render._derive_components({"title": "DeepSeek prompt cache broken"})
+    assert "tasks" in render._derive_components({"title": "Isolated cron fails"})
+    # capped at 2, ordered by priority
+    many = render._derive_components({"title": "auth keyed-store plugin self-hosted deploy channel"})
+    assert len(many) == 2 and many[0] == "auth"
+    # nothing recognizable
+    assert render._derive_components({"title": "typo in readme"}) == []
+
+
+def test_norm_components_drops_junk():
+    assert render._norm_components(["Gateway", "models", "nope"]) == ["gateway", "models"]
+    assert render._norm_components("gateway") == []
+
+
+def test_build_attaches_components():
+    raw = {"sources": {"github_issues": [
+        {"number": 9, "title": "Gateway restart loses session", "labels": ["impact:session-state"]}]}}
+    a = {"assessment": {"known_issues": [{"number": 9, "title": "Gateway restart loses session"}]}, "version": "2.0"}
+    ki = render._build_assessment_data(a, raw)["known_issues"][0]
+    assert "sessions" in ki["components"] and "gateway" in ki["components"]
+
+
 def test_build_passes_issue_platforms_through():
     raw = {"sources": {"github_issues": [{"number": 7}]}}
     assessment = {"assessment": {"known_issues": [

@@ -314,6 +314,70 @@ def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
     return []
 
 
+# ── Component (subsystem) taxonomy — *what part of OpenClaw* an issue touches ──
+# Orthogonal to platforms ("where it runs / who's hit"). Repo labels are
+# authoritative; a keyword pass over title+body+labels is the fallback.
+_COMPONENT_KEYS = ["gateway", "models", "memory", "sessions", "auth", "channels",
+                   "plugins", "agents", "tasks", "tools", "build"]
+# Priority order when an issue matches several (we cap the pills). Harm-area auth
+# first, then concrete subsystems, then the broad/label-driven channels/models/
+# sessions last so a distinctive match (cron→tasks, gateway, memory) isn't crowded out.
+_COMPONENT_ORDER = ["auth", "memory", "gateway", "tasks", "agents", "plugins",
+                    "tools", "build", "channels", "models", "sessions"]
+_COMPONENT_LABELS = {                       # maintainer-assigned repo labels → component
+    "impact:session-state": "sessions",
+    "impact:auth-provider": "auth",
+    "impact:security": "auth",
+    "impact:message-loss": "channels",
+}
+_COMPONENT_SIGNALS = {                       # keyword fallback, scanned over the title
+    "gateway":  r"gateway|\bworker\b|bootstrap|daemon|supervisor",
+    "models":   r"\bmodels?\b|prompt cache|model fallback|adapters?|deepseek|openai|anthropic|qwen|minimax|inference|llm request",
+    "memory":   r"\bmemory\b|reindex|\bindex(ing|ed)?\b|embedding|vector store|knowledge base",
+    "sessions": r"\bsessions?\b|conversation|context window",
+    "auth":     r"\bauth\b|oauth|credential|trust gate|keyed-?store|api key|\blogin\b|permission",
+    "channels": r"discord|slack|telegram|whatsapp|wechat|feishu|msteams|\bteams\b|matrix|imessage|\bchannels?\b|dispatch|deliver(y)?|webhook|inbound|outbound",
+    "plugins":  r"\bplugins?\b|clawhub|\bmcp\b|\bskills?\b|extensions?|marketplace|catalog",
+    "agents":   r"subagent|sub-agent|\bspawn\b|depth-?\d|orchestrat|\bdelegate\b",
+    "tasks":    r"\bcron\b|scheduler|scheduled|\bjob\b|task queue|tasks? audit",
+    "tools":    r"tool\.call|tool[- ]call|tool dispatch|tool result|function call",
+    "build":    r"\bbuild\b|compile|docker|container|self-hosted|kubernetes|\bk8s\b|deploy|provision",
+}
+_COMPONENT_SIGNALS = {k: re.compile(v, re.IGNORECASE) for k, v in _COMPONENT_SIGNALS.items()}
+
+
+def _norm_components(value) -> list:
+    """Normalize an analyst-supplied `components` list to known keys (drop junk)."""
+    if not isinstance(value, list):
+        return []
+    out = []
+    for c in value:
+        t = str(c or "").strip().lower()
+        if t in _COMPONENT_KEYS and t not in out:
+            out.append(t)
+    return out
+
+
+def _derive_components(raw_issue: dict, max_n: int = 2) -> list:
+    """The subsystem(s) an issue touches, from labels + title/body keywords.
+    Capped at `max_n`, ordered by _COMPONENT_ORDER so pills stay legible."""
+    if not isinstance(raw_issue, dict):
+        return []
+    labels = raw_issue.get("labels") or []
+    label_names = [(l.get("name", "") if isinstance(l, dict) else str(l)).lower() for l in labels]
+    found = set()
+    for ln in label_names:                       # labels are authoritative
+        if ln in _COMPONENT_LABELS:
+            found.add(_COMPONENT_LABELS[ln])
+    # Keyword scan on the TITLE only — the body is too noisy (generic "session",
+    # "model", "provider" words) and label text would double-trigger keywords.
+    title = str(raw_issue.get("title", "")).lower()
+    for key, pat in _COMPONENT_SIGNALS.items():
+        if pat.search(title):
+            found.add(key)
+    return [c for c in _COMPONENT_ORDER if c in found][:max_n]
+
+
 def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     """Merge assessment.json + raw-data.json into the flat DATA dict the template expects."""
     a = assessment_raw.get("assessment", {})
@@ -357,6 +421,8 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             # deterministic derivation from the issue's title/body/labels.
             "platforms": _norm_platforms(issue.get("platforms"))
                          or _derive_platforms(raw_i, issue.get("severity"), issue.get("category")),
+            # Subsystem(s) this issue touches (orthogonal facet) — analyst tags ∥ derivation.
+            "components": _norm_components(issue.get("components")) or _derive_components(raw_i),
             # Ledger-derived: "new since last run" badge + issue age.
             "is_new": bool(issue.get("is_new")),
             "first_seen": issue.get("first_seen") or raw_i.get("first_seen"),

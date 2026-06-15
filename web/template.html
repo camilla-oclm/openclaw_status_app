@@ -306,6 +306,7 @@ body::after{
 .tag.t-good{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
 .tag.t-info{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
 .tag.t-plat{color:var(--text); border-color:var(--border2); background:var(--card2); font-weight:700}
+.tag.t-comp{color:var(--accent2); font-weight:700; border-color:color-mix(in srgb,var(--accent2) 38%,transparent); background:color-mix(in srgb,var(--accent2) 13%,transparent)}
 .issue.mine{border-color:var(--info-bd); box-shadow:0 0 0 1px var(--info-bd), var(--shadow-1)}
 .tag.t-me{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
 
@@ -974,6 +975,22 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ["discord","💬","Discord"],["slack","💼","Slack"],["telegram","✈️","Telegram"]
   ];
   var PLAT_LABEL = {}; PLAT.forEach(function(p){ PLAT_LABEL[p[0]] = [p[1], p[2]]; });
+  // Components = which subsystem of OpenClaw an issue touches (orthogonal to platforms).
+  var COMP = [
+    ["gateway","🛰️","Gateway"],["models","🧠","Models"],["memory","🗂️","Memory"],
+    ["sessions","🧵","Sessions"],["auth","🔐","Auth"],["channels","📡","Channels"],
+    ["plugins","🧩","Plugins"],["agents","🤖","Agents"],["tasks","⏱️","Tasks"],
+    ["tools","🔧","Tools"],["build","📦","Build"]
+  ];
+  var COMP_LABEL = {}; COMP.forEach(function(c){ COMP_LABEL[c[0]] = [c[1], c[2]]; });
+  // Components come pre-derived in DATA (render side); just normalize to known keys.
+  function issueComponents(i){
+    var raw = (i && i.components) || [], out = [];
+    if (Array.isArray(raw)) raw.forEach(function(c){
+      c = String(c||"").toLowerCase(); if (COMP_LABEL[c] && out.indexOf(c)<0) out.push(c);
+    });
+    return out;
+  }
   var IMPACT = {none:{label:"None",w:10},low:{label:"Low",w:38},medium:{label:"Medium",w:68},high:{label:"High",w:100}};
 
   // ── personalization: the user's platform/channel "stack" (localStorage) ──
@@ -1207,6 +1224,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         if (meta) tags.push(el("span",{"class":"tag t-plat"}, meta[0]+" "+meta[1]));
       });
     }
+    // Component pills — which subsystem of OpenClaw this issue touches.
+    issueComponents(i).forEach(function(ck){
+      var cm = COMP_LABEL[ck];
+      if (cm) tags.push(el("span",{"class":"tag t-comp"}, cm[0]+" "+cm[1]));
+    });
     if (i.affects_version){
       tags.push(el("span",{"class":"tag t-bad"}, "⊘ affects this version"));
     }
