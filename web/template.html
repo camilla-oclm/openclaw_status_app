@@ -414,6 +414,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .pbadge{flex:none; font-size:.64rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; padding:.12rem .5rem; border-radius:999px; border:1px solid var(--ic); color:var(--ic)}
 .risk .pdetail{color:var(--muted); font-size:.82rem}
 .risk .pdetail.muted2{color:var(--faint); font-style:italic}
+.risk .prow-all{margin-top:.5rem; padding-top:.6rem; border-top:1px dashed var(--border2)}
 
 /* ── release-health trend: SVG area chart ──────────────────────────────── */
 .trend{background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--border); border-radius:var(--r-md); padding:1.2rem 1.3rem 1rem; box-shadow:var(--shadow-1)}
@@ -1688,24 +1689,24 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var W = {none:0, low:1, medium:2, high:3};                 // platform-impact weight
     var SEVW = {critical:3, high:3, medium:2, low:1};          // severity → comparable weight
     var SEV_IMP = {critical:"high", high:"high", medium:"medium", low:"low"};  // → badge colour
-    function issuesForPlat(k){
-      return ki.filter(function(i){ var ps = issuePlatforms(i); return ps.indexOf(k)>=0 || ps.indexOf("all")>=0; });
+    // A platform's *own* issues = those that explicitly name it. The blanket "all"
+    // (cross-cutting) issues are deliberately excluded here so every channel doesn't
+    // repeat the same IDs; they get one shared row below instead.
+    function specificForPlat(k){
+      return ki.filter(function(i){ return issuePlatforms(i).indexOf(k) >= 0; });
     }
     function issuesForComp(k){
       return ki.filter(function(i){ return issueComponents(i).indexOf(k) >= 0; });
     }
-    // Cross-cutting regressions — drive a platform's rating when nothing names it.
-    var coreIssues = ki.filter(function(i){
-      var sv = String(i.severity||"");
-      if (!(sv==="critical"||sv==="high")) return false;
-      var ps = issuePlatforms(i);
-      return ps.indexOf("all") >= 0 || ps.length === 0;
-    });
+    // Cross-cutting issues that hit every platform/channel (tagged "all").
+    var crossCutting = ki.filter(function(i){ return issuePlatforms(i).indexOf("all") >= 0; });
+    var pickedPlats = stackPlatforms();
+
     var rows = [];
-    stackPlatforms().forEach(function(k){
+    pickedPlats.forEach(function(k){
       var lv = String(pi[k]||"none").toLowerCase(), m = PLAT_LABEL[k]||["?",k];
       rows.push({kind:"plat", emoji:m[0], label:m[1], w:(W[lv]||0),
-                 badgeCls:"imp-"+lv, badgeTxt:(IMPACT[lv]||IMPACT.none).label, iss:issuesForPlat(k)});
+                 badgeCls:"imp-"+lv, badgeTxt:(IMPACT[lv]||IMPACT.none).label, iss:specificForPlat(k)});
     });
     stackComponents().forEach(function(k){
       var iss = issuesForComp(k), worst = 0, wn = null, m = COMP_LABEL[k]||["?",k];
@@ -1726,30 +1727,26 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     else { tone="tone-good";
       head = "Your stack looks largely spared — the issues behind the “"+verdict+"” verdict mostly land elsewhere."; }
 
+    function issueLinks(items, n){
+      var kids = [];
+      items.slice(0,n).forEach(function(it,idx){
+        if (idx) kids.push(document.createTextNode(", "));
+        kids.push(el("a",{"class":"ilink", href:issueUrl(it.number)}, "#"+it.number));
+      });
+      if (items.length>n) kids.push(document.createTextNode(" +"+(items.length-n)+" more"));
+      return kids;
+    }
+
     var list = el("div",{"class":"prow-list"});
     rows.forEach(function(r){
       var badge = el("span",{"class":"pbadge "+r.badgeCls}, r.badgeTxt);
       var detail;
       if (r.iss.length){
-        var kids = [];
-        r.iss.slice(0,5).forEach(function(it,idx){
-          if (idx) kids.push(document.createTextNode(", "));
-          kids.push(el("a",{"class":"ilink", href:issueUrl(it.number)}, "#"+it.number));
-        });
-        if (r.iss.length>5) kids.push(document.createTextNode(" +"+(r.iss.length-5)+" more"));
-        detail = el("span",{"class":"pdetail"}, kids);
+        detail = el("span",{"class":"pdetail"}, issueLinks(r.iss, 5));
       } else if (r.kind==="plat" && r.w>=2){
-        var core = coreIssues.slice(0,3);
-        if (core.length){
-          var ck = [document.createTextNode("no issue names it directly — driven by cross-cutting core regressions: ")];
-          core.forEach(function(it,idx){
-            if (idx) ck.push(document.createTextNode(", "));
-            ck.push(el("a",{"class":"ilink", href:issueUrl(it.number)}, "#"+it.number));
-          });
-          detail = el("span",{"class":"pdetail muted2"}, ck);
-        } else {
-          detail = el("span",{"class":"pdetail muted2"}, "rated from cross-cutting regressions — see Known issues below");
-        }
+        detail = el("span",{"class":"pdetail muted2"},
+          crossCutting.length ? ("no "+r.label+"-specific issues — affected via the cross-cutting issues below")
+                              : "rated from cross-cutting regressions — see Known issues below");
       } else {
         detail = el("span",{"class":"pdetail muted2"}, "clear this release");
       }
@@ -1758,6 +1755,19 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         badge, detail
       ]));
     });
+
+    // One shared row for the issues tagged "all" — they hit every channel/platform,
+    // so listing them once (instead of under each) keeps the per-platform rows distinct.
+    if (pickedPlats.length && crossCutting.length){
+      var ccW = 0, ccN = null;
+      crossCutting.forEach(function(it){ var s=String(it.severity||"low").toLowerCase(), w=SEVW[s]||0; if (w>ccW){ ccW=w; ccN=s; } });
+      var ccLvl = ccN ? SEV_IMP[ccN] : "none";
+      list.appendChild(el("div",{"class":"prow prow-all"},[
+        el("span",{"class":"ppn"}, "🌐 All platforms"),
+        el("span",{"class":"pbadge imp-"+ccLvl}, (IMPACT[ccLvl]||IMPACT.none).label),
+        el("span",{"class":"pdetail"}, issueLinks(crossCutting, 5))
+      ]));
+    }
 
     return el("div",{"class":"risk "+tone},[ el("div",{"class":"rh"}, head), list ]);
   }
