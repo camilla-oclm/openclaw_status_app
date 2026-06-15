@@ -391,7 +391,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .bestver a.snap:hover{text-decoration:underline}
 
 /* ── your setup ────────────────────────────────────────────────────────── */
-.setup .chips{display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:.9rem}
+.setup .chips{display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-bottom:.9rem}
+.setup .chip-grp{flex-basis:100%; font-size:.64rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-top:.3rem}
+.setup .chip-grp:first-child{margin-top:0}
 .pick{font-size:.8rem; font-weight:600; padding:.36rem .82rem; border-radius:999px; cursor:pointer; background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s var(--ease); display:inline-flex; align-items:center; gap:.4rem}
 .pick:hover{color:var(--text); border-color:var(--accent)}
 .pick[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#04121a; font-weight:700}
@@ -1009,6 +1011,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   })();
   function stackKeys(){ var a=[]; for (var k in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k) && STACK[k]) a.push(k); } return a; }
   function stackActive(){ return stackKeys().length > 0; }
+  // The stack mixes platform keys and component keys (disjoint sets); split by membership.
+  function stackPlatforms(){ return stackKeys().filter(function(k){ return PLAT_LABEL[k]; }); }
+  function stackComponents(){ return stackKeys().filter(function(k){ return COMP_LABEL[k]; }); }
   function saveStack(){ try { localStorage.setItem("oc-stack", JSON.stringify(stackKeys())); } catch(e){} }
   // Title keyword match — the FALLBACK for issues with no analyst `platforms` tag.
   var STACK_MATCH = {
@@ -1032,13 +1037,17 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     for (var k in STACK_MATCH){ if (STACK_MATCH[k].test(title)) out.push(k); }
     return out;
   }
-  // Does this issue touch the user's selected stack? ("all"/core hits everyone.)
+  // Does this issue touch the user's stack? Matches any selected platform (or a
+  // cross-cutting "all" issue when platforms are picked) OR any selected component.
   function issueHitsStack(i){
     if (!stackActive()) return false;
-    var ps = issuePlatforms(i);
-    if (ps.indexOf("all") >= 0) return true;
-    var keys = stackKeys();
-    for (var j=0;j<keys.length;j++){ if (ps.indexOf(keys[j]) >= 0) return true; }
+    var ps = issuePlatforms(i), selP = stackPlatforms();
+    if (selP.length){
+      if (ps.indexOf("all") >= 0) return true;
+      for (var j=0;j<selP.length;j++){ if (ps.indexOf(selP[j]) >= 0) return true; }
+    }
+    var cs = issueComponents(i), selC = stackComponents();
+    for (var m=0;m<selC.length;m++){ if (cs.indexOf(selC[m]) >= 0) return true; }
     return false;
   }
   // Risk height (%) per verdict for the release-health trend — taller = riskier.
@@ -1414,12 +1423,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var g = el("div",{"class":"plat-grid"});
     keys.forEach(function(k){
       var a = agg[k], meta = COMP_LABEL[k] || ["📦", cap(k)];
+      var mine = !!STACK[k];
       var seg = el("div",{"class":"seg"});
       for (var j=0;j<4;j++){ seg.appendChild(el("i",{"class": j<a.worst?"on":""}, null)); }
       var sub = a.count + (a.count>1?" issues":" issue") + (a.regr? " · "+a.regr+" regr" : "");
-      g.appendChild(el("div",{"class":"plat cs-"+a.worstName},[
+      g.appendChild(el("div",{"class":"plat cs-"+a.worstName+(mine?" you":"")},[
         el("div",{"class":"ph"},[
-          el("span",{"class":"pn"}, [document.createTextNode(meta[0]+" "), el("span",{"class":"pname"}, meta[1])])
+          el("span",{"class":"pn"}, [document.createTextNode(meta[0]+" "), el("span",{"class":"pname"}, meta[1]), mine?el("span",{"class":"me"}," ★you"):null])
         ]),
         el("div",{"class":"pmeter"},[ seg, el("span",{"class":"pl"}, sub) ])
       ]));
@@ -1557,10 +1567,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function personalize(){
     var s = el("div",{"class":"section setup", id:"setup"});
     s.appendChild(sectionHead("Your setup", null, "tailor the verdict to what you run"));
+    function pickBtn(k, label){
+      return el("button",{"class":"pick", type:"button", "aria-pressed": STACK[k]?"true":"false", "data-k":k}, label);
+    }
     var chips = el("div",{"class":"chips"});
-    PLAT.forEach(function(p){
-      chips.appendChild(el("button",{"class":"pick", type:"button", "aria-pressed": STACK[p[0]]?"true":"false", "data-k":p[0]}, p[1]+" "+p[2]));
-    });
+    chips.appendChild(el("span",{"class":"chip-grp"}, "Platforms & channels"));
+    PLAT.forEach(function(p){ chips.appendChild(pickBtn(p[0], p[1]+" "+p[2])); });
+    chips.appendChild(el("span",{"class":"chip-grp"}, "Components"));
+    COMP.forEach(function(c){ chips.appendChild(pickBtn(c[0], c[1]+" "+c[2])); });
     s.appendChild(chips);
     s.appendChild(personalRisk());
     chips.addEventListener("click", function(ev){
@@ -1599,53 +1613,60 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var oldP = document.getElementById("platforms");
     if (oldP){ var fp = platforms(); if (fp) oldP.parentNode.replaceChild(fp, oldP); }
+    var oldC = document.getElementById("components");
+    if (oldC){ var fc = componentHealth(); if (fc) oldC.parentNode.replaceChild(fc, oldC); }
     addAnchors();   // rebuilt sections lost their permalink "#" — re-add (idempotent)
   }
   function personalRisk(){
     if (!stackActive()){
-      return el("div",{"class":"hint"}, "Pick your platforms and channels above — your stack's issues get highlighted and the read below is tuned to it (saved on this device).");
+      return el("div",{"class":"hint"}, "Pick the platforms, channels, and OpenClaw components you rely on — your stack's issues get highlighted and the read below is tuned to it (saved on this device).");
     }
     var pi = DATA.platform_impact || {};
     var ki = DATA.known_issues || [];
-    var keys = stackKeys();
-    var labelOf = {}, emojiOf = {};
-    PLAT.forEach(function(p){ labelOf[p[0]]=p[2]; emojiOf[p[0]]=p[1]; });
-    var W = {none:0,low:1,medium:2,high:3};
-    // Issues hitting a surface = tagged for it, OR tagged "all" (core hits every surface).
-    function issuesFor(k){
-      return ki.filter(function(i){
-        var ps = issuePlatforms(i);
-        return ps.indexOf(k) >= 0 || ps.indexOf("all") >= 0;
-      });
+    var W = {none:0, low:1, medium:2, high:3};                 // platform-impact weight
+    var SEVW = {critical:3, high:3, medium:2, low:1};          // severity → comparable weight
+    var SEV_IMP = {critical:"high", high:"high", medium:"medium", low:"low"};  // → badge colour
+    function issuesForPlat(k){
+      return ki.filter(function(i){ var ps = issuePlatforms(i); return ps.indexOf(k)>=0 || ps.indexOf("all")>=0; });
     }
-    // Cross-cutting regressions: serious issues tagged "all" (or unattributed) —
-    // what drives a high/medium rating when nothing names the surface specifically.
+    function issuesForComp(k){
+      return ki.filter(function(i){ return issueComponents(i).indexOf(k) >= 0; });
+    }
+    // Cross-cutting regressions — drive a platform's rating when nothing names it.
     var coreIssues = ki.filter(function(i){
       var sv = String(i.severity||"");
       if (!(sv==="critical"||sv==="high")) return false;
       var ps = issuePlatforms(i);
       return ps.indexOf("all") >= 0 || ps.length === 0;
     });
-    // One row per selected platform, worst impact first — the actual insight.
-    var rows = keys.map(function(k){
-      var lv = String(pi[k]||"none").toLowerCase();
-      return {k:k, lv:lv, w:(W[lv]||0), iss:issuesFor(k)};
-    }).sort(function(a,b){ return b.w-a.w || b.iss.length-a.iss.length; });
+    var rows = [];
+    stackPlatforms().forEach(function(k){
+      var lv = String(pi[k]||"none").toLowerCase(), m = PLAT_LABEL[k]||["?",k];
+      rows.push({kind:"plat", emoji:m[0], label:m[1], w:(W[lv]||0),
+                 badgeCls:"imp-"+lv, badgeTxt:(IMPACT[lv]||IMPACT.none).label, iss:issuesForPlat(k)});
+    });
+    stackComponents().forEach(function(k){
+      var iss = issuesForComp(k), worst = 0, wn = null, m = COMP_LABEL[k]||["?",k];
+      iss.forEach(function(it){ var s = String(it.severity||"low").toLowerCase(), w = SEVW[s]||0; if (w>worst){ worst=w; wn=s; } });
+      rows.push({kind:"comp", emoji:m[0], label:m[1], w:worst,
+                 badgeCls: wn?("imp-"+SEV_IMP[wn]):"imp-none", badgeTxt: wn?(cap(wn)+" sev"):"Clear", iss:iss});
+    });
+    rows.sort(function(a,b){ return b.w-a.w || b.iss.length-a.iss.length; });
 
     var worst = rows.length ? rows[0].w : 0;
-    var hot = rows.filter(function(r){ return r.w>=2; }).map(function(r){ return labelOf[r.k]; });
+    var hot = rows.filter(function(r){ return r.w>=2; }).map(function(r){ return r.label; });
     var verdict = (VERDICTS[DATA.recommendation]||{label:String(DATA.recommendation||"")}).label;
     var tone, head;
     if (worst>=3){ tone="tone-bad";
       head = "Your stack takes the brunt — "+hot.join(", ")+" "+(hot.length>1?"are":"is")+" among the hardest hit, so the “"+verdict+"” verdict applies squarely to you."; }
     else if (worst===2){ tone="tone-warn";
-      head = "Moderate risk for your stack — "+hot.join(", ")+" see medium impact; weigh the “"+verdict+"” verdict accordingly."; }
+      head = "Moderate risk for your stack — "+hot.join(", ")+" show real exposure; weigh the “"+verdict+"” verdict accordingly."; }
     else { tone="tone-good";
       head = "Your stack looks largely spared — the issues behind the “"+verdict+"” verdict mostly land elsewhere."; }
 
     var list = el("div",{"class":"prow-list"});
     rows.forEach(function(r){
-      var badge = el("span",{"class":"pbadge imp-"+r.lv}, (IMPACT[r.lv]||IMPACT.none).label);
+      var badge = el("span",{"class":"pbadge "+r.badgeCls}, r.badgeTxt);
       var detail;
       if (r.iss.length){
         var kids = [];
@@ -1655,7 +1676,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         });
         if (r.iss.length>5) kids.push(document.createTextNode(" +"+(r.iss.length-5)+" more"));
         detail = el("span",{"class":"pdetail"}, kids);
-      } else if (r.w>=2){
+      } else if (r.kind==="plat" && r.w>=2){
         var core = coreIssues.slice(0,3);
         if (core.length){
           var ck = [document.createTextNode("no issue names it directly — driven by cross-cutting core regressions: ")];
@@ -1671,7 +1692,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         detail = el("span",{"class":"pdetail muted2"}, "clear this release");
       }
       list.appendChild(el("div",{"class":"prow"},[
-        el("span",{"class":"ppn"}, emojiOf[r.k]+" "+labelOf[r.k]),
+        el("span",{"class":"ppn"}, r.emoji+" "+r.label),
         badge, detail
       ]));
     });
