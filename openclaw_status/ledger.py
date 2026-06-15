@@ -19,8 +19,6 @@ flagged "fixed in next pre-release" — which is exactly the 🔄 "wait for next
 from openclaw_status import config, github
 from openclaw_status.lib import load_json, now_iso, save_json
 
-_SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-
 
 def load_ledger() -> dict:
     """Load the on-disk ledger, or {} if missing/corrupt."""
@@ -31,11 +29,6 @@ def load_ledger() -> dict:
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
-
-
-def _worst_severity(a, b):
-    """The more severe of two severity strings (missing/unknown ranks lowest)."""
-    return a if _SEV_ORDER.get(a, 99) <= _SEV_ORDER.get(b, 99) else b
 
 
 def _merge_fixed(prev, new):
@@ -60,8 +53,12 @@ def is_version_relevant(it: dict) -> bool:
 def _lean(it: dict, now: str, prev: dict | None) -> dict:
     """A compact, accumulating record for one issue.
 
-    Monotonic fields (reactions, severity) only ever move toward "worse" so a quieter
-    re-scout can't walk an issue back; first_seen is preserved, last_seen bumped.
+    Reaction/comment counts are monotonic (max) — a quieter or partial re-scout can't
+    walk a community-impact signal back. Label-derived fields (severity, category,
+    affects_version), by contrast, track the *current* scout: they are pure functions of
+    the issue's labels/text (github.derive_*), so re-deriving them each run lets a
+    scoring-formula change or a maintainer re-label self-correct instead of freezing at a
+    historical worst. first_seen is preserved, last_seen bumped.
     """
     prev = prev or {}
     return {
@@ -74,12 +71,13 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         "total_reactions": max(int(it.get("total_reactions") or 0), int(prev.get("total_reactions") or 0)),
         "created_at": it.get("created_at") or prev.get("created_at", ""),
         "labels": (it.get("labels") or prev.get("labels") or [])[:6],
-        "affects_version": bool(it.get("affects_version") or prev.get("affects_version")),
+        # Re-derived from the current scout (not OR'd with prev) so a tightened match
+        # walks a stale "affects this version" back; falls back to prev only if absent.
+        "affects_version": bool(it["affects_version"]) if "affects_version" in it
+                           else bool(prev.get("affects_version")),
         "impact": it.get("impact") or prev.get("impact"),
-        "severity": _worst_severity(prev.get("severity"), it.get("severity")),
-        # "regression" is sticky — once post-release breakage, always flagged so.
-        "category": "regression" if "regression" in (it.get("category"), prev.get("category"))
-                    else (it.get("category") or prev.get("category") or "active"),
+        "severity": it.get("severity") or prev.get("severity") or "medium",
+        "category": it.get("category") or prev.get("category") or "active",
         "fixed_in": _merge_fixed(prev.get("fixed_in"), it.get("fixed_in")),
         "clawsweeper": it.get("clawsweeper") or prev.get("clawsweeper"),
         "first_seen": prev.get("first_seen", now),
@@ -104,12 +102,17 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None) ->
     store = entry["issues"]
 
     for it in scouted:
-        if not is_version_relevant(it):
-            continue
         num = it.get("number")
         if num is None:
             continue
         key = str(num)
+        if not is_version_relevant(it):
+            # Re-scouted this run but no longer relevant to THIS release (e.g. a version
+            # mention a tightened match no longer counts) — drop the stale entry. Issues
+            # we simply didn't see this run are still left untouched below (an immutable
+            # release doesn't lose an open issue just because a noisier search missed it).
+            store.pop(key, None)
+            continue
         store[key] = _lean(it, now, store.get(key))
 
     entry["last_seen"] = now

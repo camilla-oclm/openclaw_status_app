@@ -515,12 +515,15 @@ def test_build_data_strips_cost_from_public_payload(tmp_path, monkeypatch):
     ))
 
     data = render._build_assessment_data(
-        {"assessment": {}, "version": "2026.6.6", "usage": {"cost_usd": 0.03, "api_calls": 2}},
+        {"assessment": {}, "version": "2026.6.6",
+         "usage": {"cost_usd": 0.03, "latency_ms": 185889, "api_calls": 2, "tokens_in": 9}},
         {"sources": {}},
     )
-    # Run cost must not surface on the public frontend...
+    # Run cost and latency are internal — they must not surface on the public frontend...
     assert "cost_usd" not in data["usage"]
+    assert "latency_ms" not in data["usage"]
     assert all("cost_usd" not in h for h in data["version_history"])
-    # ...but the rest of the usage/history payload is untouched.
+    # ...but token/model-call counts (which evidence the real pipeline) are untouched.
     assert data["usage"]["api_calls"] == 2
+    assert data["usage"]["tokens_in"] == 9
     assert data["version_history"][0]["headline"] == "h"

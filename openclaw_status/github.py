@@ -279,7 +279,13 @@ def version_relevant(text: str, version: str) -> bool:
     parts = v.split(".")
     if len(parts) >= 2:
         series = ".".join(parts[:2])
-        return bool(series) and series in t
+        if not series:
+            return False
+        # Match the minor series as a whole number-token so "2026.6" doesn't also
+        # swallow "2026.60" / "2026.66" (different series) or digits inside a larger
+        # number. A same-series patch ("2026.6.1") still matches — a regression in the
+        # series may persist in this release — but a different series no longer does.
+        return re.search(r"(?<!\d)" + re.escape(series) + r"(?!\d)", t) is not None
     return False
 
 

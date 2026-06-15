@@ -91,6 +91,17 @@ def test_version_relevant_negative():
     assert github.version_relevant("", "2026.6.1") is False
 
 
+def test_version_relevant_series_not_substring():
+    # The series "2026.6" must match as a whole number-token, not as a substring of a
+    # different series ("2026.60"/"2026.66") or glued to other digits.
+    assert github.version_relevant("regression in 2026.60 build", "2026.6.6") is False
+    assert github.version_relevant("seen on 2026.66", "2026.6.6") is False
+    assert github.version_relevant("PR 12026.6 thousand", "2026.6.6") is False
+    # …but a genuine series mention (and a same-series patch) still match.
+    assert github.version_relevant("broke in the 2026.6 series", "2026.6.6") is True
+    assert github.version_relevant("also affects 2026.6.1", "2026.6.6") is True
+
+
 # ── impact_level ─────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("thumbs,comments,expected", [
