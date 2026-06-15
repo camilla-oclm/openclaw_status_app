@@ -282,6 +282,9 @@ body::after{
 }
 .fbtn:hover{color:var(--text); border-color:var(--accent)}
 .fbtn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#04121a; font-weight:700}
+.fcomp[aria-pressed="true"]{background:var(--accent2); border-color:var(--accent2)}
+.fsep{display:inline-flex; align-items:center; margin-left:.35rem; padding-left:.5rem; border-left:1px solid var(--border2);
+  font-size:.64rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint)}
 .issue{
   display:flex; gap:.9rem; align-items:flex-start;
   background:var(--card); border:1px solid var(--border); border-left-width:3px; border-radius:var(--r-md);
@@ -1249,7 +1252,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (i.first_seen) tags.push(el("span",{"class":"tag"}, "tracked "+timeAgo(i.first_seen)));
     if (mine) tags.unshift(el("span",{"class":"tag t-me"}, "★ your stack"));
     if (i.is_new) tags.unshift(el("span",{"class":"tag t-good"}, "🆕 new"));
-    return el("div",{"class":"issue sev-"+sev+(mine?" mine":""), "data-cat":i.category||"other", "data-mine":mine?"1":"0"},[
+    return el("div",{"class":"issue sev-"+sev+(mine?" mine":""), "data-cat":i.category||"other", "data-mine":mine?"1":"0", "data-comp":issueComponents(i).join(" ")},[
       el("a",{"class":"num", href:issueUrl(i.number)}, "#"+i.number),
       el("div",{"class":"body"},[
         el("div",{"class":"title"}, i.title||"(untitled)"),
@@ -1286,6 +1289,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var mineN = ki.filter(function(i){ return issueHitsStack(i); }).length;
       filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":"mine"}, "★ My stack ("+mineN+")"));
     }
+    // Component filters — one chip per subsystem present, in taxonomy order.
+    var compCounts = {};
+    ki.forEach(function(i){ issueComponents(i).forEach(function(c){ compCounts[c]=(compCounts[c]||0)+1; }); });
+    var compKeys = COMP.map(function(c){return c[0];}).filter(function(k){ return compCounts[k]; });
+    if (compKeys.length){
+      filters.appendChild(el("span",{"class":"fsep"}, "subsystem"));
+      compKeys.forEach(function(k){
+        var m = COMP_LABEL[k];
+        filters.appendChild(el("button",{"class":"fbtn fcomp", type:"button", "aria-pressed":"false", "data-f":"comp:"+k},
+          m[0]+" "+m[1]+" ("+compCounts[k]+")"));
+      });
+    }
     s.appendChild(filters);
 
     var list = el("div",{"class":"issue-list"});
@@ -1297,9 +1312,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var f = btn.getAttribute("data-f");
       filters.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b===btn?"true":"false"); });
       list.querySelectorAll(".issue").forEach(function(row){
-        var show = (f==="all") ? true
-                 : (f==="mine") ? row.getAttribute("data-mine")==="1"
-                 : row.getAttribute("data-cat")===f;
+        var show;
+        if (f==="all") show = true;
+        else if (f==="mine") show = row.getAttribute("data-mine")==="1";
+        else if (f.indexOf("comp:")===0) show = (row.getAttribute("data-comp")||"").split(" ").indexOf(f.slice(5)) >= 0;
+        else show = row.getAttribute("data-cat")===f;
         row.style.display = show ? "" : "none";
       });
     });
