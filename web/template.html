@@ -1882,11 +1882,17 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   }
   function trends(){
     var tl=(DATA.timeline||[]).slice();
-    if (tl.length<2) return null;
+    if (!tl.length) return null;
     tl.sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
     tl = tl.slice(-30);
     var s=el("div",{"class":"section", id:"trends"});
     s.appendChild(sectionHead("Trends", null, "tracked every run · about every 6 hours"));
+    if (tl.length<2){   // need ≥2 points to draw a line — show the section, explain the wait
+      s.appendChild(el("div",{"class":"tcard"},[ el("div",{"class":"tc-empty"},
+        "Charts populate as runs accumulate (about every 6 hours). Tracking "+tl.length+
+        " run so far — check back after the next one.") ]));
+      return s;
+    }
     var grid=el("div",{"class":"trends-grid"});
     grid.appendChild(tCard("Issue pressure","open issues & regressions per run", issuePressureChart(tl)));
     grid.appendChild(tCard("Severity mix","make-up of known issues", severityChart(tl)));
