@@ -446,6 +446,42 @@ def append_history(version: str, assessment: dict, usage: dict):
     print(f"📜 History updated: {version} ({entry['recommendation']})")
 
 
+def append_timeline(version: str, assessment: dict, usage: dict):
+    """Append a per-RUN metric snapshot to timeline.json (the Trends charts' time series).
+
+    Unlike append_history (one row per version), this appends every run — so a version
+    re-assessed each 6h cadence produces a curve, not a single point. Append-only, pruned
+    by count + 90 days."""
+    ki = assessment.get("known_issues", []) or []
+    def sev(name):
+        return sum(1 for i in ki if str(i.get("severity", "")).lower() == name)
+    entry = {
+        "t": datetime.now(timezone.utc).isoformat(),
+        "version": version,
+        "recommendation": assessment.get("recommendation", "?"),
+        "confidence": assessment.get("confidence", "medium"),
+        "issues": len(ki),
+        "regressions": sum(1 for i in ki if i.get("category") == "regression"),
+        "critical": sev("critical"), "high": sev("high"),
+        "medium": sev("medium"), "low": sev("low"),
+        "cost_usd": round(usage.get("cost_usd", 0) or 0, 6),
+        "latency_ms": int(usage.get("latency_ms", 0) or 0),
+    }
+    timeline = []
+    if config.TIMELINE_FILE.exists():
+        try:
+            timeline = load_json(config.TIMELINE_FILE)
+        except Exception:
+            timeline = []
+    if not isinstance(timeline, list):
+        timeline = []
+    timeline.append(entry)
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+    timeline = [r for r in timeline if r.get("t", "") >= cutoff][-config.TIMELINE_KEEP:]
+    save_json(config.TIMELINE_FILE, timeline)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Pipeline steps
 # ═══════════════════════════════════════════════════════════════════════════
@@ -807,6 +843,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     print(f"💾 Saved to: {config.ASSESSMENT_FILE}")
 
     append_history(version, final_assessment, total_usage)
+    append_timeline(version, final_assessment, total_usage)
     for step in pipeline_steps:
         log_usage(step["model"], step["usage"], True)
 

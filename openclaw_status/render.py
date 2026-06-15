@@ -432,6 +432,26 @@ def _derive_components(raw_issue: dict, max_n: int = 2) -> list:
     return [c for c in _COMPONENT_ORDER if c in found][:max_n]
 
 
+def _timeline_from_history(h: dict) -> dict:
+    """Map a per-version history row to a timeline row (coarse fallback before the real
+    per-run series accumulates). history stores `high` as high+critical combined and has
+    no medium/low split, so we approximate: high band = `high`, the rest → low."""
+    issues = h.get("issues", 0) or 0
+    sev_hi = h.get("high", 0) or 0
+    return {
+        "t": h.get("assessed_at", ""),
+        "version": h.get("version", ""),
+        "recommendation": h.get("recommendation", "?"),
+        "confidence": h.get("confidence", "medium"),
+        "issues": issues,
+        "regressions": h.get("regressions", 0) or 0,
+        "critical": 0, "high": sev_hi, "medium": 0, "low": max(0, issues - sev_hi),
+        "cost_usd": round(h.get("cost_usd", 0) or 0, 6),
+        "latency_ms": 0,
+        "approx": True,   # flags the coarse per-version fallback (no per-run granularity yet)
+    }
+
+
 def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     """Merge assessment.json + raw-data.json into the flat DATA dict the template expects."""
     a = assessment_raw.get("assessment", {})
@@ -439,18 +459,30 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     cw = sources.get("clawsweeper", {})
 
     # Version history
-    version_history = []
+    raw_history = []
     if config.HISTORY_FILE.exists():
         try:
-            version_history = load_json(config.HISTORY_FILE)
+            loaded = load_json(config.HISTORY_FILE)
+            raw_history = [h for h in loaded if isinstance(h, dict)] if isinstance(loaded, list) else []
         except Exception:
-            pass
-    # Run cost is internal — keep it out of the public payload (page source / latest.json).
-    if isinstance(version_history, list):
-        version_history = [
-            {k: v for k, v in h.items() if k != "cost_usd"}
-            for h in version_history if isinstance(h, dict)
-        ]
+            raw_history = []
+    # Run cost is internal — keep it out of the public per-version payload.
+    version_history = [{k: v for k, v in h.items() if k != "cost_usd"} for h in raw_history]
+
+    # Per-run metric time series for the Trends charts (cost/latency ARE surfaced here
+    # on purpose — the "pipeline cost & speed" chart is a transparency feature).
+    timeline = []
+    if config.TIMELINE_FILE.exists():
+        try:
+            raw_tl = load_json(config.TIMELINE_FILE)
+            if isinstance(raw_tl, list):
+                timeline = [r for r in raw_tl if isinstance(r, dict)][-config.TIMELINE_KEEP:]
+        except Exception:
+            timeline = []
+    # Until the real per-run series has ≥2 points, synthesize a coarse per-version
+    # fallback from history so the charts aren't empty (one point per release).
+    if len(timeline) < 2 and raw_history:
+        timeline = [_timeline_from_history(h) for h in raw_history]
 
     # Known issues with clawsweeper metadata
     raw_issues = {i["number"]: i for i in sources.get("github_issues", []) if isinstance(i, dict)}
@@ -501,6 +533,7 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "platform_impact": _derive_platform_impact(known_issues) or a.get("platform_impact", {}),
         "usage": {k: v for k, v in (assessment_raw.get("usage") or {}).items() if k != "cost_usd"},
         "version_history": version_history,
+        "timeline": timeline,
         # Stable-release changelog (newest first) with extracted Highlights — the
         # "catching up from an older version" section aggregates these client-side.
         "release_history": [
