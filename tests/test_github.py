@@ -171,9 +171,14 @@ def test_categorize_diamond():
     assert github.categorize("2026-01-01", ["issue-rating: 🦞 diamond lobster"], False, "low", "2026-06-03") == "diamond_lobster"
 
 
-def test_categorize_regression_when_post_release_and_relevant():
-    assert github.categorize("2026-06-05", ["bug"], True, "low", "2026-06-03") == "regression"
+def test_categorize_regression_requires_confirmation():
+    # A CONFIRMED regression — `regression` label or a "regression" title — regardless of timing.
     assert github.categorize("2026-06-05", ["regression"], False, "low", "2026-06-03") == "regression"
+    assert github.categorize("2026-06-05", ["bug"], True, "low", "2026-06-03",
+                             title="Regression: build fails") == "regression"
+    # Post-release + affects this version but NOT confirmed as a regression → post_release,
+    # NOT "regression" (a bug filed after a release isn't automatically a regression).
+    assert github.categorize("2026-06-05", ["bug"], True, "low", "2026-06-03") == "post_release"
 
 
 def test_categorize_active_when_post_release_but_not_version_relevant():

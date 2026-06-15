@@ -110,8 +110,10 @@ Each issue is then scored from the repo's real labels:
   requests too — so it is **not** treated as a severity.)*
 - **Impact** = a bucket from 👍 reactions + comment volume.
 - **`affects_version`** = the issue text mentions the assessed version or its minor series.
-- **Category** = `regression` (post-release & version-relevant, or labelled regression) /
-  `diamond_lobster` / `active`.
+- **Category** = `regression` (a *confirmed* regression — a `regression` label or a
+  "regression" title; not merely any post-release bug) / `post_release` (filed after the
+  release and affects this version, but not confirmed as a regression) / `diamond_lobster` /
+  `active`.
 
 Results are **ranked by severity blended with version-relevance** (an issue confirmed in the
 assessed version outranks a critical about some *other* version, but a trivial version

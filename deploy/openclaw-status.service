@@ -4,6 +4,9 @@
 Description=OpenClaw Status — pull latest code + run the assessment pipeline
 After=network-online.target
 Wants=network-online.target
+# Hard failure (git/collector crash, LLM timeout) → ping the alert webhook. The deploy
+# guard already keeps the last good page live; this is the only out-of-band signal it died.
+OnFailure=openclaw-status-failure.service
 
 [Service]
 Type=oneshot

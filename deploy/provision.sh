@@ -64,8 +64,9 @@ chmod 600 "$APP_DIR/.env"
 git config --system --add safe.directory "$APP_DIR"
 
 # --- systemd timer ---------------------------------------------------------
-install -m644 "$APP_DIR/deploy/openclaw-status.service" /etc/systemd/system/
-install -m644 "$APP_DIR/deploy/openclaw-status.timer"   /etc/systemd/system/
+install -m644 "$APP_DIR/deploy/openclaw-status.service"         /etc/systemd/system/
+install -m644 "$APP_DIR/deploy/openclaw-status-failure.service" /etc/systemd/system/
+install -m644 "$APP_DIR/deploy/openclaw-status.timer"           /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now openclaw-status.timer
 

@@ -1000,6 +1000,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   };
   var CAT = {
     regression:    {icon:"🔄", label:"Regression",      cls:"t-bad"},
+    post_release:  {icon:"🔶", label:"Post-release",     cls:"t-warn"},
     diamond_lobster:{icon:"💎", label:"Diamond Lobster", cls:"t-info"},
     active:        {icon:"🟢", label:"Active",          cls:"t-warn"}
   };
@@ -1311,7 +1312,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     if (i.fixed_in){
       tags.push(el("span",{"class":"tag t-good"}, "✓ fixed in "+i.fixed_in));
-    } else if (i.category==="regression"){
+    } else if (i.category==="regression" || i.category==="post_release"){
       tags.push(el("span",{"class":"tag t-bad"}, "● unfixed"));
     }
     if (i.reactions){
@@ -1334,7 +1335,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var ki = (DATA.known_issues||[]).slice();
     if (!ki.length) return null;
     var order = {critical:0,high:1,medium:2,low:3};
-    var catOrder = {regression:0,diamond_lobster:1,active:2};
+    var catOrder = {regression:0,post_release:1,diamond_lobster:2,active:3};
     function rank(map,key){ return (key in map) ? map[key] : 9; }  // NB: 0 is falsy, don't use ||
     ki.sort(function(a,b){
       var s = rank(order,a.severity) - rank(order,b.severity);
@@ -1611,7 +1612,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         el("a",{href:"llms.txt"}, "llms.txt (for AI agents) ↗")
       ])),
       el("div",{"class":"disclaimer"},
-        "Independent, unofficial project — not affiliated with, or endorsed by, OpenClaw or its maintainers. Verdicts are generated automatically and may be wrong; confirm against the linked issues before you update.")
+        "Independent, unofficial project — not affiliated with, or endorsed by, OpenClaw or its maintainers. Verdicts are generated automatically and may be wrong; confirm against the linked issues before you update. Data is drawn from the public github.com/openclaw/openclaw issue tracker and releases via the GitHub API.")
     ]);
   }
 
@@ -1904,7 +1905,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     grid.appendChild(tCard("Issue pressure","open issues & regressions per run", issuePressureChart(tl)));
     grid.appendChild(tCard("Severity mix","make-up of known issues", severityChart(tl)));
     grid.appendChild(tCard("Verdict","risk per run · higher = riskier", verdictChart(tl)));
-    grid.appendChild(tCard("Regression share","post-release regressions as a share of known issues", regressionShareChart(tl)));
+    grid.appendChild(tCard("Regression share","confirmed regressions as a share of known issues", regressionShareChart(tl)));
     s.appendChild(grid);
     return s;
   }

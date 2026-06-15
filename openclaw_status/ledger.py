@@ -102,7 +102,7 @@ def _rederive_stored(store: dict, release_date: str) -> None:
             labels, rec.get("reactions", 0), rec.get("comments", 0))
         rec["category"] = github.categorize(
             rec.get("created_at", ""), labels, bool(rec.get("affects_version")),
-            rec.get("impact") or "low", release_date)
+            rec.get("impact") or "low", release_date, rec.get("title", ""))
         if not is_version_relevant(rec):
             del store[key]   # no longer affects this release and isn't a regression
 
