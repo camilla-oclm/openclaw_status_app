@@ -483,6 +483,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     # fallback from history so the charts aren't empty (one point per release).
     if len(timeline) < 2 and raw_history:
         timeline = [_timeline_from_history(h) for h in raw_history]
+    # Cost & latency are internal pipeline metrics — kept on disk (timeline.json), but
+    # never shipped in the public payload (page source / latest.json).
+    timeline = [{k: v for k, v in r.items() if k not in ("cost_usd", "latency_ms")} for r in timeline]
 
     # Known issues with clawsweeper metadata
     raw_issues = {i["number"]: i for i in sources.get("github_issues", []) if isinstance(i, dict)}
