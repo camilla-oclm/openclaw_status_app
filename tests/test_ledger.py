@@ -30,12 +30,15 @@ def test_merge_accumulates_across_runs(led):
     assert {i["number"] for i in b} == {1, 2, 3}
 
 
-def test_reactions_and_severity_are_monotonic(led):
+def test_reactions_monotonic_but_severity_tracks_current_scout(led):
+    # Reaction counts only climb (a partial re-scout can't walk a community signal back)…
     ledger.merge_version_issues("1.0", [_issue(1, reactions=10, severity="high")])
     out = ledger.merge_version_issues("1.0", [_issue(1, reactions=2, severity="low")])
     one = next(i for i in out if i["number"] == 1)
     assert one["reactions"] == 10          # reactions only climb
-    assert one["severity"] == "high"       # severity keeps its worst
+    # …but severity is re-derived from current labels each run, so a downgrade (or a
+    # scoring-formula change) self-corrects instead of freezing at the historical worst.
+    assert one["severity"] == "low"
 
 
 def test_only_version_relevant_issues_accumulate(led):
@@ -47,10 +50,32 @@ def test_only_version_relevant_issues_accumulate(led):
     assert {i["number"] for i in out} == {1, 2}
 
 
-def test_regression_category_is_sticky(led):
+def test_category_tracks_current_scout(led):
+    # Category is re-derived each run (not sticky): a re-scout that no longer categorizes
+    # as a regression is reflected. (Here the issue stays version-relevant via
+    # affects_version, so it isn't dropped — only its category updates.)
     ledger.merge_version_issues("1.0", [_issue(1, category="regression")])
     out = ledger.merge_version_issues("1.0", [_issue(1, category="active")])
-    assert next(i for i in out if i["number"] == 1)["category"] == "regression"
+    assert next(i for i in out if i["number"] == 1)["category"] == "active"
+
+
+def test_rescout_as_no_longer_relevant_drops_entry(led):
+    # First run: #1 affects this release → accumulated.
+    a = ledger.merge_version_issues("1.0", [_issue(1, affects_version=True, category="regression")])
+    assert {i["number"] for i in a} == {1}
+    # Re-scouted but now neither version-relevant nor a regression (e.g. a tightened
+    # version match): it must be dropped, not frozen in at its old worst.
+    b = ledger.merge_version_issues("1.0", [_issue(1, affects_version=False, category="active")])
+    assert {i["number"] for i in b} == set()
+
+
+def test_affects_version_is_re_derived_not_monotonic(led):
+    ledger.merge_version_issues("1.0", [_issue(1, affects_version=True, category="regression")])
+    # Re-scouted: no longer matches the version but still a labelled regression → kept,
+    # yet affects_version reflects the current scout (False), not a frozen True.
+    out = ledger.merge_version_issues("1.0", [_issue(1, affects_version=False, category="regression")])
+    one = next(i for i in out if i["number"] == 1)
+    assert one["affects_version"] is False
 
 
 def test_fixed_status_merges_and_persists(led):

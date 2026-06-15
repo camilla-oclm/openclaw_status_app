@@ -473,6 +473,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .foot .meta code{font-family:var(--mono); color:var(--muted)}
 .foot a{color:var(--accent); text-decoration:none}
 .foot a:hover{text-decoration:underline}
+.foot .disclaimer{margin-top:1rem; font-size:.75rem; color:var(--faint); line-height:1.5}
 
 .errbox{max-width:600px; margin:4rem auto; text-align:center; color:var(--muted)}
 .errbox h2{color:var(--text); margin-bottom:.5rem}
@@ -1608,7 +1609,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         el("a",{href:"https://github.com/openclaw/openclaw/releases"}, "Releases ↗"),
         el("a",{href:"latest.json"}, "JSON API ↗"),
         el("a",{href:"llms.txt"}, "llms.txt (for AI agents) ↗")
-      ]))
+      ])),
+      el("div",{"class":"disclaimer"},
+        "Independent, unofficial project — not affiliated with, or endorsed by, OpenClaw or its maintainers. Verdicts are generated automatically and may be wrong; confirm against the linked issues before you update.")
     ]);
   }
 
@@ -1854,16 +1857,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return wrapChart(c, tLegend([["critical","var(--bad)"],["high","var(--orange)"],["medium","var(--warn)"],["low","var(--gray)"]]));
   }
   function verdictChart(tl){
-    var n=tl.length, c=chartSVG();
+    var p=tl.filter(function(r){ return !(r.approx && !r.issues); });  // same filter as siblings
+    if (p.length<2) return tEmpty();
+    var n=p.length, c=chartSVG();
     [[0,35,"var(--good)","update"],[35,63,"var(--warn)","care"],[63,88,"var(--info)","wait"],[88,100,"var(--bad)","skip"]].forEach(function(bd){
       var y1=py(c,bd[1],100), y2=py(c,bd[0],100);
       c.svg.appendChild(svgEl("rect",{x:c.l,y:y1,width:c.r-c.l,height:(y2-y1),fill:bd[2],opacity:"0.10"}));
       var lab=svgEl("text",{"class":"taxis2", x:c.r-2, y:(y1+y2)/2+3, "text-anchor":"end", fill:bd[2]}); lab.textContent=bd[3]; c.svg.appendChild(lab);
     });
-    var risk=tl.map(function(r){ return RISK[r.recommendation]||30; }), seq=[];
+    var risk=p.map(function(r){ return RISK[r.recommendation]||30; }), seq=[];
     for (var i=0;i<n;i++){ if(i) seq.push(px(c,i,n)+","+py(c,risk[i-1],100)); seq.push(px(c,i,n)+","+py(c,risk[i],100)); }
     c.svg.appendChild(svgEl("polyline",{points:seq.join(" "), fill:"none", stroke:"var(--accent)","stroke-width":2.5,"stroke-linejoin":"round","stroke-linecap":"round"}));
-    for (var j=1;j<n;j++){ if (tl[j].version!==tl[j-1].version){ var mx=px(c,j,n); c.svg.appendChild(svgEl("line",{x1:mx,x2:mx,y1:c.t,y2:c.b,stroke:"var(--accent2)","stroke-width":1,"stroke-dasharray":"2 3",opacity:"0.7"})); } }
+    for (var j=1;j<n;j++){ if (p[j].version!==p[j-1].version){ var mx=px(c,j,n); c.svg.appendChild(svgEl("line",{x1:mx,x2:mx,y1:c.t,y2:c.b,stroke:"var(--accent2)","stroke-width":1,"stroke-dasharray":"2 3",opacity:"0.7"})); } }
     c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,risk[n-1],100), r:"3", fill:"var(--accent)"}));
     return wrapChart(c, tLegend([["risk per run","var(--accent)"],["new version","var(--accent2)"]]));
   }
@@ -1881,12 +1886,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (!tl.length) return null;
     tl.sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
     tl = tl.slice(-30);
+    var real = tl.filter(function(r){ return !r.approx; });
+    // Real per-run points need ≥3 before a line means anything — two near-simultaneous
+    // seed points just draw a flat line that reads as placeholder data. The coarse
+    // per-version fallback (all-approx, one point per release) is a genuine trend at ≥2.
+    var enough = real.length ? real.length >= 3 : tl.length >= 2;
     var s=el("div",{"class":"section", id:"trends"});
     s.appendChild(sectionHead("Trends", null, "tracked every run · about every 6 hours"));
-    if (tl.length<2){   // need ≥2 points to draw a line — show the section, explain the wait
+    if (!enough){   // show the section but explain the wait rather than a misleading line
+      var n = real.length || tl.length;
       s.appendChild(el("div",{"class":"tcard"},[ el("div",{"class":"tc-empty"},
-        "Charts populate as runs accumulate (about every 6 hours). Tracking "+tl.length+
-        " run so far — check back after the next one.") ]));
+        "Charts populate as runs accumulate (about every 6 hours). Tracking "+n+
+        " run"+(n===1?"":"s")+" so far — check back after the next one.") ]));
       return s;
     }
     var grid=el("div",{"class":"trends-grid"});

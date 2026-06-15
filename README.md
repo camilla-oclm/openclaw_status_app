@@ -45,7 +45,8 @@ providers** argue it out before anything ships.
   (`latest.json`), an RSS feed, a status badge, and an **agent-readable mirror** (`llms.txt` /
   `llms-full.txt`) — plus server-rendered HTML + JSON-LD so search engines and LLM agents can read
   the answer without executing JavaScript.
-- **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (~$0.02–0.05/run).
+- **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (a few cents/run
+  typically, up to ~$0.08 when the validator disagrees and the analyst refines).
 - **Hermetic test suite.** 165+ network-free tests gate CI on every push.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
@@ -240,8 +241,9 @@ python3 run.py full                # collect → assess → render-assessment (c
 python3 run.py notify-test ["msg"] # send a test alert to ALERT_WEBHOOK_URL (verify the webhook)
 ```
 
-A full run takes **~2–3 min** end-to-end (measured ~143 s), almost all of it the
-analyst/validator LLM reasoning; collect and render are seconds. Cost ~$0.02–0.05/run.
+A full run takes **~2–5 min** end-to-end, almost all of it the analyst/validator LLM
+reasoning (longest when the validator disagrees and the analyst refines); collect and
+render are seconds. Cost is a few cents/run typically, up to ~$0.08 on a refinement run.
 
 To preview the page, open `web/index.html` in a browser.
 

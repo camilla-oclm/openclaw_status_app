@@ -469,8 +469,8 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     # Run cost is internal — keep it out of the public per-version payload.
     version_history = [{k: v for k, v in h.items() if k != "cost_usd"} for h in raw_history]
 
-    # Per-run metric time series for the Trends charts (cost/latency ARE surfaced here
-    # on purpose — the "pipeline cost & speed" chart is a transparency feature).
+    # Per-run metric time series for the Trends charts (cost & latency are stripped below
+    # — they're internal pipeline metrics, kept on disk but never shipped to the page).
     timeline = []
     if config.TIMELINE_FILE.exists():
         try:
@@ -534,7 +534,10 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         # Evidence-grounded per-platform impact (worst severity per surface from the
         # issue tags); the analyst's free-text value is only a fallback (it saturates).
         "platform_impact": _derive_platform_impact(known_issues) or a.get("platform_impact", {}),
-        "usage": {k: v for k, v in (assessment_raw.get("usage") or {}).items() if k != "cost_usd"},
+        # Token counts + model-call count are surfaced (they evidence the real multi-model
+        # pipeline); cost and latency are internal — kept off the public payload.
+        "usage": {k: v for k, v in (assessment_raw.get("usage") or {}).items()
+                  if k not in ("cost_usd", "latency_ms")},
         "version_history": version_history,
         "timeline": timeline,
         # Stable-release changelog (newest first) with extracted Highlights — the
@@ -793,6 +796,10 @@ def _llms_txt(data: dict) -> str:
         "evidence-backed verdict for each OpenClaw release — scouted from post-release bug reports "
         "and weighed by an independent multi-model LLM pipeline.",
         "",
+        "_Independent, unofficial project — not affiliated with or endorsed by OpenClaw or its "
+        "maintainers. Verdicts are generated automatically and may be wrong; confirm against the "
+        "linked issues before updating._",
+        "",
         "## Current verdict",
         "",
         f"- Subject: OpenClaw v{ver}",
@@ -1040,6 +1047,9 @@ def _seo_body(data: dict) -> str:
                "two-model review, refreshed every few hours.</p>")
     out.append('<p>Machine-readable: <a href="latest.json">JSON API</a> · '
                '<a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">full markdown</a></p>')
+    out.append('<p><small>Independent, unofficial project — not affiliated with or endorsed by '
+               'OpenClaw or its maintainers. Verdicts are generated automatically and may be wrong; '
+               'confirm against the linked issues before updating.</small></p>')
     out.append("</article>")
     return "\n".join(out)
 
@@ -1129,20 +1139,24 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
     try:
         with os.fdopen(tmp_fd, "w") as f:
             f.write(html)
-
         smoke = smoke_test_html(tmp_path, expected_version=version)
-        if not smoke["pass"]:
-            failed = [c for c in smoke["checks"] if not c["passed"]]
-            print(f"  ⚠️ SMOKE TEST FAILED ({len(failed)} checks):")
-            for c in failed:
-                print(f"    ❌ {c['name']}: {c['detail']}")
-            print(f"  Keeping previous version at: {out}")
+    except Exception as e:
+        # A write/smoke-test error must NOT publish: treat it as a failed deploy and
+        # keep the previous page rather than overwriting it with an untested one.
+        print(f"  ⚠️ SMOKE TEST ERRORED ({e}) — keeping previous version at: {out}")
+        if os.path.exists(tmp_path):
             os.unlink(tmp_path)
-            return ""
-        else:
-            print(f"  ✅ Smoke test passed ({len(smoke['checks'])} checks)")
-    except Exception:
-        pass
+        return ""
+
+    if not smoke["pass"]:
+        failed = [c for c in smoke["checks"] if not c["passed"]]
+        print(f"  ⚠️ SMOKE TEST FAILED ({len(failed)} checks):")
+        for c in failed:
+            print(f"    ❌ {c['name']}: {c['detail']}")
+        print(f"  Keeping previous version at: {out}")
+        os.unlink(tmp_path)
+        return ""
+    print(f"  ✅ Smoke test passed ({len(smoke['checks'])} checks)")
 
     # Smoke test passed — move tmp to final location
     shutil.move(tmp_path, out)
