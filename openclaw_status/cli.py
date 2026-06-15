@@ -77,6 +77,16 @@ def cmd_notify_test(args):
         sys.exit(1)
 
 
+def cmd_notify_failure(args):
+    """Fire a failure alert — wired to the systemd unit's OnFailure= so a hard pipeline
+    crash (git/collector/timeout) reaches the channel, not just the in-page staleness pill
+    after 7 days. Best-effort and always exits 0 so it can't itself fail the failure unit."""
+    from .lib import notify
+    unit = getattr(args, "unit", None) or "openclaw-status.service"
+    notify(f"🛑 OpenClaw Status: pipeline run FAILED ({unit}). The live page is unchanged "
+           f"(last good deploy stands). Inspect `journalctl -u {unit}` on the box.")
+
+
 def cmd_full(args):
     print("\n" + "=" * 60)
     print("OpenClaw Status — Full Pipeline")
@@ -119,6 +129,8 @@ def main():
     sub.add_parser("full", help="Full pipeline: collect → assess → render-assessment")
     nt = sub.add_parser("notify-test", help="Send a test alert to ALERT_WEBHOOK_URL")
     nt.add_argument("message", nargs="?", help="Optional custom message to send")
+    nf = sub.add_parser("notify-failure", help="Send a pipeline-failure alert (systemd OnFailure=)")
+    nf.add_argument("unit", nargs="?", help="Failed unit name (for the message)")
 
     args = parser.parse_args()
 
@@ -132,6 +144,7 @@ def main():
         "render-assessment": cmd_render_assessment,
         "full": cmd_full,
         "notify-test": cmd_notify_test,
+        "notify-failure": cmd_notify_failure,
     }
 
     if args.command in commands:

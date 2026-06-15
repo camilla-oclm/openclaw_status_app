@@ -1,0 +1,13 @@
+# OnFailure= handler for openclaw-status.service — POSTs a failure alert to
+# ALERT_WEBHOOK_URL (no-op if unset). Not enabled on its own; systemd starts it
+# only when the main service fails.
+[Unit]
+Description=OpenClaw Status — alert that the pipeline run failed
+
+[Service]
+Type=oneshot
+User=openclaw
+Group=openclaw
+WorkingDirectory=/opt/openclaw_status_app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py notify-failure openclaw-status.service

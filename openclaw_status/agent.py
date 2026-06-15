@@ -842,10 +842,20 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     save_json(config.ASSESSMENT_FILE, output)
     print(f"💾 Saved to: {config.ASSESSMENT_FILE}")
 
-    append_history(version, final_assessment, total_usage)
-    append_timeline(version, final_assessment, total_usage)
+    # Only fold this run into the persistent record (Past verdicts + Trends) if it's
+    # actually publishable. Otherwise the render-time deploy guard blocks the PAGE while
+    # history/timeline would still advance — leaving the shipped page out of sync with its
+    # own trend data. Reuse the guard so the two stay on identical criteria.
+    from openclaw_status.render import _can_deploy
+    deployable, block_reasons = _can_deploy(output)
+    if deployable:
+        append_history(version, final_assessment, total_usage)
+        append_timeline(version, final_assessment, total_usage)
+    else:
+        print(f"   ⏭️  Not publishable ({'; '.join(block_reasons)}) — skipping history/"
+              f"timeline so the shipped page and trend data stay consistent")
     for step in pipeline_steps:
-        log_usage(step["model"], step["usage"], True)
+        log_usage(step["model"], step["usage"], True)   # always log spend (budget tracking)
 
     # Check cost thresholds
     daily, monthly, alerts = check_cost_thresholds()

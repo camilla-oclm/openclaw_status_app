@@ -333,7 +333,7 @@ def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
         return found
     sev = str(severity or raw_issue.get("severity", "")).lower()
     cat = str(category or raw_issue.get("category", "")).lower()
-    if (cat == "regression" or sev in ("critical", "high")) \
+    if (cat in ("regression", "post_release") or sev in ("critical", "high")) \
             and _CORE_SIGNAL.search(text) and not _CHANNEL_SIGNAL.search(text):
         return ["all"]
     return []
@@ -1049,7 +1049,8 @@ def _seo_body(data: dict) -> str:
                '<a href="llms.txt">llms.txt</a> · <a href="llms-full.txt">full markdown</a></p>')
     out.append('<p><small>Independent, unofficial project — not affiliated with or endorsed by '
                'OpenClaw or its maintainers. Verdicts are generated automatically and may be wrong; '
-               'confirm against the linked issues before updating.</small></p>')
+               'confirm against the linked issues before updating. Data is drawn from the public '
+               'github.com/openclaw/openclaw issue tracker and releases via the GitHub API.</small></p>')
     out.append("</article>")
     return "\n".join(out)
 

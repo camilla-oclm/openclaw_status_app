@@ -327,13 +327,21 @@ def derive_severity(labels, thumbs_up: int = 0, comments: int = 0) -> str:
     return _SEV[base]
 
 
-def categorize(created_at: str, labels, affects_version: bool, impact: str, release_date: str) -> str:
-    """regression (post-release & affects this version, or labelled regression)
-    > diamond_lobster (top-rated tracked issue) > active."""
+def categorize(created_at: str, labels, affects_version: bool, impact: str,
+               release_date: str, title: str = "") -> str:
+    """regression (a CONFIRMED regression — `regression` label or a "regression" title)
+    > post_release (filed after the release & affects this version, but not confirmed as a
+    regression) > diamond_lobster (top-rated tracked issue) > active.
+
+    A bug merely filed after a release isn't necessarily a *regression* (worked before,
+    now broken) — calling every post-release issue a "regression" overstates the breakage.
+    So a regression must be explicitly flagged; the rest are honestly "post-release"."""
     low = [str(l).lower() for l in (labels or [])]
     after_release = bool(release_date) and (created_at or "")[:10] >= release_date[:10]
-    if "regression" in low or (after_release and affects_version):
+    if "regression" in low or "regression" in (title or "").lower():
         return "regression"
+    if after_release and affects_version:
+        return "post_release"
     if is_diamond(labels):
         return "diamond_lobster"
     return "active"
@@ -371,7 +379,7 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
         "affects_version": affects,
         "impact": impact,
         "severity": derive_severity(labels, thumbs, comments),
-        "category": categorize(created, labels, affects, impact, release_date),
+        "category": categorize(created, labels, affects, impact, release_date, title),
         "source": "github_api",
     }
 

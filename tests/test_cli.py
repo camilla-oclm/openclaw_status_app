@@ -1,8 +1,24 @@
 """Tests for openclaw_status.cli — run-log population from pipeline outputs."""
 import json
+import types
 
-from openclaw_status import cli, config
+from openclaw_status import cli, config, lib
 from openclaw_status.lib import RunLog
+
+
+def test_notify_failure_sends_message_with_unit(monkeypatch):
+    sent = []
+    monkeypatch.setattr(lib, "notify", lambda msg: sent.append(msg) or True)
+    cli.cmd_notify_failure(types.SimpleNamespace(unit="openclaw-status.service"))
+    assert sent, "expected a failure alert to be sent"
+    assert "FAILED" in sent[0] and "openclaw-status.service" in sent[0]
+
+
+def test_notify_failure_is_best_effort_when_webhook_unset(monkeypatch):
+    # notify() returns False when ALERT_WEBHOOK_URL is unset — the handler must not raise
+    # (it's the OnFailure= unit; it can't itself fail).
+    monkeypatch.setattr(lib, "notify", lambda msg: False)
+    cli.cmd_notify_failure(types.SimpleNamespace(unit=None))   # no exception = pass
 
 
 def test_populate_run_log_fills_from_outputs(tmp_path, monkeypatch):
