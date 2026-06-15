@@ -36,9 +36,9 @@ _OUTPUT_SCHEMA = """{
     "number": 12345,
     "severity": "high | medium | low",
     "category": "regression | diamond_lobster | active",
+    "platforms": ["linux"],
     "clawsweeper_decision": "keep_open | close | unknown",
-    "fixed_in": "version or null if not fixed",
-    "platforms": ["which platforms this issue affects — any of: windows, macos, linux, discord, slack, telegram; or [\\"all\\"] for a cross-platform/core issue; [] if not platform-specific"]
+    "fixed_in": "version or null if not fixed"
   }],
   "changes": {
     "breaking": [{"title": "...", "impact": "..."}],
@@ -76,7 +76,7 @@ RULES:
    - `changes.features`: items from "### Highlights" that are new features (not fixes)
    - Each item should have a concise `title` (1 line). Include the GitHub issue/PR number if referenced.
    - If the changelog only has a "### Highlights" section with bullet points, parse EACH bullet as a change. Categorize each bullet as a fix, feature, or breaking change based on its content. Include the PR/issue numbers listed in parentheses.
-10. **Tag every known issue with the platforms it affects** (`platforms`). Use the issue's text and labels: list the specific surfaces hit (windows/macos/linux/discord/slack/telegram), or `["all"]` for a cross-platform/core regression (build, memory, core engine, session/auth, etc.) that hits every platform. This MUST justify `platform_impact`: if you rate a platform medium/high, at least one known issue must name it — or be tagged `["all"]`. Leave `platforms: []` only when the issue genuinely isn't tied to any surface.
+10. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
 
 RECOMMENDATION GUIDELINES:
 - ✅ Update now: critical fix or high-value feature, no risky bugs, no open regressions
