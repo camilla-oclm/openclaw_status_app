@@ -1804,7 +1804,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var v=vmax*i/ticks, y=c.b-(c.b-c.t)*i/ticks;
       g.appendChild(svgEl("line",{x1:c.l,x2:c.r,y1:y,y2:y}));
       var lab=svgEl("text",{"class":"taxis2", x:c.l-4, y:y+3, "text-anchor":"end"});
-      lab.textContent = unit==="$" ? ("$"+v.toFixed(2)) : (unit==="s" ? (Math.round(v)+"s") : String(Math.round(v)));
+      lab.textContent = unit==="$" ? ("$"+v.toFixed(2)) : (unit==="s" ? (Math.round(v)+"s") : (unit==="%" ? (Math.round(v)+"%") : String(Math.round(v))));
       g.appendChild(lab);
     }
     c.svg.appendChild(g);
@@ -1867,18 +1867,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,risk[n-1],100), r:"3", fill:"var(--accent)"}));
     return wrapChart(c, tLegend([["risk per run","var(--accent)"],["new version","var(--accent2)"]]));
   }
-  function costChart(tl){
-    var p=tl.filter(function(r){ return (r.cost_usd||0)>0; });
+  function regressionShareChart(tl){
+    // What fraction of known issues are post-release regressions (vs pre-existing)?
+    var p=tl.filter(function(r){ return !(r.approx && !r.issues) && (r.issues||0)>0; });
     if (p.length<2) return tEmpty();
-    var n=p.length, cost=p.map(function(r){return r.cost_usd||0;}), lat=p.map(function(r){return (r.latency_ms||0)/1000;});
-    var c=chartSVG(); gridY(c,Math.max(maxOf(cost)*1.2, 0.02),3,"$");
-    plotLine(c,cost,Math.max(maxOf(cost)*1.2,0.02),n,"var(--accent)",2.5,true);
-    var legend=[["cost $"+cost[n-1].toFixed(3),"var(--accent)"]];
-    if (maxOf(lat)>0){   // latency only once real per-run timing exists (fallback rows have none)
-      plotLine(c,lat,Math.max(maxOf(lat)*1.2,1),n,"var(--accent2)",2,false,"4 3");
-      legend.push(["latency "+Math.round(lat[n-1])+"s","var(--accent2)"]);
-    }
-    return wrapChart(c, tLegend(legend));
+    var n=p.length, share=p.map(function(r){ return Math.round(100*(r.regressions||0)/(r.issues||1)); });
+    var c=chartSVG(); gridY(c,100,4,"%");
+    plotLine(c,share,100,n,"var(--orange)",2.5,true);
+    return wrapChart(c, tLegend([["regressions ÷ known issues — "+share[n-1]+"%","var(--orange)"]]));
   }
   function trends(){
     var tl=(DATA.timeline||[]).slice();
@@ -1897,7 +1893,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     grid.appendChild(tCard("Issue pressure","open issues & regressions per run", issuePressureChart(tl)));
     grid.appendChild(tCard("Severity mix","make-up of known issues", severityChart(tl)));
     grid.appendChild(tCard("Verdict","risk per run · higher = riskier", verdictChart(tl)));
-    grid.appendChild(tCard("Pipeline cost & speed","spend & wall-time per run", costChart(tl)));
+    grid.appendChild(tCard("Regression share","post-release regressions as a share of known issues", regressionShareChart(tl)));
     s.appendChild(grid);
     return s;
   }

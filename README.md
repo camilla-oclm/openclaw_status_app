@@ -159,16 +159,17 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
     re-scored to your stack and the matching issues highlighted (cross-cutting "all-platform"
     issues shown once in a shared row).
   - **Trends** — a 2×2 grid of time-series charts (issue pressure, severity mix, verdict, and
-    pipeline cost & speed) built from the per-run `timeline.json` (below).
+    regression share) built from the per-run `timeline.json` (below).
 - **`web/latest.json`** — the same payload written as a sibling file. The page renders from the
   inlined copy instantly, then `fetch()`es `latest.json` and re-renders if it's fresher — so a
   data refresh doesn't need a full HTML rebuild, while `file://` / offline viewing still works
   from the inlined copy.
 - **Per-run time series.** `data/timeline.json` gets one append-only snapshot every run (version,
-  verdict, confidence, issue/regression/severity counts, cost, latency) — *not* deduped by version,
-  so a release re-assessed each 6h becomes a curve, not a point. It's the data behind the Trends
-  charts; until it has ≥2 points the charts fall back to a coarse per-version series from
-  `history.json`. (`history.json` stays one row per version — it powers "Past verdicts".)
+  verdict, confidence, issue/regression/severity counts) — *not* deduped by version, so a release
+  re-assessed each 6h becomes a curve, not a point. It's the data behind the Trends charts; until it
+  has ≥2 points the charts fall back to a coarse per-version series from `history.json`.
+  (`history.json` stays one row per version — it powers "Past verdicts".) Per-run cost & latency are
+  also logged on disk for budget tracking but are **kept out of the public payload**.
 - **Browsable history.** Instead of discarding the outgoing page, each render snapshots it to
   `web/archive/<version>.html` (named from the version it was built for) and the "Past verdicts"
   timeline links every entry that has a snapshot. Past-version snapshots **self-canonicalise** (so
