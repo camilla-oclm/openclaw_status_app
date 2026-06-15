@@ -1895,8 +1895,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
-    [ lowConfBanner(), hero(v), bestVersion(), stats(), changes(), catchingUp(), personalize(), thesis(), evidence(),
-      issues(), platforms(), componentHealth(), sentiment(), trend(), triage(), history(), footer()
+    [ lowConfBanner(), hero(v), platforms(), componentHealth(), bestVersion(), stats(), changes(), catchingUp(),
+      personalize(), thesis(), evidence(), issues(), sentiment(), trend(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
     revealOn();
