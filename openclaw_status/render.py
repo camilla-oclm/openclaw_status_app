@@ -477,12 +477,17 @@ def _write_feed(data: dict, output_path: str) -> None:
 
 
 def _badge_svg(label: str, message: str, color: str) -> str:
-    """A self-contained shields-style SVG badge (no external dependency)."""
+    """A self-contained shields-style SVG badge (no external dependency).
+
+    Carries the ClawStat mark (white, mono) on the left of the label segment.
+    """
     def w(s):
         return int(len(s) * 6.6) + 12
-    lw, mw = w(label), w(message)
+    logo_w = 22                          # left gutter for the ClawStat mark
+    tlw, mw = w(label), w(message)
+    lw = logo_w + tlw                    # label (left) segment, logo + text
     total = lw + mw
-    lx, mx = lw / 2, lw + mw / 2
+    lx, mx = logo_w + tlw / 2, lw + mw / 2
     le, me = _xml_escape(label), _xml_escape(message)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{total}" height="20" role="img" '
@@ -495,6 +500,10 @@ def _badge_svg(label: str, message: str, color: str) -> str:
         f'<rect width="{lw}" height="20" fill="#444"/>\n'
         f'<rect x="{lw}" width="{mw}" height="20" fill="{color}"/>\n'
         f'<rect width="{total}" height="20" fill="url(#s)"/>\n'
+        '</g>\n'
+        '<g transform="translate(5,3) scale(0.14)">\n'
+        '<path d="M73 30.7 A30 30 0 1 0 73 69.3" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round"/>\n'
+        '<circle cx="50" cy="50" r="8" fill="#fff"/>\n'
         '</g>\n'
         '<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">\n'
         f'<text x="{lx:.0f}" y="15" fill="#010101" fill-opacity=".3">{le}</text>\n'
