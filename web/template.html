@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark light">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none'><path d='M73 30.7 A30 30 0 1 0 73 69.3' stroke='%2334d2e6' stroke-width='13' stroke-linecap='round'/><circle cx='50' cy='50' r='8' fill='%2334d2e6'/></svg>">
 <title>ClawStat.us — Should you update OpenClaw?</title>
 <link rel="alternate" type="text/markdown" href="llms-full.txt" title="Full verdict as markdown (for LLMs / agents)">
 <link rel="alternate" type="application/json" href="latest.json" title="Assessment JSON API">
@@ -108,10 +108,11 @@ body::after{
 }
 .brand{display:flex; align-items:center; gap:.6rem; font-weight:800; font-size:1.05rem; letter-spacing:-.02em}
 .brand .logo{
-  font-size:1.15rem; width:30px; height:30px; display:grid; place-items:center;
+  width:30px; height:30px; display:grid; place-items:center; color:var(--accent);
   border-radius:9px; background:var(--card2); border:1px solid var(--border2);
   box-shadow:inset 0 0 14px -6px var(--accent);
 }
+.brand .logo svg{display:block}
 .brand .wm{font-family:var(--display)}
 .brand .wm .dot{color:var(--accent)}
 .brand .dim{
@@ -474,7 +475,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 <body>
 
 <header class="topbar tone-muted">
-  <div class="brand"><span class="logo">🦞</span> <span class="wm">ClawStat<span class="dot">.</span>us</span> <span class="dim">release health</span></div>
+  <div class="brand"><span class="logo"><svg viewBox="0 0 100 100" width="20" height="20" fill="none" aria-hidden="true"><path d="M73 30.7 A30 30 0 1 0 73 69.3" stroke="currentColor" stroke-width="13" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="currentColor"/></svg></span> <span class="wm">ClawStat<span class="dot">.</span>us</span> <span class="dim">release health</span></div>
   <div class="bar-right">
     <span id="fresh" class="fresh tone-muted" hidden><span class="dot"></span><span id="fresh-text"></span></span>
     <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle theme" title="Toggle light/dark">🌙</button>
