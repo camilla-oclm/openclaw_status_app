@@ -305,6 +305,7 @@ body::after{
 .tag.t-warn{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
 .tag.t-good{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
 .tag.t-info{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
+.tag.t-plat{color:var(--text); border-color:var(--border2); background:var(--card2); font-weight:700}
 .issue.mine{border-color:var(--info-bd); box-shadow:0 0 0 1px var(--info-bd), var(--shadow-1)}
 .tag.t-me{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
 
@@ -972,6 +973,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ["windows","🪟","Windows"],["macos","🍎","macOS"],["linux","🐧","Linux"],
     ["discord","💬","Discord"],["slack","💼","Slack"],["telegram","✈️","Telegram"]
   ];
+  var PLAT_LABEL = {}; PLAT.forEach(function(p){ PLAT_LABEL[p[0]] = [p[1], p[2]]; });
   var IMPACT = {none:{label:"None",w:10},low:{label:"Low",w:38},medium:{label:"Medium",w:68},high:{label:"High",w:100}};
 
   // ── personalization: the user's platform/channel "stack" (localStorage) ──
@@ -987,7 +989,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function stackKeys(){ var a=[]; for (var k in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k) && STACK[k]) a.push(k); } return a; }
   function stackActive(){ return stackKeys().length > 0; }
   function saveStack(){ try { localStorage.setItem("oc-stack", JSON.stringify(stackKeys())); } catch(e){} }
-  // Keyword match for "does this issue touch the user's stack" (heuristic, title-only).
+  // Title keyword match — the FALLBACK for issues with no analyst `platforms` tag.
   var STACK_MATCH = {
     windows:/windows|win32|\.exe|powershell/i,
     macos:/macos|mac os|imessage|\bios\b|apple|darwin/i,
@@ -996,12 +998,26 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     slack:/slack/i,
     telegram:/telegram/i
   };
-  function issueHitsStack(title){
-    var keys = stackKeys();
-    for (var i=0;i<keys.length;i++){
-      var re = STACK_MATCH[keys[i]];
-      if (re && re.test(String(title||""))) return true;
+  var PLAT_KEYS = {windows:1,macos:1,linux:1,discord:1,slack:1,telegram:1,all:1};
+  // Surfaces an issue hits: prefer the analyst's structured `platforms`; if absent
+  // (pre-structured assessments), fall back to the title keyword heuristic.
+  function issuePlatforms(i){
+    var out = [], raw = i && i.platforms;
+    if (Array.isArray(raw)){
+      raw.forEach(function(p){ p=String(p||"").toLowerCase(); if (PLAT_KEYS[p] && out.indexOf(p)<0) out.push(p); });
     }
+    if (out.length) return out;
+    var title = String((i && i.title) || "");
+    for (var k in STACK_MATCH){ if (STACK_MATCH[k].test(title)) out.push(k); }
+    return out;
+  }
+  // Does this issue touch the user's selected stack? ("all"/core hits everyone.)
+  function issueHitsStack(i){
+    if (!stackActive()) return false;
+    var ps = issuePlatforms(i);
+    if (ps.indexOf("all") >= 0) return true;
+    var keys = stackKeys();
+    for (var j=0;j<keys.length;j++){ if (ps.indexOf(keys[j]) >= 0) return true; }
     return false;
   }
   // Risk height (%) per verdict for the release-health trend — taller = riskier.
@@ -1178,9 +1194,19 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
   function issueCard(i){
     var sev = String(i.severity||"medium");
-    var mine = stackActive() && issueHitsStack(i.title);
+    var mine = issueHitsStack(i);
     var cat = CAT[i.category] || {icon:"📋",label:cap(i.category||"issue"),cls:""};
     var tags = [ el("span",{"class":"tag "+cat.cls},[cat.icon+" "+cat.label]) ];
+    // System(s) this issue hits — analyst-tagged, heuristic fallback (see issuePlatforms).
+    var ips = issuePlatforms(i);
+    if (ips.indexOf("all") >= 0){
+      tags.push(el("span",{"class":"tag t-plat"}, "🌐 All platforms"));
+    } else {
+      ips.slice(0,4).forEach(function(pk){
+        var meta = PLAT_LABEL[pk];
+        if (meta) tags.push(el("span",{"class":"tag t-plat"}, meta[0]+" "+meta[1]));
+      });
+    }
     if (i.affects_version){
       tags.push(el("span",{"class":"tag t-bad"}, "⊘ affects this version"));
     }
@@ -1235,7 +1261,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":c}, meta.icon+" "+meta.label+" ("+cats[c]+")"));
     });
     if (stackActive()){
-      var mineN = ki.filter(function(i){ return issueHitsStack(i.title); }).length;
+      var mineN = ki.filter(function(i){ return issueHitsStack(i); }).length;
       filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":"mine"}, "★ My stack ("+mineN+")"));
     }
     s.appendChild(filters);
@@ -1304,7 +1330,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function platforms(){
     var pi = DATA.platform_impact || {};
     if (!Object.keys(pi).length) return null;
-    var s = el("div",{"class":"section"});
+    var s = el("div",{"class":"section", id:"platforms"});
     s.appendChild(sectionHead("Platform impact", null, "how hard each surface is hit"));
     var SEG = {none:1, low:2, medium:3, high:4};
     var g = el("div",{"class":"plat-grid"});
@@ -1466,9 +1492,38 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var k = b.getAttribute("data-k");
       if (STACK[k]) delete STACK[k]; else STACK[k]=true;
       saveStack();
-      render();   // re-render so issue highlights / platform marks / risk update in place
+      applyStack();   // update only the stack-dependent bits — no full-page re-render/flash
     });
     return s;
+  }
+  // Toggling the stack only affects three sections. Update them in place (no
+  // #app teardown) so the page doesn't flash, scroll holds, and other sections'
+  // state (catch-up version, changes tab, issue filter) is preserved.
+  function applyStack(){
+    var setup = document.getElementById("setup");
+    if (setup){
+      setup.querySelectorAll(".pick").forEach(function(b){
+        b.setAttribute("aria-pressed", STACK[b.getAttribute("data-k")] ? "true" : "false");
+      });
+      var risk = setup.querySelector(".risk, .hint");
+      if (risk) risk.parentNode.replaceChild(personalRisk(), risk);
+    }
+    var oldI = document.getElementById("issues");
+    if (oldI){
+      var af = oldI.querySelector('.fbtn[aria-pressed="true"]');
+      af = af ? af.getAttribute("data-f") : "all";
+      var freshI = issues();
+      if (freshI){
+        oldI.parentNode.replaceChild(freshI, oldI);
+        if (af && af !== "all"){
+          var b = freshI.querySelector('.fbtn[data-f="'+af+'"]');
+          if (b) b.click();   // re-apply the previously active filter (else stays "all")
+        }
+      }
+    }
+    var oldP = document.getElementById("platforms");
+    if (oldP){ var fp = platforms(); if (fp) oldP.parentNode.replaceChild(fp, oldP); }
+    addAnchors();   // rebuilt sections lost their permalink "#" — re-add (idempotent)
   }
   function personalRisk(){
     if (!stackActive()){
@@ -1480,10 +1535,21 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var labelOf = {}, emojiOf = {};
     PLAT.forEach(function(p){ labelOf[p[0]]=p[2]; emojiOf[p[0]]=p[1]; });
     var W = {none:0,low:1,medium:2,high:3};
+    // Issues hitting a surface = tagged for it, OR tagged "all" (core hits every surface).
     function issuesFor(k){
-      var re = STACK_MATCH[k]; if (!re) return [];
-      return ki.filter(function(i){ return re.test(String(i.title||"")); });
+      return ki.filter(function(i){
+        var ps = issuePlatforms(i);
+        return ps.indexOf(k) >= 0 || ps.indexOf("all") >= 0;
+      });
     }
+    // Cross-cutting regressions: serious issues tagged "all" (or unattributed) —
+    // what drives a high/medium rating when nothing names the surface specifically.
+    var coreIssues = ki.filter(function(i){
+      var sv = String(i.severity||"");
+      if (!(sv==="critical"||sv==="high")) return false;
+      var ps = issuePlatforms(i);
+      return ps.indexOf("all") >= 0 || ps.length === 0;
+    });
     // One row per selected platform, worst impact first — the actual insight.
     var rows = keys.map(function(k){
       var lv = String(pi[k]||"none").toLowerCase();
@@ -1514,7 +1580,17 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         if (r.iss.length>5) kids.push(document.createTextNode(" +"+(r.iss.length-5)+" more"));
         detail = el("span",{"class":"pdetail"}, kids);
       } else if (r.w>=2){
-        detail = el("span",{"class":"pdetail muted2"}, "no issue names it directly — exposure is via shared/core regressions");
+        var core = coreIssues.slice(0,3);
+        if (core.length){
+          var ck = [document.createTextNode("no issue names it directly — driven by cross-cutting core regressions: ")];
+          core.forEach(function(it,idx){
+            if (idx) ck.push(document.createTextNode(", "));
+            ck.push(el("a",{"class":"ilink", href:issueUrl(it.number)}, "#"+it.number));
+          });
+          detail = el("span",{"class":"pdetail muted2"}, ck);
+        } else {
+          detail = el("span",{"class":"pdetail muted2"}, "rated from cross-cutting regressions — see Known issues below");
+        }
       } else {
         detail = el("span",{"class":"pdetail muted2"}, "clear this release");
       }
@@ -1612,7 +1688,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         (r.highlights||[]).forEach(function(h){ ul.appendChild(el("li", null, linkify(h))); });
         if (!(r.highlights||[]).length) ul.appendChild(el("li",{"class":"empty"}, "(no highlights parsed for this release)"));
         out.appendChild(el("div",{"class":"cu-rel"},[
-          el("div",{"class":"cu-rh"},[ el("span",{"class":"cu-ver"}, "v"+r.version), el("span",{"class":"cu-date"}, r.published_at) ]),
+          el("div",{"class":"cu-rh"},[ el("span",{"class":"cu-ver"}, "v"+r.version), r.published_at ? el("span",{"class":"cu-date"}, " · "+r.published_at) : null ]),
           ul
         ]));
       });

@@ -237,6 +237,23 @@ def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
     assert sorted(data["archived_versions"]) == ["2026.5.28", "2026.6.1"]
 
 
+def test_norm_platforms_keeps_known_tokens_and_drops_junk():
+    assert render._norm_platforms(["Linux", "WIN", "osx", "discord", "haxxor"]) == \
+        ["linux", "windows", "macos", "discord"]
+    assert render._norm_platforms(["all", "all"]) == ["all"]       # dedup
+    assert render._norm_platforms("linux") == []                   # not a list
+    assert render._norm_platforms(None) == []
+
+
+def test_build_passes_issue_platforms_through():
+    raw = {"sources": {"github_issues": [{"number": 7}]}}
+    assessment = {"assessment": {"known_issues": [
+        {"number": 7, "title": "boom", "severity": "high", "platforms": ["Linux", "all", "nope"]}
+    ]}, "version": "2.0"}
+    ki = render._build_assessment_data(assessment, raw)["known_issues"][0]
+    assert ki["platforms"] == ["linux", "all"]
+
+
 # ── shareable artifacts + changelog ──────────────────────────────────────────
 
 def test_extract_highlights_pulls_bullets():
@@ -245,6 +262,16 @@ def test_extract_highlights_pulls_bullets():
     assert hl[0].startswith("First thing")
     assert "Second thing" in hl
     assert all("not this" not in h for h in hl)
+
+
+def test_extract_highlights_truncates_on_word_boundary():
+    # A long bullet must not be sliced mid-word; it gets an ellipsis instead.
+    long = "word " * 80  # ~400 chars, well over the 240 cap
+    body = "### Highlights\n- " + long + "\n"
+    h = render._extract_highlights(body)[0]
+    assert len(h) <= 241          # 240 cap + the ellipsis
+    assert h.endswith("…")
+    assert h.replace("…", "").endswith("word")   # cut landed on a word boundary, not "wo…"
 
 
 def test_write_feed_emits_rss(tmp_path, monkeypatch):
