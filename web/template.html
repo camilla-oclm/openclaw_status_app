@@ -415,6 +415,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .risk .pdetail{color:var(--muted); font-size:.82rem}
 .risk .pdetail.muted2{color:var(--faint); font-style:italic}
 .risk .prow-all{margin-top:.5rem; padding-top:.6rem; border-top:1px dashed var(--border2)}
+.risk .ccnote{color:var(--faint); font-style:italic}
 
 /* ── release-health trend: SVG area chart ──────────────────────────────── */
 .trend{background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--border); border-radius:var(--r-md); padding:1.2rem 1.3rem 1rem; box-shadow:var(--shadow-1)}
@@ -1763,9 +1764,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       crossCutting.forEach(function(it){ var s=String(it.severity||"low").toLowerCase(), w=SEVW[s]||0; if (w>ccW){ ccW=w; ccN=s; } });
       var ccLvl = ccN ? SEV_IMP[ccN] : "none";
       list.appendChild(el("div",{"class":"prow prow-all"},[
-        el("span",{"class":"ppn"}, "🌐 All platforms"),
+        el("span",{"class":"ppn"}, "🌐 All platforms & channels"),
         el("span",{"class":"pbadge imp-"+ccLvl}, (IMPACT[ccLvl]||IMPACT.none).label),
-        el("span",{"class":"pdetail"}, issueLinks(crossCutting, 5))
+        el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "core issues that hit every OS and channel — "), ].concat(issueLinks(crossCutting, 5)))
       ]));
     }
 
