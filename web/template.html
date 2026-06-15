@@ -334,7 +334,10 @@ body::after{
 .empty{color:var(--faint); font-size:.88rem; padding:.6rem 0}
 
 /* ── platform impact: segmented dashboard meters ───────────────────────── */
-.plat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.8rem}
+/* 3 columns at the 1000px content cap → clean rows for both grids (6 platforms,
+   9 components). Bar + count are stacked so the meter always spans the full card
+   width (an inline count label used to squeeze the segments into thin slivers). */
+.plat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:.8rem}
 .plat{
   background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--border);
   border-radius:var(--r-md); padding:.9rem 1rem; box-shadow:var(--shadow-1);
@@ -342,11 +345,11 @@ body::after{
 .plat .ph{display:flex; align-items:center; gap:.4rem; min-width:0}
 .plat .pn{font-weight:700; font-size:.88rem; display:flex; align-items:center; gap:.4rem; min-width:0; flex:1}
 .plat .pname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.plat .pmeter{display:flex; align-items:center; gap:.65rem; margin-top:.75rem}
-.plat .seg{display:flex; gap:4px; flex:1}
-.plat .seg i{flex:1; height:7px; border-radius:3px; background:var(--card3); border:1px solid var(--border)}
+.plat .pmeter{display:flex; flex-direction:column; align-items:flex-start; gap:.5rem; margin-top:.8rem}
+.plat .seg{display:flex; gap:5px; width:100%}
+.plat .seg i{flex:1; height:9px; border-radius:3px; background:var(--card3); border:1px solid var(--border)}
 .plat .seg i.on{background:var(--ic); border-color:var(--ic); box-shadow:0 0 10px -3px var(--ic)}
-.plat .pl{flex:none; font-size:.62rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--ic); padding:.1rem .45rem; border:1px solid var(--ic); border-radius:999px; min-width:3.7rem; text-align:center}
+.plat .pl{font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--ic)}
 .plat.you{outline:2px solid var(--accent); outline-offset:2px}
 .plat .me{flex:none; white-space:nowrap; font-size:.6rem; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:.04em}
 
