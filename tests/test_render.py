@@ -245,6 +245,32 @@ def test_norm_platforms_keeps_known_tokens_and_drops_junk():
     assert render._norm_platforms(None) == []
 
 
+def test_derive_platforms_from_text():
+    # specific surface by keyword (title/body/labels)
+    assert render._derive_platforms({"title": "Docker self-hosted deploy fails"}) == ["linux"]
+    assert render._derive_platforms({"title": "x", "body": "crashes on Windows only"}) == ["windows"]
+    assert render._derive_platforms({"title": "Discord bot offline"}) == ["discord"]
+    assert render._derive_platforms({"title": "x", "labels": [{"name": "platform:macos"}]}) == ["macos"]
+    # serious core regression naming no surface -> "all"
+    assert render._derive_platforms({"title": "memory index reindex race"},
+                                    severity="critical", category="regression") == ["all"]
+    # a channel-specific crash is NOT "all"
+    assert render._derive_platforms({"title": "msteams channel crash-loop"},
+                                    severity="critical", category="regression") == []
+    # benign, unattributed -> nothing
+    assert render._derive_platforms({"title": "typo in docs"}, severity="low") == []
+
+
+def test_build_derives_platforms_when_analyst_absent():
+    raw = {"sources": {"github_issues": [
+        {"number": 7, "title": "Docker build broken", "severity": "high", "category": "regression"}]}}
+    assessment = {"assessment": {"known_issues": [
+        {"number": 7, "title": "Docker build broken", "severity": "high", "category": "regression"}]},
+        "version": "2.0"}
+    ki = render._build_assessment_data(assessment, raw)["known_issues"][0]
+    assert ki["platforms"] == ["linux"]   # derived, no analyst tag present
+
+
 def test_build_passes_issue_platforms_through():
     raw = {"sources": {"github_issues": [{"number": 7}]}}
     assessment = {"assessment": {"known_issues": [

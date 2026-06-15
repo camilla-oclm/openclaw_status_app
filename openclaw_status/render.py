@@ -273,6 +273,47 @@ def _norm_platforms(value) -> list:
     return out
 
 
+# Deterministic platform derivation from an issue's text (title + body + labels) — the
+# always-on baseline that doesn't depend on the LLM (and survives a cheap re-render).
+_PLATFORM_SIGNALS = {
+    "windows": r"windows|win32|\.exe|powershell|\bwsl\b",
+    "macos": r"macos|mac os|\bosx\b|darwin|imessage|\bapple\b",
+    "linux": r"linux|docker|container|systemd|ubuntu|debian|cgroup|self-hosted|kubernetes|\bk8s\b",
+    "discord": r"discord",
+    "slack": r"slack",
+    "telegram": r"telegram",
+}
+_CORE_SIGNAL = re.compile(
+    r"\b(build|compile|memory|index|reindex|engine|session|auth|gateway|database|migration|startup|worker|core)\b",
+    re.IGNORECASE,
+)
+# A serious core regression that names a *channel* surface isn't "all platforms".
+_CHANNEL_SIGNAL = re.compile(r"msteams|teams|wechat|whatsapp|signal|matrix|imessage|channel|plugin", re.IGNORECASE)
+
+
+def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
+    """Heuristic surfaces an issue hits, from its title + body + labels. Specific
+    platforms by keyword; a serious core regression that names no surface → ["all"]."""
+    if not isinstance(raw_issue, dict):
+        return []
+    labels = raw_issue.get("labels") or []
+    label_text = " ".join((l.get("name", "") if isinstance(l, dict) else str(l)) for l in labels)
+    text = " ".join([
+        str(raw_issue.get("title", "")),
+        str(raw_issue.get("body", ""))[:600],
+        label_text,
+    ]).lower()
+    found = [k for k, pat in _PLATFORM_SIGNALS.items() if re.search(pat, text)]
+    if found:
+        return found
+    sev = str(severity or raw_issue.get("severity", "")).lower()
+    cat = str(category or raw_issue.get("category", "")).lower()
+    if (cat == "regression" or sev in ("critical", "high")) \
+            and _CORE_SIGNAL.search(text) and not _CHANNEL_SIGNAL.search(text):
+        return ["all"]
+    return []
+
+
 def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     """Merge assessment.json + raw-data.json into the flat DATA dict the template expects."""
     a = assessment_raw.get("assessment", {})
@@ -312,9 +353,10 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "reactions": raw_i.get("reactions", 0),
             "impact": raw_i.get("impact"),
             "affects_version": raw_i.get("affects_version", False),
-            # Analyst-tagged surfaces this issue hits (falls back to a title
-            # keyword heuristic client-side when absent / pre-structured data).
-            "platforms": _norm_platforms(issue.get("platforms")),
+            # Surfaces this issue hits: the analyst's tags if it emitted any, else a
+            # deterministic derivation from the issue's title/body/labels.
+            "platforms": _norm_platforms(issue.get("platforms"))
+                         or _derive_platforms(raw_i, issue.get("severity"), issue.get("category")),
             # Ledger-derived: "new since last run" badge + issue age.
             "is_new": bool(issue.get("is_new")),
             "first_seen": issue.get("first_seen") or raw_i.get("first_seen"),

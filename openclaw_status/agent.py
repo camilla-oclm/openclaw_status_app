@@ -744,7 +744,16 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     from openclaw_status import ledger
     accumulated = (raw.get("sources") or {}).get("github_issues", [])
     if accumulated:
-        final_assessment["known_issues"] = ledger.display_known_issues(accumulated)
+        # The ledger list doesn't carry the analyst's per-issue `platforms`; preserve
+        # them (matched by number) so the model's semantic tags survive the replacement.
+        analyst_plat = {i.get("number"): i.get("platforms")
+                        for i in (final_assessment.get("known_issues") or [])
+                        if isinstance(i, dict) and i.get("platforms")}
+        ledger_issues = ledger.display_known_issues(accumulated)
+        for it in ledger_issues:
+            if it.get("number") in analyst_plat:
+                it["platforms"] = analyst_plat[it["number"]]
+        final_assessment["known_issues"] = ledger_issues
 
     # ── Final output ──
     rec = final_assessment.get("recommendation", "?")
