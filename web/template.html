@@ -173,6 +173,13 @@ body::after{
   box-shadow:inset 0 0 24px -14px var(--tone);
 }
 .verdict .em{font-size:1.5rem; line-height:1}
+/* verdict pill / pre-release chip as links to the GitHub release */
+a.verdict{text-decoration:none; cursor:pointer; transition:filter .15s var(--ease), box-shadow .15s var(--ease)}
+a.verdict:hover{filter:brightness(1.07); box-shadow:inset 0 0 24px -10px var(--tone), 0 0 0 1px var(--tone-bd)}
+.verdict .v-ext{font-size:.9rem; opacity:.65; margin-left:.15rem; align-self:flex-start}
+a.chip{text-decoration:none; cursor:pointer; transition:border-color .15s var(--ease), color .15s var(--ease)}
+a.chip:hover{border-color:var(--accent); color:var(--text)}
+.chip .v-ext{font-size:.72rem; opacity:.7; margin-left:.1rem}
 .verdict-blurb{margin-top:.85rem; color:var(--text); font-weight:600; font-size:1.02rem}
 .hero-headline{margin-top:.5rem; color:var(--muted); font-size:.95rem; max-width:60ch}
 .conf-row{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.1rem; align-items:center}
@@ -343,8 +350,11 @@ body::after{
   transition:color .15s var(--ease), background .15s var(--ease);
 }
 .ltab:hover{color:var(--text)}
-.ltab[aria-selected="true"]{color:var(--text); background:var(--card); border-color:var(--border); border-bottom-color:var(--card)}
-.ltab[aria-selected="true"]::after{content:""; position:absolute; left:1rem; right:1rem; bottom:-1px; height:2px; background:var(--accent); border-radius:2px}
+.ltab[aria-selected="true"], .ltab[aria-pressed="true"]{color:var(--text); background:var(--card); border-color:var(--border); border-bottom-color:var(--card)}
+.ltab[aria-selected="true"]::after, .ltab[aria-pressed="true"]::after{content:""; position:absolute; left:1rem; right:1rem; bottom:-1px; height:2px; background:var(--accent); border-radius:2px}
+/* Known-issues category tabs reuse .ltabs/.ltab; subsystem chips sit on a row below. */
+.ki-cats{margin-bottom:1rem}
+.ki-subs{margin-top:0}
 .ltab:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 .ltab-panel:focus{outline:none}
 .ltab-panel .section:first-child{margin-top:1.4rem}
@@ -1242,13 +1252,23 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       el("span",{"class":"chip lvl-"+conf, title:CONF_DESC[conf]||""},[document.createTextNode("Confidence: "), el("b",null,cap(conf))]),
       el("span",{"class":"chip"},[document.createTextNode("Assessed "), el("b",null,timeAgo(DATA.assessed_at))])
     ];
-    if (pre.tag) chips.push(el("span",{"class":"chip", title:"A newer pre-release exists, but it's unverified — its fixes for the issues below aren't confirmed."},[el("b",null,"Pre-release "+pre.tag)," available"]));
+    if (pre.tag){
+      var preTip = "A newer pre-release exists, but it's unverified — its fixes for the issues below aren't confirmed.";
+      var preKids = [el("b",null,"Pre-release "+pre.tag)," available"];
+      chips.push(pre.url
+        ? el("a",{"class":"chip chip-link", href:pre.url, title:"View "+pre.tag+" on GitHub. "+preTip},
+            preKids.concat(el("span",{"class":"v-ext","aria-hidden":"true"},"↗")))
+        : el("span",{"class":"chip", title:preTip}, preKids));
+    }
 
     var main = el("div",{"class":"hero-main"},[
       el("div",{"class":"eyebrow"},"Release assessment"),
       el("div",{"class":"hero-version"},["OpenClaw ", el("span",{"class":"vnum"},"v"+(DATA.version||"?"))]),
       el("div",{"class":"hero-sub"}, subNodes),
-      el("div",{"class":"verdict "+v.tone},[el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label)]),
+      (rel.url
+        ? el("a",{"class":"verdict "+v.tone, href:rel.url, title:"View the OpenClaw v"+(DATA.version||"")+" release on GitHub"},
+            [el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label), el("span",{"class":"v-ext","aria-hidden":"true"},"↗")])
+        : el("div",{"class":"verdict "+v.tone},[el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label)])),
       el("div",{"class":"verdict-blurb"}, v.blurb),
       DATA.headline ? el("div",{"class":"hero-headline"}, DATA.headline) : null,
       el("div",{"class":"conf-row"}, chips)
@@ -1402,39 +1422,44 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
     var cats = {};
     ki.forEach(function(i){ if(i.category) cats[i.category]=(cats[i.category]||0)+1; });
-    var filters = el("div",{"class":"filters"});
-    var allBtn = el("button",{"class":"fbtn", type:"button", "aria-pressed":"true", "data-f":"all"}, "All ("+ki.length+")");
-    filters.appendChild(allBtn);
+    // Category filters render as a tab strip (styled like the long-tail tabs above);
+    // subsystem filters sit on a secondary row below. Both feed ONE mutually-exclusive
+    // selection (a subsystem tab and a category tab can't both be active).
+    var catStrip = el("div",{"class":"ltabs ki-cats", role:"group", "aria-label":"Filter known issues by category"});
+    catStrip.appendChild(el("button",{"class":"ltab", type:"button", "aria-pressed":"true", "data-f":"all"}, "All ("+ki.length+")"));
     Object.keys(cats).forEach(function(c){
       var meta = CAT[c]||{icon:"📋",label:cap(c)};
-      filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":c}, meta.icon+" "+meta.label+" ("+cats[c]+")"));
+      catStrip.appendChild(el("button",{"class":"ltab", type:"button", "aria-pressed":"false", "data-f":c}, meta.icon+" "+meta.label+" ("+cats[c]+")"));
     });
     if (stackActive()){
       var mineN = ki.filter(function(i){ return issueHitsStack(i); }).length;
-      filters.appendChild(el("button",{"class":"fbtn", type:"button", "aria-pressed":"false", "data-f":"mine"}, "★ My stack ("+mineN+")"));
+      catStrip.appendChild(el("button",{"class":"ltab", type:"button", "aria-pressed":"false", "data-f":"mine"}, "★ My stack ("+mineN+")"));
     }
+    s.appendChild(catStrip);
+
     // Component filters — one chip per subsystem present, in taxonomy order.
     var compCounts = {};
     ki.forEach(function(i){ issueComponents(i).forEach(function(c){ compCounts[c]=(compCounts[c]||0)+1; }); });
     var compKeys = COMP.map(function(c){return c[0];}).filter(function(k){ return compCounts[k]; });
+    var compRow = null;
     if (compKeys.length){
-      filters.appendChild(el("span",{"class":"fsep"}, "subsystem"));
+      compRow = el("div",{"class":"filters ki-subs"});
+      compRow.appendChild(el("span",{"class":"fsep"}, "subsystem"));
       compKeys.forEach(function(k){
         var m = COMP_LABEL[k];
-        filters.appendChild(el("button",{"class":"fbtn fcomp", type:"button", "aria-pressed":"false", "data-f":"comp:"+k},
+        compRow.appendChild(el("button",{"class":"fbtn fcomp", type:"button", "aria-pressed":"false", "data-f":"comp:"+k},
           m[0]+" "+m[1]+" ("+compCounts[k]+")"));
       });
+      s.appendChild(compRow);
     }
-    s.appendChild(filters);
 
     var list = el("div",{"class":"issue-list"});
     ki.forEach(function(i){ list.appendChild(issueCard(i)); });
     s.appendChild(list);
 
-    filters.addEventListener("click", function(ev){
-      var btn = ev.target.closest(".fbtn"); if(!btn) return;
-      var f = btn.getAttribute("data-f");
-      filters.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b===btn?"true":"false"); });
+    function applyFilter(f){
+      catStrip.querySelectorAll(".ltab").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===f?"true":"false"); });
+      if (compRow) compRow.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===f?"true":"false"); });
       list.querySelectorAll(".issue").forEach(function(row){
         var show;
         if (f==="all") show = true;
@@ -1443,6 +1468,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         else show = row.getAttribute("data-cat")===f;
         row.style.display = show ? "" : "none";
       });
+    }
+    s.addEventListener("click", function(ev){
+      var btn = ev.target.closest(".ki-cats .ltab, .ki-subs .fbtn"); if(!btn) return;
+      applyFilter(btn.getAttribute("data-f"));
     });
     return s;
   }
@@ -2081,9 +2110,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function tabbedLongTail(){
     var groups = [
       {key:"impact",  label:"Impact",     build:[impact, triage]},
-      {key:"history", label:"History",    build:[history]},
+      {key:"new",     label:"What's new", build:[changes, catchingUp]},
       {key:"trends",  label:"Trends",     build:[trends]},
-      {key:"new",     label:"What's new", build:[changes, catchingUp]}
+      {key:"history", label:"History",    build:[history]}
     ];
     var tablist = el("div",{"class":"ltabs", role:"tablist", "aria-label":"More detail"});
     var panelsWrap = el("div",{"class":"ltab-panels"});
@@ -2147,12 +2176,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
     // Order: lead with the decision-relevant content as one always-visible scroll
-    // — verdict → your-setup → reasoning (why+sentiment → case) → known issues —
-    // then group the secondary detail (impact meters, past verdicts, trends/triage,
-    // changelog) behind tabbedLongTail() to cut clutter; footer stays at the bottom.
+    // — verdict → your-setup → reasoning (why+sentiment → case) — then the long-tail
+    // tab strip (Impact / What's new / Trends / History), and below it the Known
+    // issues section (its own category-tab strip); footer stays at the bottom.
     [ lowConfBanner(), hero(v), about(), bestVersion(), stats(),
-      personalize(), thesis(), evidence(), issues(),
+      personalize(), thesis(), evidence(),
       tabbedLongTail(),
+      issues(),
       footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
