@@ -331,6 +331,23 @@ body::after{
 .tab:hover{color:var(--text)}
 .tab[aria-selected="true"]{background:var(--card3); color:var(--text); border-color:var(--accent)}
 .tab .cnt{font-family:var(--mono); font-size:.74rem; background:var(--bg-elev); padding:.05rem .42rem; border-radius:6px; color:var(--muted)}
+/* ── top-level long-tail tabs (Impact / History / Trends / What's new) ─────────
+   Group the secondary detail below the always-visible decision. Namespaced .ltab*
+   so they never collide with the inner .tab pills used inside the changelog. */
+.ltab-wrap{margin-top:2.8rem}
+.ltabs{display:flex; gap:.25rem; flex-wrap:wrap; border-bottom:1px solid var(--border)}
+.ltab{
+  font-family:var(--display); font-size:.95rem; font-weight:700; letter-spacing:-.01em;
+  color:var(--muted); background:transparent; border:1px solid transparent; border-bottom:none;
+  border-radius:10px 10px 0 0; padding:.55rem 1rem; cursor:pointer; position:relative; top:1px;
+  transition:color .15s var(--ease), background .15s var(--ease);
+}
+.ltab:hover{color:var(--text)}
+.ltab[aria-selected="true"]{color:var(--text); background:var(--card); border-color:var(--border); border-bottom-color:var(--card)}
+.ltab[aria-selected="true"]::after{content:""; position:absolute; left:1rem; right:1rem; bottom:-1px; height:2px; background:var(--accent); border-radius:2px}
+.ltab:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.ltab-panel:focus{outline:none}
+.ltab-panel .section:first-child{margin-top:1.4rem}
 .change{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:.6rem .85rem; margin-bottom:.45rem; box-shadow:var(--shadow-1)}
 .change .ct{font-weight:600; font-size:.88rem}
 .change .cm{font-size:.82rem; color:var(--muted); margin-top:.25rem}
@@ -2054,6 +2071,73 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // ── render ──────────────────────────────────────────────────────────────────
   // Rebuilds the page body from the current DATA. Safe to call more than once
   // (clears #app first) so the runtime-fetch path can re-render in place.
+  // ── top-level long-tail tabs ────────────────────────────────────────────────
+  // The decision content (verdict → setup → reasoning → known issues) stays a single
+  // always-visible scroll; the secondary detail is grouped behind these tabs to cut
+  // clutter without burying the verdict. SEO is unaffected — the crawlable answer is
+  // the server-rendered <article> (render._seo_body), generated independently of this
+  // client-side layout. Empty groups (e.g. gated-out Trends) drop their tab entirely.
+  var activateLongTab = null;   // set below; lets scrollToHash() open a deep-linked section's tab
+  function tabbedLongTail(){
+    var groups = [
+      {key:"impact",  label:"Impact",     build:[impact, triage]},
+      {key:"history", label:"History",    build:[history]},
+      {key:"trends",  label:"Trends",     build:[trends]},
+      {key:"new",     label:"What's new", build:[changes, catchingUp]}
+    ];
+    var tablist = el("div",{"class":"ltabs", role:"tablist", "aria-label":"More detail"});
+    var panelsWrap = el("div",{"class":"ltab-panels"});
+    var tabs = [], pans = [];
+    groups.forEach(function(g){
+      var nodes = g.build.map(function(fn){ return fn(); }).filter(function(n){ return n; });
+      if (!nodes.length) return;   // skip an empty group (e.g. Trends gated to ≥3 points)
+      var panelId = "ltp-"+g.key, tabId = "ltt-"+g.key;
+      var panel = el("div",{"class":"ltab-panel", id:panelId, role:"tabpanel",
+                            "aria-labelledby":tabId, tabindex:"0"});
+      nodes.forEach(function(n){ panel.appendChild(n); });
+      var btn = el("button",{"class":"ltab", id:tabId, type:"button", role:"tab",
+                             "aria-controls":panelId, "aria-selected":"false"}, g.label);
+      btn.addEventListener("click", function(){ activate(btn); });
+      tablist.appendChild(btn); panelsWrap.appendChild(panel);
+      tabs.push(btn); pans.push(panel);
+    });
+    if (!tabs.length) return null;
+
+    function activate(btn){
+      tabs.forEach(function(t,i){
+        var on = (t === btn);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.setAttribute("tabindex", on ? "0" : "-1");
+        if (on){
+          pans[i].removeAttribute("hidden");
+          // sections in a freshly-shown panel never tripped the IntersectionObserver
+          // (they had no layout while hidden) — reveal them directly.
+          pans[i].querySelectorAll(".reveal").forEach(function(n){ n.classList.add("in"); });
+        } else {
+          pans[i].setAttribute("hidden","");
+        }
+      });
+    }
+    tablist.addEventListener("keydown", function(ev){
+      var i = tabs.indexOf(document.activeElement);
+      if (i < 0) return;
+      var j = -1;
+      if (ev.key === "ArrowRight" || ev.key === "ArrowDown") j = (i+1) % tabs.length;
+      else if (ev.key === "ArrowLeft" || ev.key === "ArrowUp") j = (i-1+tabs.length) % tabs.length;
+      else if (ev.key === "Home") j = 0;
+      else if (ev.key === "End") j = tabs.length-1;
+      if (j < 0) return;
+      ev.preventDefault(); activate(tabs[j]); tabs[j].focus();
+    });
+
+    activate(tabs[0]);                        // first non-empty tab open by default
+    activateLongTab = function(panel){        // open the tab that holds a deep-linked section
+      var k = pans.indexOf(panel);
+      if (k >= 0) activate(tabs[k]);
+    };
+    return el("div",{"class":"ltab-wrap"},[tablist, panelsWrap]);
+  }
+
   function render(){
     app.textContent = "";
     if (!DATA || !DATA.recommendation){
@@ -2062,13 +2146,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
-    // Order: lead with the decision-relevant content — verdict → your-setup →
-    // reasoning (why+sentiment → case) → known issues → past verdicts (track record) —
-    // then the derived Impact meters, the changelog, and the long-tail trends/triage.
+    // Order: lead with the decision-relevant content as one always-visible scroll
+    // — verdict → your-setup → reasoning (why+sentiment → case) → known issues —
+    // then group the secondary detail (impact meters, past verdicts, trends/triage,
+    // changelog) behind tabbedLongTail() to cut clutter; footer stays at the bottom.
     [ lowConfBanner(), hero(v), about(), bestVersion(), stats(),
-      personalize(), thesis(), evidence(), issues(), history(),
-      impact(), changes(), catchingUp(),
-      trends(), triage(), footer()
+      personalize(), thesis(), evidence(), issues(),
+      tabbedLongTail(),
+      footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
     revealOn();
@@ -2109,6 +2194,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var t = null;
     try { t = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch(e){}
     if (t){
+      var panel = t.closest ? t.closest(".ltab-panel") : null;
+      if (panel && activateLongTab) activateLongTab(panel);   // open the tab holding the target
       t.scrollIntoView({behavior:"smooth", block:"start"});
       t.classList.add("tgt"); setTimeout(function(){ t.classList.remove("tgt"); }, 1800);
     }
