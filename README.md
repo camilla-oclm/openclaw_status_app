@@ -188,7 +188,13 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
     README: `[![OpenClaw status](https://clawstat.us/badge.svg)](https://clawstat.us)`.
   - **`web/latest.json`** is also a documented public **JSON API** — the full assessment payload
     (`version`, `recommendation`, `confidence`, `thesis`, `known_issues`, `changes`, …). Poll it
-    instead of scraping the page.
+    instead of scraping the page. It carries a `schema_version` (bumped only on a breaking
+    shape change — additive fields don't bump it) so consumers can guard against drift, and
+    `latest_release` / `latest_prerelease` include a `url` to the GitHub release. Note on
+    per-issue fields: **`severity`** is the harm class (from the repo's `P0…P4` + breakage/
+    impact labels) while **`impact`** is a *community-engagement* bucket (👍 reactions +
+    comment volume) — they're different axes and intentionally diverge, so filter on
+    `severity`, not `impact`, for "how bad is it".
   - **`web/llms.txt`** + **`web/llms-full.txt`** — an **agent-readable mirror** ([llms.txt](https://llmstxt.org)
     convention). The page is JS-rendered, so an LLM/agent (e.g. an OpenClaw agent deciding whether to
     self-update) can read `https://clawstat.us/llms.txt` for the current verdict + links, or

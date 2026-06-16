@@ -1348,6 +1348,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     } else if (i.category==="regression" || i.category==="post_release"){
       tags.push(el("span",{"class":"tag t-bad"}, "● unfixed"));
     }
+    if (i.has_workaround){
+      tags.push(el("span",{"class":"tag t-info", title:"The issue report mentions a workaround or mitigation — open the linked thread for details. (Detected from the report text; not a guarantee one exists or is official.)"}, "🔧 workaround noted"));
+    }
     if (i.reactions){
       tags.push(el("span",{"class":"tag"}, "👍 "+i.reactions));
     }
@@ -1844,14 +1847,19 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
     // One shared row for the issues tagged "all" — they hit every channel/platform,
     // so listing them once (instead of under each) keeps the per-platform rows distinct.
-    if (pickedPlats.length && crossCutting.length){
+    // Cross-cutting issues hit every platform & channel, so show this row whenever the
+    // user has picked ANY stack — previously gated on platforms only, so component-only
+    // pickers never saw these core issues. Badge now carries worst severity + a count,
+    // and the note flags how many are confirmed to affect the assessed version.
+    if (stackActive() && crossCutting.length){
       var ccW = 0, ccN = null;
       crossCutting.forEach(function(it){ var s=String(it.severity||"low").toLowerCase(), w=SEVW[s]||0; if (w>ccW){ ccW=w; ccN=s; } });
       var ccLvl = ccN ? SEV_IMP[ccN] : "none";
+      var ccAffV = crossCutting.filter(function(it){ return it.affects_version; }).length;
       list.appendChild(el("div",{"class":"prow prow-all"},[
         el("span",{"class":"ppn"}, "🌐 All platforms & channels"),
-        el("span",{"class":"pbadge imp-"+ccLvl}, (IMPACT[ccLvl]||IMPACT.none).label),
-        el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "core issues that hit every OS and channel — "), ].concat(issueLinks(crossCutting, 5)))
+        el("span",{"class":"pbadge imp-"+ccLvl}, (IMPACT[ccLvl]||IMPACT.none).label+" · "+crossCutting.length),
+        el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "core issues that hit every OS and channel"+(ccAffV?(" ("+ccAffV+" affect v"+(DATA.version||"")+")"):"")+" — ")].concat(issueLinks(crossCutting, 5)))
       ]));
     }
 

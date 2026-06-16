@@ -328,6 +328,29 @@ def test_build_passes_issue_platforms_through():
     assert ki["platforms"] == ["linux", "all"]
 
 
+def test_build_detects_workaround_signal():
+    raw = {"sources": {"github_issues": [
+        {"number": 1, "title": "crash on start", "body": "No fix yet, but as a workaround you can downgrade."},
+        {"number": 2, "title": "slow boot", "body": "just slow, nothing notable here"},
+    ]}}
+    a = {"assessment": {"known_issues": [
+        {"number": 1, "title": "crash on start"}, {"number": 2, "title": "slow boot"}]}, "version": "2.0"}
+    ki = {i["number"]: i for i in render._build_assessment_data(a, raw)["known_issues"]}
+    assert ki[1]["has_workaround"] is True
+    assert ki[2]["has_workaround"] is False
+
+
+def test_build_exposes_schema_version_and_release_urls():
+    raw = {"sources": {
+        "latest_release": {"tag": "v2.0", "url": "https://gh/r/v2.0", "published_at": "2026-06-12T00:00:00Z"},
+        "latest_prerelease": {"tag": "v2.1-beta", "url": "https://gh/r/v2.1-beta", "published_at": "2026-06-14T00:00:00Z"},
+    }}
+    data = render._build_assessment_data({"assessment": {}, "version": "2.0"}, raw)
+    assert data["schema_version"] == render.SCHEMA_VERSION
+    assert data["latest_release"]["url"] == "https://gh/r/v2.0"
+    assert data["latest_prerelease"]["url"] == "https://gh/r/v2.1-beta"
+
+
 # ── shareable artifacts + changelog ──────────────────────────────────────────
 
 def test_extract_highlights_pulls_bullets():
@@ -359,6 +382,21 @@ def test_write_feed_emits_rss(tmp_path, monkeypatch):
     assert "<rss" in feed and "<item>" in feed
     assert "OpenClaw v2.0: wait for next" in feed
     assert (tmp_path / "feed.xml").stat().st_mode & 0o004   # world-readable for Caddy
+
+
+def test_feed_links_are_individually_addressable(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    data = {"version": "2.0", "recommendation": "🔄", "archived_versions": ["1.9"],
+            "version_history": [
+                {"version": "2.0", "recommendation": "🔄", "headline": "now", "assessed_at": "2026-06-14T03:00:00+00:00"},
+                {"version": "1.9", "recommendation": "⏸️", "headline": "old", "assessed_at": "2026-06-13T00:00:00+00:00"},
+                {"version": "1.5", "recommendation": "✅", "headline": "older", "assessed_at": "2026-06-10T00:00:00+00:00"},
+            ]}
+    render._write_feed(data, str(out))
+    feed = (tmp_path / "feed.xml").read_text()
+    assert "https://example.test/archive/1.9.html" in feed                   # snapshotted past → archive
+    assert "https://github.com/openclaw/openclaw/releases/tag/v1.5" in feed   # un-snapshotted past → GH release
 
 
 def test_write_badge_emits_svg(tmp_path):
