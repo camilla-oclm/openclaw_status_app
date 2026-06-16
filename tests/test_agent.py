@@ -379,3 +379,17 @@ def test_run_summary_message_includes_run_and_total_cost():
 
 def test_run_summary_message_singular_issue():
     assert "(1 known issue)" in agent._run_summary_message("1.0", "✅", 0.0, 0.0, 0.0, 1)
+
+
+def test_validator_disagrees_triggers_refine():
+    # explicit disagreement → refine
+    assert agent._validator_disagrees({"agrees": False}) is True
+    # clean agreement → no refine
+    assert agent._validator_disagrees({"agrees": True}) is False
+    assert agent._validator_disagrees({"agrees": True, "miscategorized_issues": []}) is False
+    # a concrete mis-categorization overrides a soft "agrees" — the validator can't
+    # rubber-stamp the analyst's labels (e.g. the #92843 macOS-tagged-Windows class)
+    assert agent._validator_disagrees(
+        {"agrees": True, "miscategorized_issues": ["#92843: windows -> macos"]}) is True
+    # a failed/unreviewed validator never forces a refine
+    assert agent._validator_disagrees({"agrees": False, "unreviewed": True}) is False
