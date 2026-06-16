@@ -9,7 +9,7 @@
 [![OpenClaw release status](https://clawstat.us/badge.svg)](https://clawstat.us)
 
 <p align="center">
-  <img src="docs/hero-dark.png" alt="The OpenClaw Status decision page: a Skip-this-version verdict for v2026.6.6, with stats and an evidence-backed thesis" width="820">
+  <img src="docs/hero-dark.png" alt="The OpenClaw Status decision page: a verdict-first dashboard for the latest OpenClaw release, with key-metric tiles and an evidence-backed thesis" width="820">
   <br>
   <em>The generated decision page — a verdict-first dashboard backed by scored, version-relevant bug evidence (<a href="docs/hero-light.png">light theme</a>).</em>
 </p>
@@ -135,8 +135,12 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    prompt (`config.MAX_ISSUES_IN_CONTEXT`) and the output budget is widened
    (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on busy releases.
 2. **Validator** (`qwen/qwen3.7-plus`) — a *different* provider from the analyst, so it's
-   an independent second opinion, not the model checking its own work. Flags missed issues /
-   unsupported claims.
+   an independent second opinion, not the model checking its own work. It re-derives each
+   top issue's severity / category (regression vs post-release) / platform from the raw data
+   rather than trusting the analyst's labels, and flags missed issues, **mis-categorizations**,
+   and unsupported claims. A spotted mis-categorization forces a refinement pass even if the
+   validator otherwise agrees — so the analyst's first answer is never taken as correct by
+   default.
 3. **Refine** (analyst again) — only if the validator disagrees.
 
 If the analyst call fails, it falls back to `minimax/minimax-m3` — a third distinct provider,
