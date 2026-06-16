@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/clawstat-sticker.png" alt="ClawStat.us — the OpenClaw release-status lobster" width="190">
+</p>
+
 # OpenClaw Status
 
 **Should you update to the latest OpenClaw release?** This tool answers that.
