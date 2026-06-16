@@ -903,11 +903,10 @@ def _llms_txt(data: dict) -> str:
     fr = data.get("freshness") or {}
     if fr.get("fresh"):
         spec = fr.get("version_specific_issues") or 0
-        L.append(f"- Note: Fresh release — preliminary verdict. {spec} issue(s) so far are "
-                 "reported against this exact version; the rest are carried over from earlier "
-                 "releases. Version-specific reports take time to land (a community lag, not a "
-                 "model gap); the verdict firms up over the next few re-assessments. Back up "
-                 "before updating.")
+        L.append(f"- Note: Fresh release — early read. {spec} issue(s) so far name this exact "
+                 "version; the rest are carried over from earlier releases. Bug reports keep "
+                 "arriving after a release, so the verdict firms up over the next few "
+                 "re-assessments as users report in. Back up before updating.")
     L += [
         "",
         "## Resources",
@@ -1129,14 +1128,15 @@ def _seo_body(data: dict) -> str:
     if fr.get("fresh"):
         spec = fr.get("version_specific_issues") or 0
         when = "today" if (fr.get("days_since_release") or 0) == 0 else "in the last few days"
-        body = (f"{spec} of the issues below have been reported against this exact "
-                "release so far; the rest are carried over from earlier versions."
-                if spec else "No issues have been reported against this exact release yet — "
-                "the list below is carried over from earlier versions.")
+        body = (f"So far {spec} of the issues below name this exact release; the rest are "
+                "carried over from earlier versions."
+                if spec else "No issues have been filed against this exact release yet, so the "
+                "list below is carried over from earlier versions — a reporting lag as people "
+                "upgrade, not a gap in the analysis.")
         out.append(f"<p><strong>Fresh release.</strong> OpenClaw v{e(ver)} was published "
-                   f"{when}, so this is a preliminary verdict. {body} That's normal for a "
-                   "new release — version-specific reports take time to land, and the verdict "
-                   "firms up over the next few re-assessments. Back up before you update.</p>")
+                   f"{when} — an early read. {body} Bug reports keep arriving in the days after "
+                   "a release, so the verdict firms up over the next few re-assessments. Back up "
+                   "before you update.</p>")
     if data.get("headline"):
         out.append(f"<p>{e(data['headline'].strip())}</p>")
     thesis = (data.get("thesis") or "").strip()

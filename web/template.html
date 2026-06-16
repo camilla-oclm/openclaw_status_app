@@ -1326,11 +1326,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ]);
   }
 
-  // A just-dropped release has little version-specific evidence yet, so the verdict is
-  // preliminary: most of the listed issues are carried over from earlier versions until
-  // the community files reports against this one. Tell users to back up and that the
-  // picture firms up over the next few runs (sparse early data is a reporting lag, not a
-  // model error). Gated by render._release_freshness (DATA.freshness.fresh).
+  // A just-dropped release is an early read: reports are still arriving, so the verdict
+  // will move over the next few runs. When the community hasn't filed anything against
+  // this version yet, the listed issues are carried over from earlier ones — that's a
+  // reporting lag as people upgrade, not a gap in the analysis. Either way: back up.
+  // Gated by render._release_freshness (DATA.freshness.fresh).
   function freshBanner(){
     var fr = DATA.freshness || {};
     if (!fr.fresh) return null;
@@ -1339,14 +1339,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var when = (d == null || d === 0) ? "today" : (d === 1 ? "yesterday" : d + " days ago");
     var spec = fr.version_specific_issues || 0;
     var detail = spec
-      ? ("So far " + spec + " of the issues below " + (spec === 1 ? "has" : "have") +
-         " been reported against this exact release; the rest are carried over from earlier versions.")
-      : "No issues have been reported against this exact release yet, so the list below is carried over from earlier versions.";
+      ? ("So far " + spec + " of the issues below " + (spec === 1 ? "names" : "name") +
+         " this exact release; the rest are carried over from earlier versions.")
+      : "No issues have been filed against this exact release yet, so the list below is carried over from earlier versions — a reporting lag as people upgrade, not a gap in the analysis.";
     return el("div",{"class":"banner banner-fresh"},[
       el("span",{"class":"bi","aria-hidden":"true"},"🆕"),
       el("div",{"class":"banner-body"},[
-        el("div",{"class":"banner-title"},"Fresh release — treat this verdict as preliminary."),
-        el("div",null,"OpenClaw v"+ver+" was published "+when+". "+detail+" That's expected for a brand-new release: version-specific bug reports take time to land, so the early read leans on prior-version issues — it isn't a gap in the analysis."),
+        el("div",{"class":"banner-title"},"Fresh release — this is an early read."),
+        el("div",null,"OpenClaw v"+ver+" was published "+when+". "+detail+" Bug reports keep arriving in the days after a release, so the verdict will firm up over the next few runs."),
         el("div",{"class":"ba"},[
           el("strong",null,"Back up before you update,"),
           document.createTextNode(" and check back over the next few runs — confidence builds as users report in and we re-assess.")
