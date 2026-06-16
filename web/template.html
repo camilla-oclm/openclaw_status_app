@@ -1194,18 +1194,30 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     medium: "Some evidence gaps remain — treat the verdict as a moderate-strength signal.",
     low:    "Limited or conflicting data — treat as a weak signal and verify against the issues."
   };
+  // On a fresh release the evidence is NOT complete yet (reports are still arriving), so
+  // the confidence note must not claim completeness — that would contradict the fresh
+  // banner. Confidence stays the analyst's read of the risks already found; we just
+  // reconcile the caption: strong on what's seen so far, but an early, still-filling read.
+  var CONF_DESC_FRESH = {
+    high:   "Strong on the evidence so far — but this is a fresh release, so it isn't fully reported yet; the picture keeps filling in over the next few runs.",
+    medium: "Some evidence gaps remain, and a fresh release isn't fully reported yet — treat it as a moderate-strength early read.",
+    low:    "Limited or conflicting data on a freshly-dropped release — treat as a weak early signal and verify against the issues."
+  };
+  function confNote(conf){
+    return ((DATA.freshness && DATA.freshness.fresh) ? CONF_DESC_FRESH : CONF_DESC)[conf] || "";
+  }
   function signalPanel(v){
     var conf = String(DATA.confidence||"medium").toLowerCase();
     var lit = CONF_STEP[conf] || 2;
     var segs = el("div",{"class":"g-segs"});
     for (var gi=1; gi<=3; gi++){ segs.appendChild(el("span",{"class":"g-seg"+(gi<=lit?" on":"")}, null)); }
-    var gauge = el("div",{"class":"gauge "+v.tone, title:CONF_DESC[conf]||""},[
+    var gauge = el("div",{"class":"gauge "+v.tone, title:confNote(conf)},[
       el("div",{"class":"g-top"},[
         el("span",{"class":"g-lab"},"Verdict confidence"),
         el("span",{"class":"g-val"}, cap(conf))
       ]),
       segs,
-      el("div",{"class":"g-note"}, CONF_DESC[conf]||"")
+      el("div",{"class":"g-note"}, confNote(conf))
     ]);
     // Platform glance: bar height = issue volume, colour = worst severity (same
     // scale as the "Platform impact" section), derived from the issue tags.
@@ -1291,7 +1303,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var conf = String(DATA.confidence||"medium").toLowerCase();
     var pre = DATA.latest_prerelease || {};
     var chips = [
-      el("span",{"class":"chip lvl-"+conf, title:CONF_DESC[conf]||""},[document.createTextNode("Confidence: "), el("b",null,cap(conf))]),
+      el("span",{"class":"chip lvl-"+conf, title:confNote(conf)},[document.createTextNode("Confidence: "), el("b",null,cap(conf))]),
       el("span",{"class":"chip"},[document.createTextNode("Assessed "), el("b",null,timeAgo(DATA.assessed_at))])
     ];
     if (pre.tag){
@@ -1861,7 +1873,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var best = null;
     for (var i=0;i<h.length;i++){ if (h[i].version!==DATA.version && SAFE[h[i].recommendation]){ best = h[i]; break; } }
     var tone, bi, body;
-    if (curSafe){
+    if (curSafe && DATA.freshness && DATA.freshness.fresh){
+      // A freshly-dropped release is too new to call "the safest / cleared to run" — that
+      // would contradict the fresh-release note. Defer the verdict until reports accrue.
+      tone="tone-info"; bi="🆕";
+      body = [el("b",null,"v"+(DATA.version||"")+" is the latest release."),
+              document.createTextNode(" It's too new to call cleared — give it a few runs of real-world reports first (see the fresh-release note above).")];
+    } else if (curSafe){
       tone="tone-good"; bi="✅";
       body = [el("b",null,"You're on the safest version."),
               document.createTextNode(" v"+(DATA.version||"")+" is the latest and it's cleared to run.")];
