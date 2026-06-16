@@ -996,7 +996,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     "✅": {label:"Update now",              tone:"tone-good", blurb:"Safe to update — no blocking issues found in this release."},
     "⚠️": {label:"Update with precautions", tone:"tone-warn", blurb:"Worthwhile, but back up first — some real risk remains."},
     "⏸️": {label:"Skip this version",       tone:"tone-bad",  blurb:"Hold off — the open issues outweigh the benefits right now."},
-    "🔄": {label:"Wait for next release",   tone:"tone-info", blurb:"Fixes are already lined up in a pre-release — wait for it to land."}
+    "🔄": {label:"Wait for next release",   tone:"tone-info", blurb:"Hold for the next stable — a pre-release is in the works, but its fixes aren't confirmed yet."}
   };
   var CAT = {
     regression:    {icon:"🔄", label:"Regression",      cls:"t-bad"},
@@ -1996,8 +1996,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
-    [ lowConfBanner(), hero(v), bestVersion(), stats(), platforms(), componentHealth(), changes(), catchingUp(),
-      personalize(), thesis(), evidence(), issues(), sentiment(), trends(), triage(), history(), footer()
+    // Order: lead with the decision-relevant content — verdict → your-setup →
+    // reasoning (why + case) → known issues — then the derived summaries (the
+    // platform/component meters), the changelog, and the long-tail trends/history.
+    [ lowConfBanner(), hero(v), bestVersion(), stats(),
+      personalize(), thesis(), evidence(), issues(),
+      platforms(), componentHealth(), changes(), catchingUp(),
+      sentiment(), trends(), triage(), history(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
     revealOn();
