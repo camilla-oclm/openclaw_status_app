@@ -367,6 +367,64 @@ def test_build_exposes_schema_version_and_release_urls():
     assert data["latest_prerelease"]["url"] == "https://gh/r/v2.1-beta"
 
 
+# ── release freshness (just-dropped → preliminary verdict) ───────────────────
+
+def test_release_freshness_fresh_within_window():
+    ki = [{"affects_version": True}, {"affects_version": False}, {"affects_version": False}]
+    f = render._release_freshness(
+        "2026.6.8", "2026-06-16T10:00:00+00:00",
+        {"tag": "v2026.6.8", "published_at": "2026-06-16"}, ki)
+    assert f["fresh"] is True
+    assert f["days_since_release"] == 0
+    assert f["version_specific_issues"] == 1
+    assert f["carried_over_issues"] == 2
+
+
+def test_release_freshness_expires_after_window():
+    # FRESH_RELEASE_DAYS days after publish is still fresh; one day past is not.
+    edge = render._release_freshness(
+        "2026.6.8", "2026-06-18", {"tag": "v2026.6.8", "published_at": "2026-06-16"}, [])
+    past = render._release_freshness(
+        "2026.6.8", "2026-06-19", {"tag": "v2026.6.8", "published_at": "2026-06-16"}, [])
+    assert config.FRESH_RELEASE_DAYS == 2
+    assert edge["fresh"] is True and edge["days_since_release"] == 2
+    assert past["fresh"] is False and past["days_since_release"] == 3
+
+
+def test_release_freshness_requires_matching_version_and_known_date():
+    # The assessed page must be about the latest release, with a parseable publish date.
+    mismatch = render._release_freshness(
+        "2026.6.6", "2026-06-16", {"tag": "v2026.6.8", "published_at": "2026-06-16"}, [])
+    no_date = render._release_freshness(
+        "2026.6.8", "2026-06-16", {"tag": "v2026.6.8", "published_at": ""}, [])
+    assert mismatch["fresh"] is False
+    assert no_date["fresh"] is False and no_date["days_since_release"] is None
+
+
+def test_release_freshness_clamps_future_publish_to_zero():
+    # A publish date "after" the assessment clock shouldn't go negative — treat as same-day.
+    f = render._release_freshness(
+        "2026.6.8", "2026-06-16", {"tag": "v2026.6.8", "published_at": "2026-06-17"}, [])
+    assert f["fresh"] is True and f["days_since_release"] == 0
+
+
+def test_build_exposes_freshness():
+    raw = {"sources": {"latest_release": {
+        "tag": "v9.9", "url": "https://gh/r/v9.9", "published_at": "2026-06-16T00:00:00Z"}}}
+    data = render._build_assessment_data(
+        {"assessment": {}, "version": "9.9", "assessed_at": "2026-06-16T12:00:00+00:00"}, raw)
+    assert data["freshness"]["fresh"] is True
+
+
+def test_seo_body_includes_fresh_note_only_when_fresh():
+    base = {"version": "2026.6.8", "recommendation": "⚠️", "known_issues": []}
+    fresh = render._seo_body({**base, "freshness": {
+        "fresh": True, "days_since_release": 0, "version_specific_issues": 0}})
+    stale = render._seo_body({**base, "freshness": {"fresh": False}})
+    assert "Fresh release." in fresh and "Back up before you update" in fresh
+    assert "Fresh release." not in stale
+
+
 # ── shareable artifacts + changelog ──────────────────────────────────────────
 
 def test_extract_highlights_pulls_bullets():

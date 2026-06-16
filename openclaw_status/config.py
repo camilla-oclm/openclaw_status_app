@@ -125,3 +125,12 @@ SITE_URL = "https://clawstat.us"
 # reachable with no extra config. Retention is capped at ARCHIVE_KEEP (oldest pruned).
 ARCHIVE_DIR = WEB_DIR / "archive"
 ARCHIVE_KEEP = 30
+
+# A just-published release is "fresh": the community hasn't filed version-specific
+# bug reports yet, so the known-issues list is mostly carried over from earlier
+# versions and the verdict is preliminary. We flag a release fresh for this many
+# days after its publish date (relative to the assessment time) so the page can
+# tell users to back up and treat the early verdict as provisional. At the ~6h run
+# cadence this spans the first several re-assessments — long enough for reports to
+# start landing and the picture to firm up.
+FRESH_RELEASE_DAYS = 2

@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from openclaw_status import config
@@ -471,6 +472,46 @@ def _has_workaround(raw_i: dict) -> bool:
     return bool(_WORKAROUND_RE.search(f"{raw_i.get('title','')} {raw_i.get('body','')}"))
 
 
+def _days_between(later_iso: str, earlier_iso: str):
+    """Whole days from `earlier_iso` to `later_iso` (date-only). None if unparseable.
+
+    Negative spans clamp to 0 (a release "published in the future" relative to the
+    assessment clock is treated as same-day, not negative)."""
+    def _date(s):
+        try:
+            return datetime.fromisoformat(str(s)[:10]).date()
+        except (ValueError, TypeError):
+            return None
+    a, b = _date(later_iso), _date(earlier_iso)
+    if a is None or b is None:
+        return None
+    return max((a - b).days, 0)
+
+
+def _release_freshness(version: str, assessed_at: str, latest_release: dict,
+                       known_issues: list) -> dict:
+    """Is this a just-dropped release we don't have version-specific data on yet?
+
+    A fresh release is one published within `config.FRESH_RELEASE_DAYS` of the
+    assessment AND matching the assessed version — so the verdict leans on issues
+    carried over from earlier versions rather than reports filed against *this* one.
+    The page uses this to tell users to back up and treat the early verdict as
+    preliminary (sparse early data is a community-reporting lag, not a model error)."""
+    rel_ver = (latest_release.get("tag", "") or "").lstrip("v")
+    days = _days_between(assessed_at, latest_release.get("published_at", ""))
+    is_latest = bool(version) and rel_ver == version
+    fresh = bool(is_latest and days is not None and days <= config.FRESH_RELEASE_DAYS)
+    # Of the issues we *are* showing, how many actually name this release vs. are
+    # carried over from prior versions — drives the honest "N mention this version".
+    specific = sum(1 for i in known_issues if i.get("affects_version"))
+    return {
+        "fresh": fresh,
+        "days_since_release": days,
+        "version_specific_issues": specific,
+        "carried_over_issues": max(len(known_issues) - specific, 0),
+    }
+
+
 # Bump when the public latest.json shape changes in a breaking way (field removed /
 # renamed / retyped). Additive fields don't require a bump.
 SCHEMA_VERSION = 1
@@ -598,6 +639,15 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "clawsweeper_closed": cw.get("recently_closed", []),
         # Versions with a browsable snapshot — history entries link to these.
         "archived_versions": _archived_versions(),
+        # "Just dropped" signal: a fresh release has little version-specific evidence
+        # yet, so the page flags the early verdict as preliminary + says to back up.
+        "freshness": _release_freshness(
+            assessment_raw.get("version", ""),
+            assessment_raw.get("assessed_at", ""),
+            {"tag": lr.get("tag", "") if lr else "",
+             "published_at": lr.get("published_at", "") if lr else ""},
+            known_issues,
+        ),
     }
     return _deep_sanitize_markdown(data)
 
@@ -677,7 +727,6 @@ def _rfc822(iso: str) -> str:
     if not iso:
         return ""
     try:
-        from datetime import datetime
         from email.utils import format_datetime
         return format_datetime(datetime.fromisoformat(iso))
     except Exception:
@@ -851,6 +900,14 @@ def _llms_txt(data: dict) -> str:
     ]
     if data.get("headline"):
         L.append(f"- Summary: {data['headline'].strip()}")
+    fr = data.get("freshness") or {}
+    if fr.get("fresh"):
+        spec = fr.get("version_specific_issues") or 0
+        L.append(f"- Note: Fresh release — preliminary verdict. {spec} issue(s) so far are "
+                 "reported against this exact version; the rest are carried over from earlier "
+                 "releases. Version-specific reports take time to land (a community lag, not a "
+                 "model gap); the verdict firms up over the next few re-assessments. Back up "
+                 "before updating.")
     L += [
         "",
         "## Resources",
@@ -1068,6 +1125,18 @@ def _seo_body(data: dict) -> str:
     if assessed:
         verdict_line += f", assessed {e(assessed)}"
     out.append(f"<p>{verdict_line}.</p>")
+    fr = data.get("freshness") or {}
+    if fr.get("fresh"):
+        spec = fr.get("version_specific_issues") or 0
+        when = "today" if (fr.get("days_since_release") or 0) == 0 else "in the last few days"
+        body = (f"{spec} of the issues below have been reported against this exact "
+                "release so far; the rest are carried over from earlier versions."
+                if spec else "No issues have been reported against this exact release yet — "
+                "the list below is carried over from earlier versions.")
+        out.append(f"<p><strong>Fresh release.</strong> OpenClaw v{e(ver)} was published "
+                   f"{when}, so this is a preliminary verdict. {body} That's normal for a "
+                   "new release — version-specific reports take time to land, and the verdict "
+                   "firms up over the next few re-assessments. Back up before you update.</p>")
     if data.get("headline"):
         out.append(f"<p>{e(data['headline'].strip())}</p>")
     thesis = (data.get("thesis") or "").strip()

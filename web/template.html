@@ -236,6 +236,12 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
   background:var(--warn-bg); border:1px solid var(--warn-bd); color:var(--text); font-size:.88rem;
 }
 .banner .bi{font-size:1.1rem; line-height:1.3}
+/* fresh-release notice — informational (teal), distinct from the red low-conf one */
+.banner-fresh{background:var(--info-bg); border-color:var(--info-bd)}
+.banner-fresh .bi{font-size:1.25rem}
+.banner-body{display:flex; flex-direction:column; gap:.3rem; min-width:0}
+.banner-title{font-weight:700; color:var(--text)}
+.banner-body .ba strong{color:var(--accent)}
 
 /* ── signal tiles (stats) ──────────────────────────────────────────────── */
 .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.8rem; margin-bottom:1.8rem}
@@ -1320,6 +1326,35 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ]);
   }
 
+  // A just-dropped release has little version-specific evidence yet, so the verdict is
+  // preliminary: most of the listed issues are carried over from earlier versions until
+  // the community files reports against this one. Tell users to back up and that the
+  // picture firms up over the next few runs (sparse early data is a reporting lag, not a
+  // model error). Gated by render._release_freshness (DATA.freshness.fresh).
+  function freshBanner(){
+    var fr = DATA.freshness || {};
+    if (!fr.fresh) return null;
+    var ver = DATA.version || "?";
+    var d = fr.days_since_release;
+    var when = (d == null || d === 0) ? "today" : (d === 1 ? "yesterday" : d + " days ago");
+    var spec = fr.version_specific_issues || 0;
+    var detail = spec
+      ? ("So far " + spec + " of the issues below " + (spec === 1 ? "has" : "have") +
+         " been reported against this exact release; the rest are carried over from earlier versions.")
+      : "No issues have been reported against this exact release yet, so the list below is carried over from earlier versions.";
+    return el("div",{"class":"banner banner-fresh"},[
+      el("span",{"class":"bi","aria-hidden":"true"},"🆕"),
+      el("div",{"class":"banner-body"},[
+        el("div",{"class":"banner-title"},"Fresh release — treat this verdict as preliminary."),
+        el("div",null,"OpenClaw v"+ver+" was published "+when+". "+detail+" That's expected for a brand-new release: version-specific bug reports take time to land, so the early read leans on prior-version issues — it isn't a gap in the analysis."),
+        el("div",{"class":"ba"},[
+          el("strong",null,"Back up before you update,"),
+          document.createTextNode(" and check back over the next few runs — confidence builds as users report in and we re-assess.")
+        ])
+      ])
+    ]);
+  }
+
   function stats(){
     var ki = DATA.known_issues || [];
     var ch = DATA.changes || {};
@@ -2264,7 +2299,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     // — verdict → your-setup → reasoning (why+sentiment → case) — then the long-tail
     // tab strip (Impact / What's new / Trends / History), and below it the Known
     // issues section (its own category-tab strip); footer stays at the bottom.
-    [ lowConfBanner(), hero(v), about(), bestVersion(), stats(),
+    [ lowConfBanner(), freshBanner(), hero(v), about(), bestVersion(), stats(),
       personalize(), thesis(), evidence(),
       tabbedLongTail(),
       issues(),
