@@ -406,6 +406,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .about .atxt a{color:var(--accent); text-decoration:none}
 .about .atxt a:hover{text-decoration:underline}
 .about .atxt p.alinks{margin:.55rem 0 0; display:flex; gap:1.1rem; flex-wrap:wrap; font-weight:600}
+.impact-sub{margin-top:1.3rem}
+.impact-sub:first-of-type{margin-top:.2rem}
+.impact-sublabel{font-family:var(--mono); font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-weight:600; margin-bottom:.55rem}
+.impact-note{font-size:.79rem; color:var(--muted); margin-bottom:.6rem}
+.prose + .quote{margin-top:1.2rem}
 
 /* ── your setup ────────────────────────────────────────────────────────── */
 .setup .chips{display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-bottom:.9rem}
@@ -1276,6 +1281,15 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       box.appendChild(el("p", null, linkify(para.trim())));
     });
     s.appendChild(box);
+    // Community sentiment folded in here (was its own section) — it's the analyst's read
+    // of the same evidence, so it belongs with the reasoning rather than as a standalone block.
+    if (DATA.sentiment_summary){
+      s.appendChild(el("div",{"class":"quote"},[
+        el("div",{"class":"qh"},"Community sentiment"),
+        el("div", null, linkify(DATA.sentiment_summary)),
+        el("div",{"class":"qsrc"},"Read by the analyst from GitHub issue signals — reaction counts, comment volume and how fast regressions pile up. Not scraped from social media.")
+      ]));
+    }
     return s;
   }
 
@@ -1479,9 +1493,16 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       });
       maxCount = 5;
     } else if (!maxCount){ return null; }
-    var s = el("div",{"class":"section", id:"platforms"});
-    s.appendChild(sectionHead("Platform impact", null, "bar = issue volume · colour = worst severity"));
     var SEG = 5;
+    var s = el("div",{"class":"impact-sub", id:"platforms"});
+    s.appendChild(el("div",{"class":"impact-sublabel"}, "By platform & channel"));
+    // When every affected platform shows the same volume×severity, the bars carry no
+    // signal — say so and point at the component split rather than a wall of identical bars.
+    var sigs = {}, nShown = 0;
+    PLAT.forEach(function(p){ var a=stat[p[0]]; if (a.count>0){ nShown++; sigs[a.worst+":"+volFill(a.count,maxCount,SEG)]=1; } });
+    if (nShown>=2 && Object.keys(sigs).length===1){
+      s.appendChild(el("div",{"class":"impact-note"}, "Affects all platforms about equally — the meaningful split is by component, above."));
+    }
     var g = el("div",{"class":"plat-grid"});
     PLAT.forEach(function(p){
       var a = stat[p[0]], mine = !!STACK[p[0]];
@@ -1497,6 +1518,20 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       ]));
     });
     s.appendChild(g);
+    return s;
+  }
+
+  // Impact — one section that merges the two volume×severity meter views. Component
+  // first (it differentiates — gateway/plugins hot spots), then platform/channel
+  // (which often reads all-high; the sub-builder flags that case).
+  function impact(){
+    var comp = componentHealth();
+    var plat = platforms();
+    if (!comp && !plat) return null;
+    var s = el("div",{"class":"section", id:"impact"});
+    s.appendChild(sectionHead("Impact", null, "bar = issue volume · colour = worst severity"));
+    if (comp) s.appendChild(comp);
+    if (plat) s.appendChild(plat);
     return s;
   }
 
@@ -1518,8 +1553,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (!keys.length) return null;
     var maxCount = 0; keys.forEach(function(k){ if (agg[k].count > maxCount) maxCount = agg[k].count; });
     keys.sort(function(a,b){ return agg[b].count-agg[a].count || agg[b].w-agg[a].w; });  // hot spots first
-    var s = el("div",{"class":"section", id:"components"});
-    s.appendChild(sectionHead("Component health", null, "bar = issue volume · colour = worst severity"));
+    var s = el("div",{"class":"impact-sub", id:"components"});
+    s.appendChild(el("div",{"class":"impact-sublabel"}, "By component"));
     var SEG = 5;
     var g = el("div",{"class":"plat-grid"});
     keys.forEach(function(k){
@@ -1536,18 +1571,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       ]));
     });
     s.appendChild(g);
-    return s;
-  }
-
-  function sentiment(){
-    if (!DATA.sentiment_summary) return null;
-    var s = el("div",{"class":"section"});
-    s.appendChild(sectionHead("Community sentiment", null, "read from GitHub issue activity"));
-    s.appendChild(el("div",{"class":"quote"},[
-      el("div",{"class":"qh"},"Inferred from the issue tracker"),
-      el("div", null, linkify(DATA.sentiment_summary)),
-      el("div",{"class":"qsrc"},"Derived by the analyst from GitHub issue signals — reaction counts, comment volume and how fast regressions pile up. Not scraped from social media.")
-    ]));
     return s;
   }
 
@@ -1930,19 +1953,12 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     tl.sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
     tl = tl.slice(-30);
     var real = tl.filter(function(r){ return !r.approx; });
-    // Real per-run points need ≥3 before a line means anything — two near-simultaneous
-    // seed points just draw a flat line that reads as placeholder data. The coarse
-    // per-version fallback (all-approx, one point per release) is a genuine trend at ≥2.
-    var enough = real.length ? real.length >= 3 : tl.length >= 2;
+    // Hide the whole section until there are ≥3 real per-run points. The coarse
+    // all-approx per-version fallback only ever drew near-empty charts (the chart
+    // filters drop approx points with no issue counts), which read as placeholder noise.
+    if (real.length < 3) return null;
     var s=el("div",{"class":"section", id:"trends"});
     s.appendChild(sectionHead("Trends", null, "tracked every run · about every 6 hours"));
-    if (!enough){   // show the section but explain the wait rather than a misleading line
-      var n = real.length || tl.length;
-      s.appendChild(el("div",{"class":"tcard"},[ el("div",{"class":"tc-empty"},
-        "Charts populate as runs accumulate (about every 6 hours). Tracking "+n+
-        " run"+(n===1?"":"s")+" so far — check back after the next one.") ]));
-      return s;
-    }
     var grid=el("div",{"class":"trends-grid"});
     grid.appendChild(tCard("Issue pressure","open issues & regressions per run", issuePressureChart(tl)));
     grid.appendChild(tCard("Severity mix","make-up of known issues", severityChart(tl)));
@@ -2039,12 +2055,12 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
     // Tab title stays the tidy static <title> — no version/verdict appended.
     // Order: lead with the decision-relevant content — verdict → your-setup →
-    // reasoning (why + case) → known issues — then the derived summaries (the
-    // platform/component meters), the changelog, and the long-tail trends/history.
+    // reasoning (why+sentiment → case) → known issues → past verdicts (track record) —
+    // then the derived Impact meters, the changelog, and the long-tail trends/triage.
     [ lowConfBanner(), hero(v), about(), bestVersion(), stats(),
-      personalize(), thesis(), evidence(), issues(),
-      platforms(), componentHealth(), changes(), catchingUp(),
-      sentiment(), trends(), triage(), history(), footer()
+      personalize(), thesis(), evidence(), issues(), history(),
+      impact(), changes(), catchingUp(),
+      trends(), triage(), footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
     revealOn();
