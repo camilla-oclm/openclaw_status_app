@@ -47,7 +47,7 @@ providers** argue it out before anything ships.
   the answer without executing JavaScript.
 - **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (a few cents/run
   typically, up to ~$0.08 when the validator disagrees and the analyst refines).
-- **Hermetic test suite.** 165+ network-free tests gate CI on every push.
+- **Hermetic test suite.** 175+ network-free tests gate CI on every push.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
 the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
@@ -151,18 +151,24 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   is a zero-dependency, dark/light, mobile-responsive page that builds its DOM with
   `textContent` (XSS-safe) and no inline handlers (CSP-clean). A deploy guard refuses to
   publish a low-confidence or invalid assessment, and a smoke test validates the HTML
-  before it overwrites the previous page. Beyond the verdict + key-metric tiles, the page
-  carries data-viz sections derived from the scored issues:
-  - **Platform impact** and **Component health** — per-surface (Windows/macOS/Linux/Discord/
-    Slack/Telegram) and per-subsystem (Gateway/Models/Memory/Sessions/Auth/Channels/Plugins/
-    Agents/Tasks/Tools/Build) meters, each encoding **issue volume** (bar length) × **worst
-    severity** (colour). Platform tags come from the analyst when present, else a deterministic
-    `render._derive_*` backfill.
+  before it overwrites the previous page. The page leads with the decision content (verdict,
+  key-metric tiles, **Your setup**, and the reasoning) and groups the supporting detail —
+  derived from the scored issues — behind a tab strip, with the Known-issues list below it:
   - **Your setup** — pick the platforms, channels and components you run; the verdict is
     re-scored to your stack and the matching issues highlighted (cross-cutting "all-platform"
     issues shown once in a shared row).
-  - **Trends** — a 2×2 grid of time-series charts (issue pressure, severity mix, verdict, and
-    regression share) built from the per-run `timeline.json` (below).
+  - **Impact** *(tab)* — per-component (Gateway/Models/Memory/Sessions/Auth/Channels/Plugins/
+    Agents/Tasks/Tools/Build) and per-platform (Windows/macOS/Linux/Discord/Slack/Telegram)
+    meters, each encoding **issue volume** (bar length) × **worst severity** (4-step colour
+    ramp). Platform tags come from the analyst when present, else a deterministic
+    `render._derive_*` backfill.
+  - **What's new / Trends / History** *(tabs)* — the release changelog; a 2×2 grid of per-run
+    time-series charts (issue pressure, severity mix, verdict, regression share) built from
+    `timeline.json` (below); and the past-verdicts track record.
+  - **Known issues** — the scored, version-relevant bug list as compact one-line rows that
+    expand to full detail (platform/component/severity/workaround tags + a GitHub link),
+    filterable by category and subsystem and capped with a "show all" toggle so the list stays
+    scannable as the ledger grows.
 - **`web/latest.json`** — the same payload written as a sibling file. The page renders from the
   inlined copy instantly, then `fetch()`es `latest.json` and re-renders if it's fresher — so a
   data refresh doesn't need a full HTML rebuild, while `file://` / offline viewing still works
@@ -258,7 +264,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 165+ tests, hermetic (no network)
+python3 -m pytest        # 176 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
