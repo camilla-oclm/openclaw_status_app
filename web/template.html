@@ -452,6 +452,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .about .atxt a{color:var(--accent); text-decoration:none}
 .about .atxt a:hover{text-decoration:underline}
 .about .atxt p.alinks{margin:.55rem 0 0; display:flex; gap:1.1rem; flex-wrap:wrap; font-weight:600}
+.about .atxt{flex:1 1 auto; min-width:0}
+.about-sticker{flex:0 0 auto; align-self:center; width:96px; height:auto; margin:-.15rem -.1rem -.15rem .4rem; filter:drop-shadow(0 4px 10px rgba(0,0,0,.28))}
+@media(max-width:600px){.about-sticker{width:74px}}
 .impact-sub{margin-top:1.3rem}
 .impact-sub:first-of-type{margin-top:.2rem}
 .impact-sublabel{font-family:var(--mono); font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-weight:600; margin-bottom:.55rem}
@@ -1222,7 +1225,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var kids = [ el("div",{"class":"sg-h"},"Confidence"), gauge ];
     if (rows.length){ kids.push(el("div",{"class":"sg-h"},"Platform impact")); kids.push(grid); }
     var spark = riskSparkline();
-    if (spark){ kids.push(el("div",{"class":"sg-h"},"Risk trend")); kids.push(spark); }
+    if (spark){ kids.push(el("div",{"class":"sg-h"}, spark.head)); kids.push(spark.node); }
     return el("div",{"class":"signal"}, kids);
   }
   function sparkbar(on){   // `on` = number of lit bars (0..5); colour inherited via --ic
@@ -1237,22 +1240,36 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return n;
   }
   function riskSparkline(){
-    var h = (DATA.version_history||[]).slice();
-    if (h.length < 2) return null;
-    h.sort(function(a,b){ return String(a.assessed_at).localeCompare(String(b.assessed_at)); });
-    h = h.slice(-12);
-    var W=200, H=42, n=h.length, pad=3;
+    var H = (DATA.version_history||[]).slice(), vals, firstLabel, head;
+    if (H.length >= 2){
+      H.sort(function(a,b){ return String(a.assessed_at).localeCompare(String(b.assessed_at)); });
+      H = H.slice(-12);
+      vals = H.map(function(e){ return RISK[e.recommendation]||30; });
+      firstLabel = "v"+H[0].version; head = "Risk trend";
+    } else {
+      // Only one release tracked so far → no cross-version line yet. Fall back to the
+      // per-run timeline and plot issue pressure (open issues per run) — a live, moving
+      // signal — then auto-promote to the cross-version Risk trend once a 2nd version lands.
+      var tl = (DATA.timeline||[]).filter(function(r){ return !r.approx; });
+      tl.sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
+      tl = tl.slice(-12);
+      if (tl.length < 2) return null;
+      var mx = Math.max.apply(null, tl.map(function(r){ return r.issues||0; })) || 1;
+      vals = tl.map(function(r){ return Math.round(100*(r.issues||0)/mx); });
+      firstLabel = timeAgo(tl[0].t); head = "Issue trend";
+    }
+    var W=200, HT=42, n=vals.length, pad=3;
     var xs=function(i){ return pad + (n===1?0:i*((W-2*pad)/(n-1))); };
-    var ys=function(r){ return (H-pad) - (r/100)*(H-2*pad); };
-    var pts = h.map(function(e,i){ return xs(i)+","+ys(RISK[e.recommendation]||30); });
-    var svg = svgEl("svg",{viewBox:"0 0 "+W+" "+H, preserveAspectRatio:"none"});
-    svg.appendChild(svgEl("polygon",{points: xs(0)+","+(H-pad)+" "+pts.join(" ")+" "+xs(n-1)+","+(H-pad), fill:"var(--tone-bg)"}));
+    var ys=function(r){ return (HT-pad) - (r/100)*(HT-2*pad); };
+    var pts = vals.map(function(v,i){ return xs(i)+","+ys(v); });
+    var svg = svgEl("svg",{viewBox:"0 0 "+W+" "+HT, preserveAspectRatio:"none"});
+    svg.appendChild(svgEl("polygon",{points: xs(0)+","+(HT-pad)+" "+pts.join(" ")+" "+xs(n-1)+","+(HT-pad), fill:"var(--tone-bg)"}));
     svg.appendChild(svgEl("polyline",{points: pts.join(" "), fill:"none", stroke:"var(--tone)", "stroke-width":"2", "stroke-linejoin":"round", "stroke-linecap":"round"}));
-    svg.appendChild(svgEl("circle",{cx:xs(n-1), cy:ys(RISK[h[n-1].recommendation]||30), r:"3", fill:"var(--tone)"}));
+    svg.appendChild(svgEl("circle",{cx:xs(n-1), cy:ys(vals[n-1]), r:"3", fill:"var(--tone)"}));
     var wrap = el("div",{"class":"sigtrend"});
     wrap.appendChild(svg);
-    wrap.appendChild(el("div",{"class":"cap"},[ el("span",null,"v"+h[0].version), el("span",null,"now") ]));
-    return wrap;
+    wrap.appendChild(el("div",{"class":"cap"},[ el("span",null,firstLabel), el("span",null,"now") ]));
+    return {head:head, node:wrap};
   }
   function hero(v){
     var rel = DATA.latest_release || {}, npm = DATA.npm || {};
@@ -1792,7 +1809,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
           el("a",{href:REPO},"How it works / source ↗"),
           el("a",{href:"llms.txt"},"For AI agents (llms.txt) ↗")
         ])
-      ])
+      ]),
+      el("img",{"class":"about-sticker", src:"/sticker.png", loading:"lazy",
+                alt:"ClawStat.us — the OpenClaw release-status lobster"})
     ]);
   }
 
