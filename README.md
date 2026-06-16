@@ -51,7 +51,12 @@ providers** argue it out before anything ships.
   the answer without executing JavaScript.
 - **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (a few cents/run
   typically, up to ~$0.08 when the validator disagrees and the analyst refines).
-- **Hermetic test suite.** 175+ network-free tests gate CI on every push.
+- **Honest about fresh releases.** A just-dropped version has little version-specific evidence
+  yet, so the page flags it as an *early read* — tells you to back up, notes how many issues
+  actually name this release vs. are carried over, and holds back the "cleared to run" / "data is
+  complete" language until reports accrue (sparse early data is a community-reporting lag, not a
+  model gap). It clears itself once the release is no longer fresh.
+- **Hermetic test suite.** 180+ network-free tests gate CI on every push.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
 the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
@@ -161,7 +166,11 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
   publish a low-confidence or invalid assessment, and a smoke test validates the HTML
   before it overwrites the previous page. The page leads with the decision content (verdict,
   key-metric tiles, **Your setup**, and the reasoning) and groups the supporting detail —
-  derived from the scored issues — behind a tab strip, with the Known-issues list below it:
+  derived from the scored issues — behind a tab strip, with the Known-issues list below it.
+  When the assessed version was published within `config.FRESH_RELEASE_DAYS` of the run, a
+  **fresh-release notice** leads the page (back up; the verdict is an early read that firms up
+  over the next few runs), and the confidence + "safest version" copy is tempered so it never
+  claims completeness on a release the community hasn't fully reported yet:
   - **Your setup** — pick the platforms, channels and components you run; the verdict is
     re-scored to your stack and the matching issues highlighted (cross-cutting "all-platform"
     issues shown once in a shared row).
@@ -272,7 +281,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 177 tests, hermetic (no network)
+python3 -m pytest        # 184 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
