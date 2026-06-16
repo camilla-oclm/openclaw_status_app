@@ -28,17 +28,18 @@
 }
 
 :root{
-  /* palette — dark (status-board: deep navy-slate, cyan data accent) */
-  --bg:#080b12; --bg-elev:#0b0f18;
-  --card:#101626; --card2:#141c2e; --card3:#18223a;
-  --border:#1e2a42; --border2:#293954;
-  --text:#e9eef7; --muted:#94a1b8; --faint:#5d6a82;
-  --accent:#34d2e6; --accent2:#5b8cff;        /* cyan → blue data gradient */
-  --good:#3fd07a; --warn:#e8b53a; --orange:#ff9446; --bad:#ff5d6c; --info:#5b9dff; --gray:#8794a8;
-  --good-bg:rgba(63,208,122,.12); --warn-bg:rgba(232,181,58,.13);
-  --bad-bg:rgba(255,93,108,.13); --info-bg:rgba(91,157,255,.13); --gray-bg:rgba(135,148,168,.12);
-  --good-bd:rgba(63,208,122,.40); --warn-bd:rgba(232,181,58,.42);
-  --bad-bd:rgba(255,93,108,.42); --info-bd:rgba(91,157,255,.42); --gray-bd:rgba(135,148,168,.34);
+  /* palette — dark (Warm Charcoal: soft warm slate, muted teal accent; eased off
+     pure-black/pure-white so body text sits ~12:1 instead of a harsh ~17:1) */
+  --bg:#16181d; --bg-elev:#1a1d23;
+  --card:#1e222a; --card2:#232831; --card3:#2a303b;
+  --border:#30353f; --border2:#3d434f;
+  --text:#d3d6dc; --muted:#969ca8; --faint:#686e79;
+  --accent:#45c4cc; --accent2:#8294cf;        /* muted teal → periwinkle */
+  --good:#57c285; --warn:#d6ab57; --orange:#e8945e; --bad:#e67483; --info:#7e9fd6; --gray:#8b919d;
+  --good-bg:rgba(87,194,133,.12); --warn-bg:rgba(214,171,87,.13);
+  --bad-bg:rgba(230,116,131,.13); --info-bg:rgba(126,159,214,.13); --gray-bg:rgba(139,145,157,.12);
+  --good-bd:rgba(87,194,133,.40); --warn-bd:rgba(214,171,87,.42);
+  --bad-bd:rgba(230,116,131,.42); --info-bd:rgba(126,159,214,.42); --gray-bd:rgba(139,145,157,.34);
 
   /* type */
   --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -54,19 +55,20 @@
   --grid-line:rgba(120,150,200,.05);
 }
 html[data-theme="light"]{
-  --bg:#eef1f7; --bg-elev:#e7ebf3;
-  --card:#ffffff; --card2:#f6f8fc; --card3:#eef2f9;
-  --border:#dce2ec; --border2:#cbd4e1;
-  --text:#0f1726; --muted:#54627a; --faint:#8794a8;
-  --accent:#0aa5c2; --accent2:#3b6df0;
-  --good:#13a05a; --warn:#9a6b00; --orange:#c2540a; --bad:#d23048; --info:#2563eb; --gray:#64748b;
-  --good-bg:rgba(19,160,90,.10); --warn-bg:rgba(154,107,0,.12);
-  --bad-bg:rgba(210,48,72,.09); --info-bg:rgba(37,99,235,.10); --gray-bg:rgba(100,116,139,.10);
-  --good-bd:rgba(19,160,90,.38); --warn-bd:rgba(154,107,0,.40);
-  --bad-bd:rgba(210,48,72,.38); --info-bd:rgba(37,99,235,.36); --gray-bd:rgba(100,116,139,.30);
-  --shadow-1:0 1px 2px rgba(15,23,38,.06);
-  --shadow-2:0 10px 30px -12px rgba(15,23,38,.18),0 1px 2px rgba(15,23,38,.06);
-  --grid-line:rgba(40,70,120,.05);
+  /* light — warm paper to match Warm Charcoal; text eased off near-black (~12:1) */
+  --bg:#f4f2ed; --bg-elev:#ece9e2;
+  --card:#fbfaf7; --card2:#f3f1ea; --card3:#ece8e0;
+  --border:#e2ddd3; --border2:#d0ccc0;
+  --text:#2f3238; --muted:#5e616a; --faint:#8c8f97;
+  --accent:#18929b; --accent2:#5566b8;
+  --good:#1f8f57; --warn:#8a6a1f; --orange:#b9591f; --bad:#c5414f; --info:#3a63c4; --gray:#6b6f78;
+  --good-bg:rgba(31,143,87,.10); --warn-bg:rgba(138,106,31,.12);
+  --bad-bg:rgba(197,65,79,.09); --info-bg:rgba(58,99,196,.10); --gray-bg:rgba(107,111,120,.10);
+  --good-bd:rgba(31,143,87,.38); --warn-bd:rgba(138,106,31,.40);
+  --bad-bd:rgba(197,65,79,.38); --info-bd:rgba(58,99,196,.36); --gray-bd:rgba(107,111,120,.30);
+  --shadow-1:0 1px 2px rgba(40,36,30,.06);
+  --shadow-2:0 10px 30px -12px rgba(40,36,30,.16),0 1px 2px rgba(40,36,30,.06);
+  --grid-line:rgba(90,80,60,.05);
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
