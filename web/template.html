@@ -301,18 +301,35 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .fsep{display:inline-flex; align-items:center; margin-left:.35rem; padding-left:.5rem; border-left:1px solid var(--border2);
   font-size:.64rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint)}
 .issue{
-  display:flex; gap:.9rem; align-items:flex-start;
   background:var(--card); border:1px solid var(--border); border-left-width:3px; border-radius:var(--r-md);
-  padding:.85rem 1rem; margin-bottom:.6rem; box-shadow:var(--shadow-1); transition:border-color .15s var(--ease), transform .15s var(--ease)}
-.issue:hover{transform:translateX(2px); border-color:var(--border2)}
+  margin-bottom:.4rem; box-shadow:var(--shadow-1); overflow:hidden; transition:border-color .15s var(--ease)}
+.issue:hover{border-color:var(--border2)}
 .issue.sev-critical{border-left-color:var(--bad); border-left-width:4px}
-.issue.sev-high{border-left-color:var(--bad)}
+.issue.sev-high{border-left-color:var(--orange,#e08a3c)}
 .issue.sev-medium{border-left-color:var(--warn)}
 .issue.sev-low{border-left-color:var(--gray)}
-.issue .num{font-family:var(--mono); font-size:.82rem; font-weight:700; color:var(--accent); text-decoration:none; white-space:nowrap; padding-top:.05rem}
-.issue .num:hover{text-decoration:underline}
-.issue .body{flex:1; min-width:0}
-.issue .title{font-weight:600; font-size:.93rem}
+/* compact summary row (click to expand) */
+.irow{display:flex; align-items:center; gap:.55rem; width:100%; text-align:left; cursor:pointer;
+  background:none; border:0; color:inherit; font:inherit; padding:.5rem .85rem}
+.irow:hover{background:var(--card2)}
+.irow:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.sevdot{flex:none; width:9px; height:9px; border-radius:50%; background:var(--gray)}
+.issue.sev-critical .sevdot{background:var(--bad)}
+.issue.sev-high .sevdot{background:var(--orange,#e08a3c)}
+.issue.sev-medium .sevdot{background:var(--warn)}
+.inum{flex:none; font-family:var(--mono); font-size:.78rem; font-weight:700; color:var(--accent)}
+.ititle{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; font-size:.9rem; color:var(--text)}
+.ibs{flex:none; display:flex; align-items:center; gap:.35rem}
+.ib{display:inline-flex; align-items:center; gap:.2rem; font-size:.72rem; font-weight:700; color:var(--muted)}
+.chev{flex:none; color:var(--faint); font-size:.7rem; transition:transform .15s var(--ease)}
+.irow[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.idetail{padding:.15rem .85rem .8rem 1.45rem}
+.idetail[hidden]{display:none}
+.idet-link{display:inline-block; margin-top:.55rem; font-size:.78rem; font-weight:700; color:var(--accent); text-decoration:none}
+.idet-link:hover{text-decoration:underline}
+.ki-more{display:block; margin:.5rem auto 0; font-size:.82rem; font-weight:700; color:var(--accent);
+  background:var(--card); border:1px solid var(--border2); border-radius:999px; padding:.4rem 1.15rem; cursor:pointer; transition:.15s var(--ease)}
+.ki-more:hover{border-color:var(--accent); color:var(--text)}
 .issue .tags{display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.5rem}
 .tag{
   display:inline-flex; align-items:center; gap:.3rem; font-size:.71rem; font-weight:600;
@@ -1396,13 +1413,34 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (i.first_seen) tags.push(el("span",{"class":"tag"}, "tracked "+timeAgo(i.first_seen)));
     if (mine) tags.unshift(el("span",{"class":"tag t-me"}, "★ your stack"));
     if (i.is_new) tags.unshift(el("span",{"class":"tag t-good"}, "🆕 new"));
-    return el("div",{"class":"issue sev-"+sev+(mine?" mine":""), "data-cat":i.category||"other", "data-mine":mine?"1":"0", "data-comp":issueComponents(i).join(" ")},[
-      el("a",{"class":"num", href:issueUrl(i.number)}, "#"+i.number),
-      el("div",{"class":"body"},[
-        el("div",{"class":"title"}, i.title||"(untitled)"),
-        el("div",{"class":"tags"}, tags)
-      ])
+
+    // Compact one-line summary (click to expand the full tag set + GitHub link).
+    var num = "#"+i.number;
+    var badges = [];
+    if (i.is_new) badges.push(el("span",{"class":"ib t-good", title:"New since last run"}, "🆕"));
+    if (mine) badges.push(el("span",{"class":"ib t-me", title:"Affects your stack"}, "★"));
+    badges.push(el("span",{"class":"ib", title:cat.label}, cat.icon));
+    if (i.reactions) badges.push(el("span",{"class":"ib"}, "👍 "+i.reactions));
+    var detId = "idet-"+i.number;
+    var btn = el("button",{"class":"irow", type:"button", "aria-expanded":"false",
+                           "aria-controls":detId, title:"Show details for "+num},[
+      el("span",{"class":"sevdot", title:sev+" severity"}),
+      el("span",{"class":"inum"}, num),
+      el("span",{"class":"ititle"}, i.title||"(untitled)"),
+      el("span",{"class":"ibs"}, badges),
+      el("span",{"class":"chev","aria-hidden":"true"}, "▸")
     ]);
+    var detail = el("div",{"class":"idetail", id:detId, hidden:""},[
+      el("div",{"class":"tags"}, tags),
+      el("a",{"class":"idet-link", href:issueUrl(i.number)}, "View "+num+" on GitHub ↗")
+    ]);
+    btn.addEventListener("click", function(){
+      var open = btn.getAttribute("aria-expanded")==="true";
+      btn.setAttribute("aria-expanded", open?"false":"true");
+      if (open) detail.setAttribute("hidden",""); else detail.removeAttribute("hidden");
+    });
+    return el("div",{"class":"issue sev-"+sev+(mine?" mine":""), "data-cat":i.category||"other",
+                     "data-mine":mine?"1":"0", "data-comp":issueComponents(i).join(" ")},[ btn, detail ]);
   }
   function issues(){
     var ki = (DATA.known_issues||[]).slice();
@@ -1457,22 +1495,48 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ki.forEach(function(i){ list.appendChild(issueCard(i)); });
     s.appendChild(list);
 
-    function applyFilter(f){
-      catStrip.querySelectorAll(".ltab").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===f?"true":"false"); });
-      if (compRow) compRow.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===f?"true":"false"); });
+    // Cap the rendered rows so the list stays short and scannable even as the ledger
+    // grows; "Show all" lifts the cap. The cap applies to the CURRENTLY-FILTERED set.
+    var CAP = 15, showAll = false, activeFilter = "all";
+    var moreBtn = el("button",{"class":"ki-more", type:"button"}, "");
+    s.appendChild(moreBtn);
+
+    function matchRow(row, f){
+      if (f==="all") return true;
+      if (f==="mine") return row.getAttribute("data-mine")==="1";
+      if (f.indexOf("comp:")===0) return (row.getAttribute("data-comp")||"").split(" ").indexOf(f.slice(5)) >= 0;
+      return row.getAttribute("data-cat")===f;
+    }
+    function refresh(){
+      var shown = 0, matched = 0;
       list.querySelectorAll(".issue").forEach(function(row){
-        var show;
-        if (f==="all") show = true;
-        else if (f==="mine") show = row.getAttribute("data-mine")==="1";
-        else if (f.indexOf("comp:")===0) show = (row.getAttribute("data-comp")||"").split(" ").indexOf(f.slice(5)) >= 0;
-        else show = row.getAttribute("data-cat")===f;
-        row.style.display = show ? "" : "none";
+        if (!matchRow(row, activeFilter)){ row.style.display = "none"; return; }
+        matched++;
+        var vis = showAll || shown < CAP;
+        row.style.display = vis ? "" : "none";
+        if (vis) shown++;
       });
+      if (matched > CAP){
+        moreBtn.style.display = "";
+        moreBtn.textContent = showAll ? "Show fewer ▴" : ("Show all "+matched+" ▾");
+      } else {
+        moreBtn.style.display = "none";
+      }
     }
     s.addEventListener("click", function(ev){
-      var btn = ev.target.closest(".ki-cats .ltab, .ki-subs .fbtn"); if(!btn) return;
-      applyFilter(btn.getAttribute("data-f"));
+      var f = ev.target.closest(".ki-cats .ltab, .ki-subs .fbtn");
+      if (f){
+        activeFilter = f.getAttribute("data-f");
+        catStrip.querySelectorAll(".ltab").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===activeFilter?"true":"false"); });
+        if (compRow) compRow.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===activeFilter?"true":"false"); });
+        showAll = false;                 // re-cap when the filter changes
+        refresh();
+      } else if (ev.target.closest(".ki-more")){
+        showAll = !showAll;
+        refresh();
+      }
     });
+    refresh();
     return s;
   }
 
