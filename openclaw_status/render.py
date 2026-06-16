@@ -452,6 +452,26 @@ def _timeline_from_history(h: dict) -> dict:
     }
 
 
+_WORKAROUND_RE = re.compile(
+    r"\b(work[\s-]?around|mitigat(?:e|ed|ion)|temporary fix|temp fix|stopgap)\b", re.I)
+
+
+def _has_workaround(raw_i: dict) -> bool:
+    """Best-effort: does the issue's own text mention a workaround/mitigation?
+
+    Only the issue title + (truncated) body are available — comments come back as a
+    count, not text — so this is a sparse, honest signal: it flags reports that *note*
+    a workaround, not a guarantee that one exists or is official."""
+    if not isinstance(raw_i, dict):
+        return False
+    return bool(_WORKAROUND_RE.search(f"{raw_i.get('title','')} {raw_i.get('body','')}"))
+
+
+# Bump when the public latest.json shape changes in a breaking way (field removed /
+# renamed / retyped). Additive fields don't require a bump.
+SCHEMA_VERSION = 1
+
+
 def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     """Merge assessment.json + raw-data.json into the flat DATA dict the template expects."""
     a = assessment_raw.get("assessment", {})
@@ -515,12 +535,17 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             # Ledger-derived: "new since last run" badge + issue age.
             "is_new": bool(issue.get("is_new")),
             "first_seen": issue.get("first_seen") or raw_i.get("first_seen"),
+            # Sparse, honest signal — the report's text mentions a workaround/mitigation.
+            "has_workaround": _has_workaround(raw_i),
         })
 
     lr = sources.get("latest_release", {})
     lpr = sources.get("latest_prerelease", {})
 
     data = {
+        # `impact` (per known-issue) is a community-engagement bucket from 👍 + comment
+        # volume — NOT a second severity axis; it intentionally differs from `severity`.
+        "schema_version": SCHEMA_VERSION,
         "assessed_at": assessment_raw.get("assessed_at", ""),
         "version": assessment_raw.get("version", ""),
         "recommendation": a.get("recommendation", "⏸️"),
@@ -556,11 +581,13 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "npm": sources.get("npm", {}),
         "latest_release": {
             "tag": lr.get("tag", "") if lr else "",
+            "url": lr.get("url", "") if lr else "",
             "published_at": lr.get("published_at", "")[:10] if (lr and lr.get("published_at")) else "",
             "prerelease": lr.get("prerelease", False) if lr else False,
         },
         "latest_prerelease": {
             "tag": lpr.get("tag", "") if lpr else "",
+            "url": lpr.get("url", "") if lpr else "",
             "published_at": lpr.get("published_at", "")[:10] if (lpr and lpr.get("published_at")) else "",
         },
         "clawsweeper_work": cw.get("work_candidates", []),
@@ -673,13 +700,24 @@ def _write_feed(data: dict, output_path: str) -> None:
     dest = Path(output_path).with_name("feed.xml")
     site = config.SITE_URL.rstrip("/")
     archived = set(data.get("archived_versions") or [])
+    cur = data.get("version", "")
     hist = sorted(data.get("version_history", []) or [],
                   key=lambda e: str(e.get("assessed_at", "")), reverse=True)
     items = []
     for e in hist[:20]:
         ver = e.get("version", "")
         label = _VERDICT_TEXT.get(e.get("recommendation", ""), ("assessed", ""))[0]
-        link = f"{site}/archive/{ver}.html" if ver in archived else site + "/"
+        # Make every item individually addressable: current → the live homepage; a past
+        # version we snapshotted → its archive page; otherwise → its GitHub release tag
+        # (better than dumping every old item on the homepage).
+        if ver and ver == cur:
+            link = site + "/"
+        elif ver in archived:
+            link = f"{site}/archive/{ver}.html"
+        elif ver:
+            link = f"https://github.com/openclaw/openclaw/releases/tag/v{ver}"
+        else:
+            link = site + "/"
         pub = _rfc822(e.get("assessed_at", ""))
         items.append(
             "    <item>\n"
