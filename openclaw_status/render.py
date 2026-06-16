@@ -300,13 +300,17 @@ def _norm_platforms(value) -> list:
 
 # Deterministic platform derivation from an issue's text (title + body + labels) — the
 # always-on baseline that doesn't depend on the LLM (and survives a cheap re-render).
+# Every token is \b-anchored so a signal only fires on a whole word, never as a
+# substring of a larger one: `.exe` must be a file extension, not the `.exe` inside
+# `tools.exec`; `win` must be `win32`, not `winner`; etc. (regression: issue #92843, a
+# macOS report, was mis-tagged Windows because `\.exe` matched `tools.exec.security`).
 _PLATFORM_SIGNALS = {
-    "windows": r"windows|win32|\.exe|powershell|\bwsl\b",
-    "macos": r"macos|mac os|\bosx\b|darwin|imessage|\bapple\b",
-    "linux": r"linux|docker|container|systemd|ubuntu|debian|cgroup|self-hosted|kubernetes|\bk8s\b",
-    "discord": r"discord",
-    "slack": r"slack",
-    "telegram": r"telegram",
+    "windows": r"\bwindows\b|\bwin32\b|\.exe\b|\bpowershell\b|\bwsl\b",
+    "macos": r"\bmacos\b|\bmac os\b|\bosx\b|\bdarwin\b|\bimessage\b|\bapple\b",
+    "linux": r"\blinux\b|\bdocker\b|\bcontainer\b|\bsystemd\b|\bubuntu\b|\bdebian\b|\bcgroup\b|\bself-hosted\b|\bkubernetes\b|\bk8s\b",
+    "discord": r"\bdiscord\b",
+    "slack": r"\bslack\b",
+    "telegram": r"\btelegram\b",
 }
 _CORE_SIGNAL = re.compile(
     r"\b(build|compile|memory|index|reindex|engine|session|auth|gateway|database|migration|startup|worker|core)\b",
