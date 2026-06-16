@@ -2160,11 +2160,26 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     addAnchors();
   }
   function revealOn(){
-    if (!("IntersectionObserver" in window)) return;
+    var items = app.querySelectorAll(".section, .stats, .bestver");
+    // No IntersectionObserver → just show everything (never gate content on JS animation).
+    if (!("IntersectionObserver" in window)){
+      items.forEach(function(n){ n.classList.add("in"); });
+      return;
+    }
+    // threshold:0 = reveal on the FIRST visible pixel. A fractional threshold (the old
+    // 0.06) is unreachable-in-practice for very tall sections on a phone — the section's
+    // max on-screen ratio is ~viewport/height, so a fast fling scrolls right past the
+    // narrow band where it would fire, leaving the section stuck invisible. A small
+    // positive bottom margin reveals a touch early and keeps page-bottom sections firing.
     var io = new IntersectionObserver(function(es){
       es.forEach(function(en){ if (en.isIntersecting){ en.target.classList.add("in"); io.unobserve(en.target); } });
-    }, {rootMargin:"0px 0px -8% 0px", threshold:0.06});
-    app.querySelectorAll(".section, .stats, .bestver").forEach(function(n){ n.classList.add("reveal"); io.observe(n); });
+    }, {rootMargin:"0px 0px 10% 0px", threshold:0});
+    items.forEach(function(n){ n.classList.add("reveal"); io.observe(n); });
+    // Safety net: nothing may stay invisible. After the above-the-fold animation has had
+    // time to play, reveal anything still hidden (covers any observer miss on a fast fling).
+    setTimeout(function(){
+      app.querySelectorAll(".reveal:not(.in)").forEach(function(n){ io.unobserve(n); n.classList.add("in"); });
+    }, 1800);
   }
 
   // ── permalinks: give each section a stable #id, an anchorable header, and
