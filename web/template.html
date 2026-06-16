@@ -199,8 +199,10 @@ body::after{
 .gauge .g-top{display:flex; align-items:baseline; justify-content:space-between}
 .gauge .g-val{font-family:var(--mono); font-weight:800; font-size:1.05rem; color:var(--tone)}
 .gauge .g-lab{font-size:.74rem; color:var(--muted); font-weight:600}
-.gauge .g-track{height:9px; border-radius:999px; background:var(--card3); overflow:hidden; border:1px solid var(--border)}
-.gauge .g-fill{height:100%; border-radius:999px; background:linear-gradient(90deg,var(--tone),color-mix(in srgb,var(--tone) 55%,var(--accent))); box-shadow:0 0 12px -2px var(--tone); transition:width .8s var(--ease)}
+.gauge .g-segs{display:flex; gap:5px}
+.gauge .g-seg{flex:1; height:9px; border-radius:999px; background:var(--card3); border:1px solid var(--border)}
+.gauge .g-seg.on{background:var(--tone); border-color:var(--tone); box-shadow:0 0 10px -3px var(--tone)}
+.gauge .g-note{font-size:.72rem; color:var(--muted); line-height:1.4}
 /* signal: platform sparkbars */
 .sigplat{display:grid; grid-template-columns:1fr 1fr; gap:.55rem .9rem}
 .sigplat .sp{display:flex; align-items:center; gap:.5rem; min-width:0}
@@ -397,6 +399,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .bestver .bi{font-size:1.1rem; line-height:1.3}
 .bestver a.snap{color:var(--accent); text-decoration:none; font-family:var(--mono); font-weight:700}
 .bestver a.snap:hover{text-decoration:underline}
+.about{display:flex; gap:.7rem; align-items:flex-start; margin:1.1rem 0 1.4rem; padding:.85rem 1.05rem; border-radius:var(--r-md); background:var(--card2); border:1px solid var(--border); color:var(--muted); font-size:.87rem}
+.about .ai{font-size:1.05rem; line-height:1.4}
+.about .atxt p{margin:0; line-height:1.55}
+.about .atxt b{color:var(--text)}
+.about .atxt a{color:var(--accent); text-decoration:none}
+.about .atxt a:hover{text-decoration:underline}
+.about .atxt p.alinks{margin:.55rem 0 0; display:flex; gap:1.1rem; flex-wrap:wrap; font-weight:600}
 
 /* ── your setup ────────────────────────────────────────────────────────── */
 .setup .chips{display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-bottom:.9rem}
@@ -999,10 +1008,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     "🔄": {label:"Wait for next release",   tone:"tone-info", blurb:"Hold for the next stable — a pre-release is in the works, but its fixes aren't confirmed yet."}
   };
   var CAT = {
-    regression:    {icon:"🔄", label:"Regression",      cls:"t-bad"},
-    post_release:  {icon:"🔶", label:"Post-release",     cls:"t-warn"},
-    diamond_lobster:{icon:"💎", label:"Diamond Lobster", cls:"t-info"},
-    active:        {icon:"🟢", label:"Active",          cls:"t-warn"}
+    regression:    {icon:"🔄", label:"Regression",      cls:"t-bad",  desc:"Confirmed regression — worked before, broken by a recent release."},
+    post_release:  {icon:"🔶", label:"Post-release",     cls:"t-warn", desc:"Filed after this release and affects it, but not confirmed as a regression."},
+    diamond_lobster:{icon:"💎", label:"Diamond Lobster", cls:"t-info", desc:"Maintainers' '🦞 diamond lobster' quality rating — a notable issue (not a severity)."},
+    active:        {icon:"🟠", label:"Ongoing",          cls:"t-warn", desc:"Open and ongoing — a long-standing issue not specific to this release."}
   };
   var PLAT = [
     ["windows","🪟","Windows"],["macos","🍎","macOS"],["linux","🐧","Linux"],
@@ -1117,17 +1126,26 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ]);
   }
 
-  // Confidence is categorical; map to an approximate gauge value.
-  var CONF_PCT = {high:92, medium:64, low:34};
+  // Confidence is categorical (low/medium/high) — shown as a 3-step indicator (not a
+  // false percentage) with a plain-language note so "medium" isn't a mystery.
+  var CONF_STEP = {high:3, medium:2, low:1};
+  var CONF_DESC = {
+    high:   "Strong evidence — the data is consistent and fairly complete.",
+    medium: "Some evidence gaps remain — treat the verdict as a moderate-strength signal.",
+    low:    "Limited or conflicting data — treat as a weak signal and verify against the issues."
+  };
   function signalPanel(v){
     var conf = String(DATA.confidence||"medium").toLowerCase();
-    var pct = CONF_PCT[conf] != null ? CONF_PCT[conf] : 50;
-    var gauge = el("div",{"class":"gauge "+v.tone},[
+    var lit = CONF_STEP[conf] || 2;
+    var segs = el("div",{"class":"g-segs"});
+    for (var gi=1; gi<=3; gi++){ segs.appendChild(el("span",{"class":"g-seg"+(gi<=lit?" on":"")}, null)); }
+    var gauge = el("div",{"class":"gauge "+v.tone, title:CONF_DESC[conf]||""},[
       el("div",{"class":"g-top"},[
         el("span",{"class":"g-lab"},"Verdict confidence"),
         el("span",{"class":"g-val"}, cap(conf))
       ]),
-      el("div",{"class":"g-track"},[ el("div",{"class":"g-fill", style:"width:"+pct+"%"}, null) ])
+      segs,
+      el("div",{"class":"g-note"}, CONF_DESC[conf]||"")
     ]);
     // Platform glance: bar height = issue volume, colour = worst severity (same
     // scale as the "Platform impact" section), derived from the issue tags.
@@ -1199,10 +1217,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var conf = String(DATA.confidence||"medium").toLowerCase();
     var pre = DATA.latest_prerelease || {};
     var chips = [
-      el("span",{"class":"chip lvl-"+conf},[document.createTextNode("Confidence: "), el("b",null,cap(conf))]),
+      el("span",{"class":"chip lvl-"+conf, title:CONF_DESC[conf]||""},[document.createTextNode("Confidence: "), el("b",null,cap(conf))]),
       el("span",{"class":"chip"},[document.createTextNode("Assessed "), el("b",null,timeAgo(DATA.assessed_at))])
     ];
-    if (pre.tag) chips.push(el("span",{"class":"chip"},[el("b",null,"Pre-release "+pre.tag)," available"]));
+    if (pre.tag) chips.push(el("span",{"class":"chip", title:"A newer pre-release exists, but it's unverified — its fixes for the issues below aren't confirmed."},[el("b",null,"Pre-release "+pre.tag)," available"]));
 
     var main = el("div",{"class":"hero-main"},[
       el("div",{"class":"eyebrow"},"Release assessment"),
@@ -1287,7 +1305,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var sev = String(i.severity||"medium");
     var mine = issueHitsStack(i);
     var cat = CAT[i.category] || {icon:"📋",label:cap(i.category||"issue"),cls:""};
-    var tags = [ el("span",{"class":"tag "+cat.cls},[cat.icon+" "+cat.label]) ];
+    var tags = [ el("span",{"class":"tag "+cat.cls, title:cat.desc||""},[cat.icon+" "+cat.label]) ];
     // System(s) this issue hits — analyst-tagged, heuristic fallback (see issuePlatforms).
     var ips = issuePlatforms(i);
     if (ips.indexOf("all") >= 0){
@@ -1308,7 +1326,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var dec = i.clawsweeper_decision;
     if (dec && dec!=="unknown"){
-      tags.push(el("span",{"class":"tag "+(dec==="keep_open"?"t-warn":"t-good")}, (dec==="keep_open"?"⊙ keep open":"✓ "+dec)));
+      var decTip = "Clawsweeper (OpenClaw's automated issue-triage bot) "+(dec==="keep_open"?"kept this open — not auto-closed or resolved.":"marked this "+dec+".");
+      tags.push(el("span",{"class":"tag "+(dec==="keep_open"?"t-warn":"t-good"), title:decTip}, (dec==="keep_open"?"⊙ keep open":"✓ "+dec)));
     }
     if (i.fixed_in){
       tags.push(el("span",{"class":"tag t-good"}, "✓ fixed in "+i.fixed_in));
@@ -1549,7 +1568,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       return c;
     }
     var s = el("div",{"class":"section"});
-    s.appendChild(sectionHead("Issue-triage activity", null, "from Clawsweeper"));
+    s.appendChild(sectionHead("Issue-triage activity", null, "from Clawsweeper, OpenClaw's triage bot"));
     var d = el("details",{"class":"triage"});
     d.appendChild(el("summary", null, [
       document.createTextNode("🧹  "+work.length+" in progress · "+closed.length+" recently closed"),
@@ -1613,6 +1632,29 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       ])),
       el("div",{"class":"disclaimer"},
         "Independent, unofficial project — not affiliated with, or endorsed by, OpenClaw or its maintainers. Verdicts are generated automatically and may be wrong; confirm against the linked issues before you update. Data is drawn from the public github.com/openclaw/openclaw issue tracker and releases via the GitHub API.")
+    ]);
+  }
+
+  // ── what is this? (independence + how the verdict is made — surfaced up top so a
+  //    first-time / skeptical visitor learns it's an unofficial automated tool) ──
+  function about(){
+    var REPO = "https://github.com/camilla-oclm/openclaw_status_app";
+    return el("div",{"class":"about"},[
+      el("span",{"class":"ai"},"ℹ️"),
+      el("div",{"class":"atxt"},[
+        el("p",null,[
+          el("b",null,"What is this? "),
+          "An independent, unofficial tracker — ",
+          el("b",null,"not"),
+          " affiliated with OpenClaw. It reads post-release bug reports from the public ",
+          el("a",{href:"https://github.com/openclaw/openclaw/issues"},"OpenClaw issue tracker"),
+          ", scores them by the project's own severity labels, and has two different LLMs — an analyst and an independent validator — weigh the evidence. No human writes the verdict, so sanity-check it against the linked issues."
+        ]),
+        el("p",{"class":"alinks"},[
+          el("a",{href:REPO},"How it works / source ↗"),
+          el("a",{href:"llms.txt"},"For AI agents (llms.txt) ↗")
+        ])
+      ])
     ]);
   }
 
@@ -1999,7 +2041,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     // Order: lead with the decision-relevant content — verdict → your-setup →
     // reasoning (why + case) → known issues — then the derived summaries (the
     // platform/component meters), the changelog, and the long-tail trends/history.
-    [ lowConfBanner(), hero(v), bestVersion(), stats(),
+    [ lowConfBanner(), hero(v), about(), bestVersion(), stats(),
       personalize(), thesis(), evidence(), issues(),
       platforms(), componentHealth(), changes(), catchingUp(),
       sentiment(), trends(), triage(), history(), footer()
