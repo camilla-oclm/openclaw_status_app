@@ -261,6 +261,22 @@ def test_derive_platforms_from_text():
     assert render._derive_platforms({"title": "typo in docs"}, severity="low") == []
 
 
+def test_derive_platforms_no_substring_false_positives():
+    # regression (issue #92843): a macOS report whose body mentions
+    # `tools.exec.security` must NOT be tagged Windows — `\.exe` is a file
+    # extension, not the `.exe` buried inside `.exec`.
+    macos_exec = {"title": '`security: "allowlist"` exec agents lose network access',
+                  "body": 'macOS host, single-gateway. Some agents tools.exec.security: '
+                          '"allowlist", others run unrestricted (full).'}
+    assert render._derive_platforms(macos_exec) == ["macos"]
+    # a genuine Windows .exe is still caught
+    assert render._derive_platforms({"title": "x", "body": "openclaw.exe crashes on launch"}) \
+        == ["windows"]
+    # tokens only fire as whole words, never as substrings of a larger one
+    assert render._derive_platforms({"title": "x", "body": "the winner takes the macports route"}) == []
+    assert render._derive_platforms({"title": "grapple with the syntax"}) == []
+
+
 def test_derive_platform_impact_from_tags():
     issues = [
         {"platforms": ["linux"], "severity": "critical"},   # linux ← critical
