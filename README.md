@@ -32,31 +32,22 @@ providers** argue it out before anything ships.
 
 ### Highlights
 
-- **Independent multi-model review.** The analyst and validator are *different* providers
-  (DeepSeek + Qwen), with a third (MiniMax) as fallback — so no model rubber-stamps its own
-  reasoning, and a single-vendor outage can't sink a run.
-- **Evidence-ranked issue scouting.** Three GitHub searches (all sorted by 👍) are scored from
-  the repo's real `P0…P4` / breakage / harm-area labels and ranked by severity *blended with
-  whether the bug affects the assessed version* — a confirmed regression outranks a critical
-  about some other release.
-- **Safe-by-construction frontend.** A zero-dependency static page that builds its DOM with
-  `textContent` (XSS-safe) and no inline handlers (CSP-clean) — even though every field is
-  untrusted LLM text.
-- **Ships only trustworthy pages.** A deploy guard refuses low-confidence or invalid
-  assessments, an HTML smoke test runs *before* the old page is overwritten, and each outgoing
-  page is archived to a browsable per-version snapshot.
-- **Built for humans *and* machines.** The same verdict ships as an interactive page, a JSON API
-  (`latest.json`), an RSS feed, a status badge, and an **agent-readable mirror** (`llms.txt` /
-  `llms-full.txt`) — plus server-rendered HTML + JSON-LD so search engines and LLM agents can read
-  the answer without executing JavaScript.
-- **Cost-aware.** Every run logs cost + latency with daily/monthly budget alerts (a few cents/run
-  typically, up to ~$0.08 when the validator disagrees and the analyst refines).
-- **Honest about fresh releases.** A just-dropped version has little version-specific evidence
-  yet, so the page flags it as an *early read* — tells you to back up, notes how many issues
-  actually name this release vs. are carried over, and holds back the "cleared to run" / "data is
-  complete" language until reports accrue (sparse early data is a community-reporting lag, not a
-  model gap). It clears itself once the release is no longer fresh.
-- **Hermetic test suite.** 180+ network-free tests gate CI on every push.
+- **Independent multi-model review** — the analyst and validator are *different* providers
+  (DeepSeek + Qwen, with MiniMax as fallback), so no model rubber-stamps its own reasoning and a
+  single-vendor outage can't sink a run.
+- **Evidence-ranked scouting** — issues are scored from the repo's real `P0…P4` / breakage / harm
+  labels and ranked by severity *blended with whether the bug affects the assessed version*, so a
+  confirmed regression outranks a critical about some other release.
+- **Safe by construction** — a zero-dependency static page that builds its DOM with `textContent`
+  (XSS-safe) and no inline handlers (CSP-clean), even though every field is untrusted LLM text.
+- **Ships only trustworthy pages** — a deploy guard refuses low-confidence or invalid assessments,
+  an HTML smoke test runs *before* the old page is overwritten, and each page is archived to a
+  browsable per-version snapshot.
+- **For humans *and* machines** — the verdict ships as an interactive page, a JSON API
+  (`latest.json`), an RSS feed, a status badge, and an agent-readable mirror (`llms.txt`), plus
+  server-rendered HTML + JSON-LD so search engines and agents read the answer without running JS.
+- **Honest about fresh releases** — a just-dropped version is flagged as an *early read* (back up;
+  the verdict firms up over the next few runs) until version-specific reports accrue.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
 the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
@@ -159,83 +150,39 @@ is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
 
 ### 4. Render — `openclaw_status/render.py`
 
-- **`web/index.html`** — the public decision page. Pipeline data is injected into the
-  `web/template.html` template via a `<script type="application/json">` block. The template
-  is a zero-dependency, dark/light, mobile-responsive page that builds its DOM with
-  `textContent` (XSS-safe) and no inline handlers (CSP-clean). A deploy guard refuses to
-  publish a low-confidence or invalid assessment, and a smoke test validates the HTML
-  before it overwrites the previous page. The page leads with the decision content (verdict,
-  key-metric tiles, **Your setup**, and the reasoning) and groups the supporting detail —
-  derived from the scored issues — behind a tab strip, with the Known-issues list below it.
-  When the assessed version was published within `config.FRESH_RELEASE_DAYS` of the run, a
-  **fresh-release notice** leads the page (back up; the verdict is an early read that firms up
-  over the next few runs), and the confidence + "safest version" copy is tempered so it never
-  claims completeness on a release the community hasn't fully reported yet:
-  - **Your setup** — pick the platforms, channels and components you run; the verdict is
-    re-scored to your stack and the matching issues highlighted (cross-cutting "all-platform"
-    issues shown once in a shared row).
-  - **Impact** *(tab)* — per-component (Gateway/Models/Memory/Sessions/Auth/Channels/Plugins/
-    Agents/Tasks/Tools/Build) and per-platform (Windows/macOS/Linux/Discord/Slack/Telegram)
-    meters, each encoding **issue volume** (bar length) × **worst severity** (4-step colour
-    ramp). Platform tags come from the analyst when present, else a deterministic
-    `render._derive_*` backfill.
-  - **What's new / Trends / History** *(tabs)* — the release changelog; a 2×2 grid of per-run
-    time-series charts (issue pressure, severity mix, verdict, regression share) built from
-    `timeline.json` (below); and the past-verdicts track record.
-  - **Known issues** — the scored, version-relevant bug list as compact one-line rows that
-    expand to full detail (platform/component/severity/workaround tags + a GitHub link),
-    filterable by category and subsystem and capped with a "show all" toggle so the list stays
-    scannable as the ledger grows.
-- **`web/latest.json`** — the same payload written as a sibling file. The page renders from the
-  inlined copy instantly, then `fetch()`es `latest.json` and re-renders if it's fresher — so a
-  data refresh doesn't need a full HTML rebuild, while `file://` / offline viewing still works
-  from the inlined copy.
-- **Per-run time series.** `data/timeline.json` gets one append-only snapshot every run (version,
-  verdict, confidence, issue/regression/severity counts) — *not* deduped by version, so a release
-  re-assessed each 6h becomes a curve, not a point. It's the data behind the Trends charts; until it
-  has ≥2 points the charts fall back to a coarse per-version series from `history.json`.
-  (`history.json` stays one row per version — it powers "Past verdicts".) Per-run cost & latency are
-  also logged on disk for budget tracking but are **kept out of the public payload**.
-- **Browsable history.** Instead of discarding the outgoing page, each render snapshots it to
-  `web/archive/<version>.html` (named from the version it was built for) and the "Past verdicts"
-  timeline links every entry that has a snapshot. Past-version snapshots **self-canonicalise** (so
-  each can be indexed for its own "openclaw vX" query); the snapshot of the current version keeps
-  `canonical → /` to avoid a homepage duplicate. Retention is capped (`config.ARCHIVE_KEEP`,
-  default 30); if a page's version can't be read, it falls back to a single `*.html.prev`
-  rollback copy. Caddy already serves `web/`, so the archive is reachable with no extra config.
-- **Shareable artifacts.** Each render also writes an RSS feed and an embeddable badge next to the
-  page (all static, served by Caddy):
-  - **`web/feed.xml`** — an RSS feed of verdicts (one item per tracked version). Subscribe at
-    `https://clawstat.us/feed.xml`.
-  - **`web/badge.svg`** — a self-contained shields-style status badge. Embed the live verdict in a
-    README: `[![OpenClaw status](https://clawstat.us/badge.svg)](https://clawstat.us)`.
-  - **`web/latest.json`** is also a documented public **JSON API** — the full assessment payload
-    (`version`, `recommendation`, `confidence`, `thesis`, `known_issues`, `changes`, …). Poll it
-    instead of scraping the page. It carries a `schema_version` (bumped only on a breaking
-    shape change — additive fields don't bump it) so consumers can guard against drift, and
-    `latest_release` / `latest_prerelease` include a `url` to the GitHub release. Note on
-    per-issue fields: **`severity`** is the harm class (from the repo's `P0…P4` + breakage/
-    impact labels) while **`impact`** is a *community-engagement* bucket (👍 reactions +
-    comment volume) — they're different axes and intentionally diverge, so filter on
-    `severity`, not `impact`, for "how bad is it".
-  - **`web/llms.txt`** + **`web/llms-full.txt`** — an **agent-readable mirror** ([llms.txt](https://llmstxt.org)
-    convention). The page is JS-rendered, so an LLM/agent (e.g. an OpenClaw agent deciding whether to
-    self-update) can read `https://clawstat.us/llms.txt` for the current verdict + links, or
-    `llms-full.txt` for the entire assessment as clean markdown — no HTML/JS to parse. The page's
-    `<head>` advertises both via `<link rel="alternate">`.
-- **SEO / crawlability.** Because the page builds its body in JS, each render also injects
-  search-engine signals into the static HTML (every field HTML-escaped — same XSS-safe rule as the
-  DOM side):
-  - a **dynamic `<title>` + `<meta name="description">`** carrying the version + verdict + headline,
-    a **canonical** link, and **Open Graph / Twitter** cards (preview image `web/og.png`);
-  - a **server-rendered answer** inside `#app` (a real `<h1>Should you update OpenClaw vX? — …</h1>`,
-    the headline, why-this-verdict, and top issues) so the verdict is crawlable without running JS —
-    the script clears `#app` and rebuilds the interactive page on load;
-  - **JSON-LD** structured data (`WebSite` + `WebPage` + a `FAQPage`) — version-specific questions
-    ("Should you update OpenClaw vX?") plus evergreen, version-agnostic ones ("Should I update
-    OpenClaw?" / "How do I know if a new release is safe to update to?") to match generic intent;
-  - **`web/robots.txt`** + **`web/sitemap.xml`** (homepage + every archived version), emitted each
-    render. Caddy serves unknown paths as real `404`s (no SPA fallback) to avoid soft-404 duplicates.
+Injects the pipeline data into `web/template.html` (via a `<script type="application/json">`
+block) and writes **`web/index.html`** — a zero-dependency, dark/light, mobile-responsive page
+that builds its DOM with `textContent` (XSS-safe) and no inline handlers (CSP-clean). A **deploy
+guard** refuses to publish a low-confidence or invalid assessment, and an **HTML smoke test**
+validates the page before it overwrites the previous one. The page leads with the decision
+(verdict, key-metric tiles, **Your setup** stack personalisation, reasoning) and groups the
+supporting detail — Impact meters, changelog, Trends charts, past verdicts — behind tabs, with
+the filterable Known-issues list below. A just-dropped release (published within
+`config.FRESH_RELEASE_DAYS` of the run) leads with a **fresh-release notice** and tempers the
+"cleared / complete" copy until version-specific reports accrue.
+
+Each render also emits the same verdict in other shapes beside the page (all static, served by
+Caddy):
+
+- **`latest.json`** — the full payload as a documented public **JSON API**; the page also
+  `fetch()`es it at runtime to refresh data without an HTML rebuild (the inlined copy is the
+  offline fallback). Carries a `schema_version` so consumers can guard against shape drift.
+- **`feed.xml`** + **`badge.svg`** — an RSS feed of verdicts and an embeddable shields-style
+  status badge (`[![OpenClaw status](https://clawstat.us/badge.svg)](https://clawstat.us)`).
+- **`llms.txt`** / **`llms-full.txt`** — an [agent-readable mirror](https://llmstxt.org) of the
+  verdict as clean markdown, for an LLM/agent that can't run the page's JS.
+- **Browsable archive** — the outgoing page is snapshotted to `web/archive/<version>.html`
+  (retention `config.ARCHIVE_KEEP`); past-version snapshots self-canonicalise for their own
+  search query, and "Past verdicts" links each one.
+- **SEO** — a server-rendered `<h1>` answer + dynamic `<title>`/meta/Open-Graph + JSON-LD
+  (`WebSite`/`WebPage`/`FAQPage`) so the verdict is crawlable without JS, plus `robots.txt` +
+  `sitemap.xml` each render.
+- **`timeline.json`** — one append-only metric snapshot per run (the data behind the Trends
+  charts); per-run cost & latency stay on disk, out of the public payload.
+
+> Per-issue API note: **`severity`** is the harm class (from the repo's `P0…P4` + breakage/impact
+> labels), while **`impact`** is a *community-engagement* bucket (👍 + comments) — different axes
+> that intentionally diverge, so filter on `severity` for "how bad is it".
 
 ---
 
@@ -255,9 +202,9 @@ cp .env.example .env      # then fill in the two keys
   *Repository access → Public repositories (read-only)* and *Issues: Read-only* +
   *Metadata: Read-only* (or a classic token with **no scopes**). See `.env.example`.
 - **`ALERT_WEBHOOK_URL`** *(optional)* — a Slack or Discord incoming webhook. When set,
-  cost/budget/failure alerts are POSTed there (the payload key is auto-selected: Discord
-  gets `content`, everything else `text`). Leave blank for stdout-only alerts. **It's a
-  secret** (the URL embeds a token) — keep it in `.env`, never in git.
+  cost/budget/failure alerts and a run-completion summary are POSTed there (the payload key is
+  auto-selected: Discord gets `content`, everything else `text`). Leave blank for stdout-only
+  alerts. **It's a secret** (the URL embeds a token) — keep it in `.env`, never in git.
 
 > Note: GitHub's UI only exposes the per-permission tab once you pick a repository scope, so
 > selecting *All repositories* (read-only) is fine too — it grants no more than public read.
@@ -272,16 +219,16 @@ python3 run.py full                # collect → assess → render-assessment (c
 python3 run.py notify-test ["msg"] # send a test alert to ALERT_WEBHOOK_URL (verify the webhook)
 ```
 
-A full run takes **~2–5 min** end-to-end, almost all of it the analyst/validator LLM
-reasoning (longest when the validator disagrees and the analyst refines); collect and
-render are seconds. Cost is a few cents/run typically, up to ~$0.08 on a refinement run.
+A full run takes **several minutes** end-to-end — usually ~5 min, up to ~10+ when the validator
+disagrees and the analyst refines — almost all of it the analyst/validator LLM reasoning; collect
+and render are seconds. Cost is a few cents/run typically, up to ~$0.08 on a refinement run.
 
 To preview the page, open `web/index.html` in a browser.
 
 ### Tests
 
 ```bash
-python3 -m pytest        # 184 tests, hermetic (no network)
+python3 -m pytest        # 185 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
@@ -337,19 +284,3 @@ openclaw_status_app/
 ├── tests/                  pytest suite
 └── data/                   pipeline outputs (gitignored)
 ```
-
----
-
-## Status / next steps
-
-- **Live — done.** Deployed at **<https://clawstat.us>** on an AWS Lightsail VM (Route53 DNS,
-  Caddy auto-HTTPS), self-updating every 6h via a systemd timer that pulls + runs `run.py full`.
-- **Alerting — live.** A Discord webhook (`ALERT_WEBHOOK_URL`) gets a run-completion confirmation
-  (verdict + this-run cost + running daily/monthly totals) plus alerts on cost thresholds, the
-  budget gate, and assessment failures. A hard budget gate stops runaway spend.
-  Verify any time with `run.py notify-test`.
-- **Runtime data refresh — done.** The page reads `latest.json` at runtime (inlined copy as
-  fallback), so data refreshes without rebuilding the whole HTML.
-- **Reproducible host.** The whole box is scripted in [`deploy/`](deploy/) (provision script +
-  systemd unit/timer + Caddyfile) — one `sudo deploy/provision.sh clawstat.us` from a fresh
-  Ubuntu instance.

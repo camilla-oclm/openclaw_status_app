@@ -833,6 +833,13 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
                 it["components"] = analyst_comp[it["number"]]
         final_assessment["known_issues"] = ledger_issues
 
+    # ── Deterministic, frozen changelog ──
+    # A released version's changelog is immutable, but the analyst re-extracts `changes` each
+    # run with LLM variance (drifting "fixes shipped" / "new features" counts). Freeze the first
+    # non-empty extraction per version and replay it so those counts stay static run-to-run.
+    from openclaw_status import release_changes
+    final_assessment["changes"] = release_changes.freeze(version, final_assessment.get("changes"))
+
     # ── Final output ──
     rec = final_assessment.get("recommendation", "?")
     conf = final_assessment.get("confidence", "?")
