@@ -365,6 +365,43 @@ def test_budget_gate_emits_no_real_webhook_post(tmp_path, monkeypatch):
     assert posted == []  # no webhook POST happened
 
 
+def test_refined_validation_errors_reflect_final_not_primary(tmp_path, monkeypatch):
+    """Regression: when the validator forces a refine, the published validation_errors
+    (and the deploy gate that reads them) must describe the REFINED assessment, not the
+    now-discarded primary. A primary with a validation error + a clean refinement must
+    deploy with NO errors — previously the stale primary errors blocked the good page."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+
+    primary = _valid_assessment(thesis="too short")          # < 100 chars → a validation error
+    refined = _valid_assessment(thesis="This release is solid. " * 10)   # clean
+    review = {"agrees": False, "critique": "thesis is too thin", "suggested_recommendation": "✅"}
+
+    def fake_call(model, system, user, **kw):
+        if "VALIDATOR" in system:                            # validator step
+            parsed = review
+        elif "previously produced an assessment" in system:  # refinement step
+            parsed = refined
+        else:                                                # primary step
+            parsed = primary
+        return {"success": True, "parsed": parsed, "model": model,
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [],
+        "clawsweeper": {}, "release_history": [],
+    }}
+    result = agent.run_assessment_pipeline(raw=raw)
+    assert result["success"] is True
+
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["refined"] is True
+    assert saved["validation_errors"] == []      # the clean REFINED assessment, not the primary's
+    assert config.HISTORY_FILE.exists()          # deployable → folded into the persistent record
+
+
 # ── run-completion summary message ───────────────────────────────────────────
 
 def test_run_summary_message_includes_run_and_total_cost():
