@@ -367,16 +367,19 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
    Group the secondary detail below the always-visible decision. Namespaced .ltab*
    so they never collide with the inner .tab pills used inside the changelog. */
 .ltab-wrap{margin-top:2.8rem}
-.ltabs{display:flex; gap:.25rem; flex-wrap:wrap; border-bottom:1px solid var(--border)}
+.ltabs{display:flex; gap:.4rem; flex-wrap:wrap; border-bottom:1px solid var(--border)}
 .ltab{
   font-family:var(--display); font-size:.95rem; font-weight:700; letter-spacing:-.01em;
-  color:var(--muted); background:transparent; border:1px solid transparent; border-bottom:none;
-  border-radius:10px 10px 0 0; padding:.55rem 1rem; cursor:pointer; position:relative; top:1px;
-  transition:color .15s var(--ease), background .15s var(--ease);
+  color:var(--muted); background:var(--card2); border:1px solid var(--border); border-bottom:none;
+  border-radius:10px 10px 0 0; padding:.58rem 1.15rem; cursor:pointer; position:relative; top:1px;
+  transition:color .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease);
 }
-.ltab:hover{color:var(--text)}
-.ltab[aria-selected="true"], .ltab[aria-pressed="true"]{color:var(--text); background:var(--card); border-color:var(--border); border-bottom-color:var(--card)}
-.ltab[aria-selected="true"]::after, .ltab[aria-pressed="true"]::after{content:""; position:absolute; left:1rem; right:1rem; bottom:-1px; height:2px; background:var(--accent); border-radius:2px}
+.ltab:hover{color:var(--text); background:var(--card3); border-color:var(--border2)}
+.ltab[aria-selected="true"], .ltab[aria-pressed="true"]{
+  color:var(--accent); background:color-mix(in srgb,var(--accent) 13%,var(--card));
+  border-color:color-mix(in srgb,var(--accent) 45%,var(--border)); border-bottom-color:transparent;
+}
+.ltab[aria-selected="true"]::after, .ltab[aria-pressed="true"]::after{content:""; position:absolute; left:.6rem; right:.6rem; bottom:-1px; height:3px; background:var(--accent); border-radius:3px; box-shadow:0 0 10px -1px color-mix(in srgb,var(--accent) 70%,transparent)}
 /* Known-issues category tabs reuse .ltabs/.ltab; subsystem chips sit on a row below. */
 .ki-cats{margin-bottom:1rem}
 .ki-subs{margin-top:0}
