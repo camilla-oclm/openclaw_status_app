@@ -2396,7 +2396,16 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   if (window.fetch){
     fetch("latest.json", {cache:"no-store"})
       .then(function(r){ if (!r.ok) throw new Error("http "+r.status); return r.json(); })
-      .then(function(d){ if (d && d.recommendation){ DATA = d; render(); if (location.hash) setTimeout(scrollToHash, 60); } })
+      .then(function(d){
+        if (!d || !d.recommendation) return;
+        // Don't let a stale (e.g. intermediary-cached) latest.json downgrade a fresher
+        // inline copy: only swap when it isn't older than what we already rendered.
+        var cur = (DATA && DATA.assessed_at) ? Date.parse(DATA.assessed_at) : 0;
+        var nxt = d.assessed_at ? Date.parse(d.assessed_at) : 0;
+        if (cur && nxt && nxt < cur) return;
+        DATA = d; render();
+        if (location.hash) setTimeout(scrollToHash, 60);
+      })
       .catch(function(){ /* keep the inlined data */ });
   }
 })();

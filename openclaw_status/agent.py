@@ -71,14 +71,14 @@ RULES:
 7. Clawsweeper decisions are expert automated analysis — weight them highly
 8. If a fix exists in the pre-release, say "wait for next release" not "skip"
 9. **Weight issues by impact and relevance.** A high-severity issue flagged "AFFECTS THIS VERSION" with many 👍 reactions / comments is a strong signal — these are what should drive the recommendation. A widely-felt regression that affects this version pushes toward ⏸️/⚠️/🔄; do not let it be outweighed by low-impact noise. Mention reaction counts when they're high.
-9. **Extract changes from the changelog.** The release body contains structured sections: "### Highlights", "### Changes", "### Fixes". Parse these into the `changes` field:
+10. **Extract changes from the changelog.** The release body contains structured sections: "### Highlights", "### Changes", "### Fixes". Parse these into the `changes` field:
    - `changes.breaking`: items from "### Changes" section (or items tagged as breaking)
    - `changes.fixes`: items from "### Fixes" section, set `verified: true`
    - `changes.features`: items from "### Highlights" that are new features (not fixes)
    - Each item should have a concise `title` (1 line). Include the GitHub issue/PR number if referenced.
    - If the changelog only has a "### Highlights" section with bullet points, parse EACH bullet as a change. Categorize each bullet as a fix, feature, or breaking change based on its content. Include the PR/issue numbers listed in parentheses.
-10. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
-11. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
+11. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
+12. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
 
 RECOMMENDATION GUIDELINES:
 - ✅ Update now: critical fix or high-value feature, no risky bugs, no open regressions
@@ -312,7 +312,6 @@ def _detect_conflicts(issues: list, cs: dict) -> list[dict]:
     Returns a list of conflict dicts with 'number' and 'description' keys.
     """
     conflicts = []
-    cs_records = cs.get("item_records", {})
 
     for issue in issues:
         num = issue.get("number")
@@ -610,7 +609,11 @@ def _step_validator(context: str, primary_assessment: dict) -> dict:
         print(f"   ❌ Validator failed: {result['error'][:200]}")
         print("   Marking as UNREVIEWED — primary result will be used but flagged")
         result = {
-            "success": True,
+            # The API call did NOT succeed — report it as a failed step so the pipeline
+            # doesn't count a phantom API call or log empty "successful" usage. The parsed
+            # review still flags the run UNREVIEWED, so the primary is used (never silently
+            # treated as agreement).
+            "success": False,
             "parsed": {
                 "agrees": True,
                 "critique": "",
@@ -792,8 +795,10 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
                 pipeline_steps.append({"step": "refinement", "model": config.PRIMARY_MODEL, "usage": ru})
 
                 refined_assessment = refinement_result["parsed"]
-                ref_errors = validate_assessment(refined_assessment)
-                for err in ref_errors:
+                # The refined assessment is what we publish, so it — not the now-discarded
+                # primary — must drive the deploy gate and the published validation_errors.
+                validation_errors = validate_assessment(refined_assessment)
+                for err in validation_errors:
                     print(f"   ⚠️ {err}")
 
                 final_assessment = refined_assessment

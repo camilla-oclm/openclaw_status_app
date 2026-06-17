@@ -197,9 +197,16 @@ def collect(output_path=None) -> dict:
     timer.__enter__()
 
     try:
-        # 1. npm
+        # 1. npm — "ok" only with a usable version. A payload that comes back without one
+        # is "empty", not "ok", so the completeness gate can't count a versionless npm as a
+        # live critical source.
         npm = fetch_npm_version()
-        source_status.record("npm", "ok" if npm else "failed", npm.get("version", "?") if npm else "")
+        npm_ver = (npm or {}).get("version", "")
+        source_status.record(
+            "npm",
+            "ok" if npm_ver else ("empty" if npm else "failed"),
+            npm_ver or ("registry returned no version" if npm else ""),
+        )
         if timer.check():
             return _save_partial(output_path, source_status, now, "timeout after npm")
 
@@ -276,8 +283,9 @@ def collect(output_path=None) -> dict:
                     }
                     fixed_rel = rec.get("fixed_release", "unknown")
                     if fixed_rel != "unknown":
-                        existing = item.get("fixed_in", [])
-                        item["fixed_in"] = list(set((existing if isinstance(existing, list) else []) + [fixed_rel]))
+                        existing = item.get("fixed_in") if isinstance(item.get("fixed_in"), list) else []
+                        if fixed_rel not in existing:
+                            item["fixed_in"] = existing + [fixed_rel]   # order-preserving (deterministic)
                 else:
                     item["clawsweeper"] = None
     finally:
@@ -306,19 +314,9 @@ def collect(output_path=None) -> dict:
         print(f"💾 Saved aborted raw data to: {output_path}")
         return raw
 
-    # ── DEDUPLICATION ── by issue number, keeping the highest severity.
-    _SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    seen_issues = {}
-    for issue in issues:
-        num = issue.get("number")
-        if num is None:
-            continue
-        rank = _SEV_ORDER.get(issue.get("severity", "low"), 99)
-        if num not in seen_issues or rank < _SEV_ORDER.get(seen_issues[num].get("severity", "low"), 99):
-            seen_issues[num] = issue
-    if len(seen_issues) != len(issues):
-        print(f"  🔄 Deduplicated issues: {len(issues)} → {len(seen_issues)}")
-    issues = list(seen_issues.values())
+    # Issues already arrive de-duplicated by number — github.scout_issues dedups across its
+    # three searches and drops None-numbered nodes — and the per-version ledger below upserts
+    # by number, so the ledger is the single dedup point. No separate pass is needed here.
 
     # ── Per-version issue ledger ──
     # A released version is immutable, so its known-issue set only grows. Upsert the

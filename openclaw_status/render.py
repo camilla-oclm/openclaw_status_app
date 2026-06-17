@@ -676,7 +676,9 @@ def _inject_data(html: str, data: dict) -> str:
     legacy = re.compile(r"var DATA = \{.*?\};", flags=re.DOTALL)
     m = legacy.search(html)
     if m:
-        legacy_json = json.dumps(data, indent=4, ensure_ascii=True)
+        # Escape "</" exactly like the preferred path so no string value can close the
+        # <script> early (e.g. a thesis containing "</script>").
+        legacy_json = json.dumps(data, indent=4, ensure_ascii=True).replace("</", "<\\/")
         return html[:m.start()] + f"var DATA = {legacy_json};" + html[m.end():]
 
     print("⚠️ Could not find a data injection point in template — data not injected")
@@ -1224,10 +1226,6 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
     if not can_deploy:
         for reason in deploy_reasons:
             print(f"  ⛔ DEPLOY BLOCKED: {reason}")
-        # Save a marker so the pipeline knows deploy was skipped
-        if assessment_raw is not None:
-            assessment_raw["can_deploy"] = False
-            assessment_raw["deploy_blocked_reasons"] = deploy_reasons
         return ""
 
     if not config.TEMPLATE_FILE.exists():
@@ -1285,10 +1283,6 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
     # SEO crawl infrastructure: robots.txt + sitemap.xml.
     _write_robots(out)
     _write_sitemap(data, out)
-
-    # Set can_deploy flag in assessment_raw for downstream
-    if assessment_raw is not None:
-        assessment_raw["can_deploy"] = True
 
     print(f"✅ Built assessment page: {out}")
     print(f"   Version: {version}")
