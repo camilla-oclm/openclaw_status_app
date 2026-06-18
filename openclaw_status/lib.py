@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import time
 import uuid
 import urllib.error
@@ -49,6 +50,34 @@ def _retry(func, *args, retries=MAX_RETRIES, **kwargs):
     raise last_err
 
 
+def _call_with_wallclock(func, wall_clock: float):
+    """Run `func` in a daemon thread, abandoning it if it runs longer than `wall_clock`
+    seconds. Necessary because urllib's socket `timeout` is a per-read idle timeout, not
+    a total deadline: a model that trickles tokens slowly resets it on every byte, so a
+    single call can otherwise block indefinitely (it once hung a run ~17 min until
+    systemd SIGKILLed it). The abandoned thread keeps running but is a daemon, so it
+    never blocks process exit. Re-raises whatever `func` raised; raises TimeoutError if
+    the budget is exceeded (or was already exhausted)."""
+    if wall_clock <= 0:
+        raise TimeoutError("wall-clock budget already exhausted")
+    box = {}
+
+    def _target():
+        try:
+            box["result"] = func()
+        except BaseException as e:  # propagate the real error to the caller
+            box["error"] = e
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join(wall_clock)
+    if t.is_alive():
+        raise TimeoutError(f"call exceeded wall-clock budget ({wall_clock:.0f}s)")
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  OpenRouter
 # ═══════════════════════════════════════════════════════════════════════════
@@ -61,8 +90,14 @@ def openrouter_call(
     reasoning: dict = None,
     temperature: float = 0.1,
     retries: int = MAX_RETRIES,
+    deadline: float | None = None,
 ) -> dict:
-    """Single call to OpenRouter. Returns {success, parsed, model, usage, error?}."""
+    """Single call to OpenRouter. Returns {success, parsed, model, usage, error?}.
+
+    `deadline` (an absolute time.time() epoch, optional) hard-bounds each attempt to the
+    time remaining before it, so a trickling/hung response can't blow past the run's
+    wall-clock budget (see _call_with_wallclock). Once the deadline passes, the remaining
+    retries fail fast and the call returns success=False — callers degrade from there."""
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
@@ -111,8 +146,16 @@ def openrouter_call(
             },
         }
 
+    def _attempt():
+        # Bound each attempt to the time left in the pipeline budget. urllib's own
+        # timeout=180 is a per-read idle timeout, not a total deadline, so it can't
+        # catch a slow-trickle response on its own — _call_with_wallclock is the hard cap.
+        if deadline is None:
+            return _call()
+        return _call_with_wallclock(_call, deadline - time.time())
+
     try:
-        result, attempts = _retry(_call, retries=retries)
+        result, attempts = _retry(_attempt, retries=retries)
         if attempts > 1:
             print(f"  ✓ {model_id} succeeded after {attempts} attempts", file=sys.stderr)
         return result

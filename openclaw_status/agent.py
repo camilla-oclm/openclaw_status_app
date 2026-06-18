@@ -6,6 +6,7 @@ Produces assessment.json with structured recommendation, evidence, and known iss
 
 import json
 import re
+import time
 from datetime import datetime, timezone
 
 from openclaw_status import config
@@ -511,7 +512,7 @@ def append_timeline(version: str, assessment: dict, usage: dict):
 #  Pipeline steps
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _step_primary(context: str) -> dict:
+def _step_primary(context: str, deadline: float | None = None) -> dict:
     """Step 1: Primary analyst with model fallback."""
     print(f"\n{'─'*60}")
     print("STEP 1/3 — Primary Assessment")
@@ -523,6 +524,7 @@ def _step_primary(context: str) -> dict:
         f"Analyze this OpenClaw release data and provide your assessment:\n\n{context}",
         max_tokens=config.ASSESSMENT_MAX_TOKENS,
         reasoning=config.PRIMARY_REASONING,
+        deadline=deadline,
     )
 
     if not result["success"] or "error" in result.get("parsed", {}):
@@ -534,6 +536,7 @@ def _step_primary(context: str) -> dict:
                 f"Analyze this OpenClaw release data and provide your assessment:\n\n{context}",
                 max_tokens=config.ASSESSMENT_MAX_TOKENS,
                 reasoning=fallback.get("reasoning"),
+                deadline=deadline,
             )
             if result["success"] and "error" not in result.get("parsed", {}):
                 print(f"   ✓ Fallback {fallback['model']} succeeded")
@@ -569,7 +572,7 @@ def _validator_disagrees(review: dict) -> bool:
     return bool(review.get("miscategorized_issues"))
 
 
-def _step_validator(context: str, primary_assessment: dict) -> dict:
+def _step_validator(context: str, primary_assessment: dict, deadline: float | None = None) -> dict:
     """Step 2: an independent validator (config.VALIDATOR_MODEL — a different
     provider from the analyst) reviews the primary's work.
 
@@ -591,6 +594,7 @@ def _step_validator(context: str, primary_assessment: dict) -> dict:
         config.VALIDATOR_MODEL, VALIDATOR_PROMPT, user_content,
         max_tokens=config.ASSESSMENT_MAX_TOKENS,
         reasoning=config.VALIDATOR_REASONING,
+        deadline=deadline,
     )
 
     if result["success"]:
@@ -641,7 +645,7 @@ def _step_validator(context: str, primary_assessment: dict) -> dict:
     return result
 
 
-def _step_refinement(context: str, primary_assessment: dict, validator_review: dict) -> dict:
+def _step_refinement(context: str, primary_assessment: dict, validator_review: dict, deadline: float | None = None) -> dict:
     """Step 3: Refinement (only if validator disagrees)."""
     print(f"\n{'─'*60}")
     print("STEP 3/3 — Refinement (validator disagreed)")
@@ -661,6 +665,7 @@ def _step_refinement(context: str, primary_assessment: dict, validator_review: d
         config.PRIMARY_MODEL, REFINEMENT_PROMPT, user_content,
         max_tokens=config.ASSESSMENT_MAX_TOKENS,
         reasoning=config.PRIMARY_REASONING,
+        deadline=deadline,
     )
 
     if result["success"]:
@@ -749,8 +754,14 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     pipeline_steps = []
     validation_errors = []
 
+    # Wall-clock deadline shared by every LLM call this run. Bounds the whole pipeline
+    # (primary + validator + refine, incl. retries) so a trickling/hung response degrades
+    # gracefully (e.g. validator → "unreviewed" → publish primary) well before systemd's
+    # TimeoutStartSec SIGKILLs the run with nothing published. See config.PIPELINE_BUDGET_S.
+    deadline = time.time() + config.PIPELINE_BUDGET_S
+
     # ── Step 1: Primary ──
-    primary_result = _step_primary(context)
+    primary_result = _step_primary(context, deadline=deadline)
     if not primary_result["success"]:
         log_usage(config.PRIMARY_MODEL, {}, False)
         notify(f"❌ OpenClaw Status: assessment failed — {str(primary_result.get('error'))[:200]}")
@@ -782,7 +793,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         print(f"{'─'*60}")
     else:
         # ── Step 2: Validator ──
-        validator_result = _step_validator(context, primary_assessment)
+        validator_result = _step_validator(context, primary_assessment, deadline=deadline)
 
         if validator_result["success"]:
             vu = validator_result.get("usage", {})
@@ -801,7 +812,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         refined = False
 
         if needs_refine:
-            refinement_result = _step_refinement(context, primary_assessment, validator_review)
+            refinement_result = _step_refinement(context, primary_assessment, validator_review, deadline=deadline)
             if refinement_result["success"] and "error" not in refinement_result.get("parsed", {}):
                 ru = refinement_result.get("usage", {})
                 for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):

@@ -67,6 +67,16 @@ FALLBACK_MODELS = [
 # it this same budget (its JSON would otherwise truncate behind the reasoning tokens).
 ASSESSMENT_MAX_TOKENS = 16000
 
+# Wall-clock budget for the whole LLM pipeline (primary + validator + refine, incl.
+# retries). Each openrouter_call is hard-bounded to the time left in this budget, so
+# a trickling/hung response can't block forever — urllib's socket `timeout` is only a
+# per-read idle timeout, not a total deadline, so a model that dribbles tokens resets
+# it on every byte (this once hung a run ~17 min until systemd SIGKILLed it). Keep
+# this comfortably UNDER the systemd unit's TimeoutStartSec (currently 20 min) so the
+# pipeline bows out gracefully (validator → "unreviewed" → publish primary) instead of
+# being killed mid-run with nothing published.
+PIPELINE_BUDGET_S = 900
+
 # Cap on how many issues are fed into the LLM prompt. The collector persists the
 # full ranked set to raw-data.json; only the top-N by rank go to the model, which
 # bounds both the input context (~1k chars/issue) and the known_issues output.
