@@ -219,8 +219,10 @@ def collect(output_path=None) -> dict:
         if timer.check():
             return _save_partial(output_path, source_status, now, "timeout after release")
 
-        # 3. Pre-release (most recent non-draft pre-release)
-        prerelease = github.latest_prerelease(all_releases)
+        # 3. Pre-release — most recent non-draft pre-release that is actually AHEAD
+        # of the stable. A beta of the already-shipped stable (v2026.6.8-beta.2 vs
+        # v2026.6.8) is not a "next release" to wait for, so it's filtered out.
+        prerelease = github.latest_prerelease(all_releases, stable=release)
         if prerelease:
             print(f"  Found pre-release: {prerelease['tag']}")
         else:

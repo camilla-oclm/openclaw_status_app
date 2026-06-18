@@ -185,8 +185,12 @@ def fetch_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 20) -> 
 def _norm_release(d: dict | None) -> dict | None:
     if not d:
         return None
+    tag = d.get("tag_name", "")
     return {
-        "tag": d.get("tag_name", ""),
+        "tag": tag,
+        # Clean version (no leading "v"), so consumers don't have to re-derive it
+        # from the tag/url. Matches the `lstrip("v")` convention used elsewhere.
+        "version": tag.lstrip("v"),
         "name": d.get("name", ""),
         "published_at": d.get("published_at", "") or "",
         "body": sanitize(d.get("body", ""), 5000),
@@ -209,10 +213,29 @@ def list_releases(limit: int = 30) -> list[dict]:
     return [r for r in (_norm_release(d) for d in data) if r]
 
 
-def latest_prerelease(releases: list[dict] = None) -> dict | None:
-    """Most recent non-draft pre-release, from a release list (fetched if None)."""
+def _release_base_nums(tag: str) -> tuple:
+    """The numeric (major, minor, patch, …) of a release tag, ignoring any
+    ``-prerelease`` suffix: ``v2026.6.8-beta.2`` → ``(2026, 6, 8)``. Non-numeric
+    parts collapse to 0 so the result is always tuple-comparable."""
+    base = (tag or "").strip().lstrip("v").partition("-")[0]
+    return tuple(int(p) if p.isdigit() else 0 for p in base.split(".") if p != "")
+
+
+def latest_prerelease(releases: list[dict] = None, stable: dict | str | None = None) -> dict | None:
+    """Most recent non-draft pre-release that is genuinely AHEAD of the stable.
+
+    A pre-release whose base version is <= the current stable — e.g.
+    ``v2026.6.8-beta.2`` once ``v2026.6.8`` has shipped — is the beta that
+    *preceded* that stable, not a future fix-bearing release. Surfacing it makes
+    the page tell users to "wait for next release" for something already out, so
+    such pre-releases are dropped. ``stable`` may be a release dict or a tag
+    string; when omitted, no version filter is applied (legacy behaviour)."""
     releases = releases if releases is not None else list_releases()
     pres = [r for r in releases if r.get("prerelease") and not r.get("draft")]
+    stable_tag = stable.get("tag", "") if isinstance(stable, dict) else (stable or "")
+    if stable_tag:
+        base = _release_base_nums(stable_tag)
+        pres = [r for r in pres if _release_base_nums(r.get("tag", "")) > base]
     pres.sort(key=lambda r: r.get("published_at", ""), reverse=True)
     return pres[0] if pres else None
 
