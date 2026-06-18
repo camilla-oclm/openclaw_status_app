@@ -643,6 +643,7 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "npm": sources.get("npm", {}),
         "latest_release": {
             "tag": lr.get("tag", "") if lr else "",
+            "version": (lr.get("version") or (lr.get("tag", "") or "").lstrip("v")) if lr else "",
             "url": lr.get("url", "") if lr else "",
             "published_at": lr.get("published_at", "")[:10] if (lr and lr.get("published_at")) else "",
             "prerelease": lr.get("prerelease", False) if lr else False,

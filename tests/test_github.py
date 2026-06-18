@@ -271,6 +271,7 @@ def test_norm_release():
            "body": "notes", "html_url": "https://x/r", "prerelease": False, "draft": False}
     r = github._norm_release(raw)
     assert r["tag"] == "v2026.6.1"
+    assert r["version"] == "2026.6.1"   # clean version, no leading "v"
     assert r["prerelease"] is False
     assert r["body"] == "notes"
     assert github._norm_release(None) is None
@@ -289,6 +290,37 @@ def test_latest_prerelease_picks_newest_nondraft():
 
 def test_latest_prerelease_none_when_no_prereleases():
     assert github.latest_prerelease([{"tag": "v1", "prerelease": False, "draft": False}]) is None
+
+
+def test_latest_prerelease_drops_beta_of_shipped_stable():
+    # A pre-release of the already-shipped stable (base == stable) is the beta
+    # that PRECEDED it, not a future release — it must not be surfaced as a
+    # "wait for next release" target.
+    releases = [
+        {"tag": "v2026.6.8-beta.2", "prerelease": True, "draft": False, "published_at": "2026-06-16"},
+        {"tag": "v2026.6.8", "prerelease": False, "draft": False, "published_at": "2026-06-16"},
+    ]
+    assert github.latest_prerelease(releases, stable={"tag": "v2026.6.8"}) is None
+    # accepts a bare tag string too
+    assert github.latest_prerelease(releases, stable="v2026.6.8") is None
+
+
+def test_latest_prerelease_keeps_beta_ahead_of_stable():
+    # A pre-release whose base version is strictly higher than the stable is a
+    # genuine next-release beta and is kept.
+    releases = [
+        {"tag": "v2026.6.8-beta.2", "prerelease": True, "draft": False, "published_at": "2026-06-16"},
+        {"tag": "v2026.6.9-beta.1", "prerelease": True, "draft": False, "published_at": "2026-06-18"},
+        {"tag": "v2026.6.8", "prerelease": False, "draft": False, "published_at": "2026-06-16"},
+    ]
+    pre = github.latest_prerelease(releases, stable={"tag": "v2026.6.8"})
+    assert pre["tag"] == "v2026.6.9-beta.1"
+
+
+def test_release_base_nums_ignores_prerelease_suffix():
+    assert github._release_base_nums("v2026.6.8-beta.2") == (2026, 6, 8)
+    assert github._release_base_nums("v2026.6.9") == (2026, 6, 9)
+    assert github._release_base_nums("v2026.6.9") > github._release_base_nums("v2026.6.8-beta.2")
 
 
 # ── API guards (no token) ────────────────────────────────────────────────────

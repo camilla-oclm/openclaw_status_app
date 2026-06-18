@@ -364,6 +364,7 @@ def test_build_exposes_schema_version_and_release_urls():
     data = render._build_assessment_data({"assessment": {}, "version": "2.0"}, raw)
     assert data["schema_version"] == render.SCHEMA_VERSION
     assert data["latest_release"]["url"] == "https://gh/r/v2.0"
+    assert data["latest_release"]["version"] == "2.0"   # populated, not null
     assert data["latest_prerelease"]["url"] == "https://gh/r/v2.1-beta"
 
 
