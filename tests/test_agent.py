@@ -216,14 +216,21 @@ def test_build_context_includes_ongoing_majors_as_context():
     assert "NOT specific to this release" in ctx
 
 
-def test_build_context_continuity_anchors_prior_verdict():
+def test_build_context_continuity_is_symmetric_not_a_lock():
     raw = _raw_with_n_issues(2)
     assert "Continuity" not in agent.build_context(raw)  # no prior verdict → no anchor
     ctx = agent.build_context(raw, {"recommendation": "⏸️", "confidence": "high",
                                      "assessed_at": "2026-06-10T00:00:00+00:00"})
     assert "Continuity" in ctx
-    assert "KEEP the previous verdict" in ctx
-    assert "⏸️" in ctx
+    assert "⏸️" in ctx  # prior verdict surfaced for continuity
+    # Holds against NOISE only...
+    assert "NOISE" in ctx
+    # ...but the verdict must still track the current broken-state and can move DOWN
+    # when severity worsens — not a one-directional "keep". Guards the symmetric-anchor
+    # fix against a regression back to a sticky verdict.
+    assert "BROKEN" in ctx
+    assert "DOWNGRADE" in ctx
+    assert "KEEP the previous verdict" not in ctx
 
 
 # ── model config ────────────────────────────────────────────────────────────
