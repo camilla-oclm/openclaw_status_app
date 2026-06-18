@@ -489,24 +489,34 @@ def _days_between(later_iso: str, earlier_iso: str):
 
 
 def _release_freshness(version: str, assessed_at: str, latest_release: dict,
-                       known_issues: list) -> dict:
+                       known_issues: list, run_count: int = 0) -> dict:
     """Is this a just-dropped release we don't have version-specific data on yet?
 
-    A fresh release is one published within `config.FRESH_RELEASE_DAYS` of the
-    assessment AND matching the assessed version — so the verdict leans on issues
-    carried over from earlier versions rather than reports filed against *this* one.
-    The page uses this to tell users to back up and treat the early verdict as
-    preliminary (sparse early data is a community-reporting lag, not a model error)."""
+    A fresh release matches the assessed version AND is still early — early meaning
+    BOTH published within `config.FRESH_RELEASE_DAYS` AND assessed no more than
+    `config.FRESH_RELEASE_MAX_RUNS` times. The verdict then leans on issues carried
+    over from earlier versions rather than reports filed against *this* one, so the
+    page tells users to back up and treat the early verdict as preliminary (sparse
+    early data is a community-reporting lag, not a model error).
+
+    Whichever gate trips first retires the banner. The run-count gate is the real
+    signal of "enough data in hand": by the 4th run (~24h at the 6h cadence) the
+    community has filed version-specific bugs, so the banner hides even though the
+    publish date is still < 2 days old. `run_count` = times this version has been
+    assessed so far (incl. this run); 0 = unknown, so it never retires the banner."""
     rel_ver = (latest_release.get("tag", "") or "").lstrip("v")
     days = _days_between(assessed_at, latest_release.get("published_at", ""))
     is_latest = bool(version) and rel_ver == version
-    fresh = bool(is_latest and days is not None and days <= config.FRESH_RELEASE_DAYS)
+    runs_exhausted = run_count > config.FRESH_RELEASE_MAX_RUNS
+    fresh = bool(is_latest and days is not None and days <= config.FRESH_RELEASE_DAYS
+                 and not runs_exhausted)
     # Of the issues we *are* showing, how many actually name this release vs. are
     # carried over from prior versions — drives the honest "N mention this version".
     specific = sum(1 for i in known_issues if i.get("affects_version"))
     return {
         "fresh": fresh,
         "days_since_release": days,
+        "runs_assessed": run_count,
         "version_specific_issues": specific,
         "carried_over_issues": max(len(known_issues) - specific, 0),
     }
@@ -537,11 +547,18 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     # Per-run metric time series for the Trends charts (cost & latency are stripped below
     # — they're internal pipeline metrics, kept on disk but never shipped to the page).
     timeline = []
+    # How many times THIS version has been assessed (counts the current run, which the
+    # assess step already appended to timeline.json before render). Gates the
+    # fresh-release banner — see _release_freshness / config.FRESH_RELEASE_MAX_RUNS.
+    version_run_count = 0
     if config.TIMELINE_FILE.exists():
         try:
             raw_tl = load_json(config.TIMELINE_FILE)
             if isinstance(raw_tl, list):
-                timeline = [r for r in raw_tl if isinstance(r, dict)][-config.TIMELINE_KEEP:]
+                rows = [r for r in raw_tl if isinstance(r, dict)]
+                timeline = rows[-config.TIMELINE_KEEP:]
+                version_run_count = sum(
+                    1 for r in rows if r.get("version") == assessment_raw.get("version", ""))
         except Exception:
             timeline = []
     # Until the real per-run series has ≥2 points, synthesize a coarse per-version
@@ -647,6 +664,7 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             {"tag": lr.get("tag", "") if lr else "",
              "published_at": lr.get("published_at", "") if lr else ""},
             known_issues,
+            version_run_count,
         ),
     }
     return _deep_sanitize_markdown(data)
