@@ -70,7 +70,7 @@ RULES:
 5. The recommendation MUST be one of exactly 4 values: ✅ (update now), ⚠️ (update with precautions), ⏸️ (skip this version), 🔄 (wait for next release)
 6. Consider ALL platforms — a Windows-only issue still matters for Windows users
 7. Clawsweeper decisions are expert automated analysis — weight them highly
-8. If a fix exists in the pre-release, say "wait for next release" not "skip"
+8. **🔄 requires a pre-release.** If a fix exists in the listed pre-release, say "wait for next release" (🔄) rather than "skip". But 🔄 is ONLY valid when a pre-release is actually listed in the data — if the "Latest Pre-release" section says there is none, you MUST NOT use 🔄; use ⏸️ (skip) or ⚠️ instead.
 9. **Weight issues by impact and relevance.** A high-severity issue flagged "AFFECTS THIS VERSION" with many 👍 reactions / comments is a strong signal — these are what should drive the recommendation. A widely-felt regression that affects this version pushes toward ⏸️/⚠️/🔄; do not let it be outweighed by low-impact noise. Mention reaction counts when they're high.
 10. **Extract changes from the changelog.** The release body contains structured sections: "### Highlights", "### Changes", "### Fixes". Parse these into the `changes` field:
    - `changes.breaking`: items from "### Changes" section (or items tagged as breaking)
@@ -85,7 +85,7 @@ RECOMMENDATION GUIDELINES:
 - ✅ Update now: critical fix or high-value feature, no risky bugs, no open regressions
 - ⚠️ Update with precautions: valuable changes but risky bugs exist; back up first
 - ⏸️ Skip this version: no significant value, or risky bugs present with no fix in sight
-- 🔄 Wait for next release: valuable changes coming but current version has issues; fixes exist in pre-release
+- 🔄 Wait for next release: valuable changes coming but current version has issues AND a pre-release with fixes is listed in the data. Do NOT use 🔄 when no pre-release is listed — there is nothing to wait for; choose ⏸️ or ⚠️ instead.
 
 OUTPUT FORMAT: Return ONLY valid JSON. No markdown code fences, no commentary outside the JSON.
 
@@ -186,12 +186,19 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
         f"Version: {release.get('tag', '?')}\n"
         f"Released: {release.get('published_at', '?')[:10]}"
     )
-    if prerelease:
+    if prerelease and prerelease.get("tag"):
         parts.append(
             f"## Latest Pre-release\n"
             f"Version: {prerelease.get('tag', '?')}\n"
             f"Published: {prerelease.get('published_at', '?')[:10]}\n"
             f"This contains fixes pending for the next stable release."
+        )
+    else:
+        parts.append(
+            "## Latest Pre-release\n"
+            "None — there is no pre-release ahead of the current stable. "
+            "🔄 \"wait for next release\" is therefore NOT an available verdict this "
+            "run (there is nothing to wait for); choose ✅, ⚠️, or ⏸️."
         )
 
     # Continuity — a reference against NOISE, not a lock. The verdict tracks what is
@@ -219,6 +226,9 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
             "need one single dramatic new regression.\n"
             "- UPGRADE only on real improvement — blockers fixed in a pre-release, or a severe issue "
             "debunked/downgraded on the evidence.\n"
+            "- If the prior verdict was 🔄 but NO pre-release is listed this run (it shipped/aged out "
+            "or never existed), that 🔄 has LOST its basis — do NOT carry it over. Re-judge the "
+            "current broken-state as ⏸️ (issues outweigh value) or ⚠️ (worth it with care).\n"
             "Either way, justify the call against the current broken-state in the thesis."
         )
 
@@ -713,6 +723,20 @@ def _previous_verdict(version: str) -> dict | None:
     return None
 
 
+def _enforce_prerelease_verdict(assessment: dict, prerelease: dict | None) -> bool:
+    """Backstop the 🔄 invariant: "wait for next release" only holds when a
+    pre-release with fixes actually exists. If 🔄 survives with no (ahead-of-
+    stable) pre-release — e.g. carried over by the continuity anchor after the
+    pre-release shipped/aged out — downgrade to ⏸️ so the page never tells users
+    to wait for a release that isn't coming. The prompt already steers the model
+    here; this is the deterministic guarantee. Mutates `assessment`; returns True
+    if it changed the verdict."""
+    if assessment.get("recommendation") == "🔄" and not (prerelease or {}).get("tag"):
+        assessment["recommendation"] = "⏸️"
+        return True
+    return False
+
+
 def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict:
     """Run the LLM assessment pipeline.
 
@@ -865,6 +889,13 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     # non-empty extraction per version and replay it so those counts stay static run-to-run.
     from openclaw_status import release_changes
     final_assessment["changes"] = release_changes.freeze(version, final_assessment.get("changes"))
+
+    # ── Verdict invariant: 🔄 requires a pre-release ──
+    # Deterministic backstop to the prompt rule (a model may still carry a stale 🔄
+    # over via the continuity anchor): if 🔄 survives with no pre-release to wait
+    # for, downgrade to ⏸️ so the published verdict is always coherent.
+    if _enforce_prerelease_verdict(final_assessment, (raw.get("sources") or {}).get("latest_prerelease")):
+        print("   ⚠️ Verdict guard: 🔄 with no pre-release → downgraded to ⏸️ (skip)")
 
     # ── Final output ──
     rec = final_assessment.get("recommendation", "?")
