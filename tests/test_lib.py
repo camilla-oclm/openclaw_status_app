@@ -1,6 +1,7 @@
 """Tests for openclaw_status.lib — JSON extraction, sanitization, locks, timers."""
 import json
 import os
+import time
 
 import pytest
 
@@ -232,3 +233,46 @@ def test_cost_threshold_no_alert_under_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "USAGE_LOG_FILE", usage_file)
     daily, monthly, alerts = lib.check_cost_thresholds()
     assert alerts == []
+
+
+# ── wall-clock deadline (the hung-validator guard) ───────────────────────────
+
+def test_call_with_wallclock_returns_value_within_budget():
+    assert lib._call_with_wallclock(lambda: 42, 5.0) == 42
+
+
+def test_call_with_wallclock_times_out_on_slow_call():
+    # A call that outruns its budget raises TimeoutError instead of blocking forever
+    # (the real-world failure: a validator that trickled tokens for ~17 min).
+    start = time.time()
+    with pytest.raises(TimeoutError):
+        lib._call_with_wallclock(lambda: time.sleep(5), 0.2)
+    assert time.time() - start < 2.0  # bailed at the budget, not after the full sleep
+
+
+def test_call_with_wallclock_propagates_callee_error():
+    # A real error from the call must surface, not be swallowed as a timeout.
+    def boom():
+        raise ValueError("kaboom")
+    with pytest.raises(ValueError, match="kaboom"):
+        lib._call_with_wallclock(boom, 5.0)
+
+
+def test_call_with_wallclock_zero_budget_fails_immediately():
+    with pytest.raises(TimeoutError):
+        lib._call_with_wallclock(lambda: 1, 0)
+
+
+def test_openrouter_call_past_deadline_fails_fast_without_network(monkeypatch):
+    # A deadline already in the past must short-circuit every attempt BEFORE any HTTP
+    # call — proving the pipeline degrades (success=False) instead of hanging. urlopen
+    # is patched to explode so any network touch would fail loudly.
+    def _explode(*a, **k):
+        raise AssertionError("network call attempted past the deadline")
+    monkeypatch.setattr(lib.urllib.request, "urlopen", _explode)
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "test-key")
+    out = lib.openrouter_call(
+        "x/y", "sys", "user", retries=0, deadline=time.time() - 1,
+    )
+    assert out["success"] is False
+    assert "wall-clock" in out["error"]
