@@ -162,9 +162,12 @@ OUTPUT FORMAT: Return ONLY valid JSON. Same schema as before.
 def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
     """Format raw data into a structured prompt context for the LLM.
 
-    `prev_verdict` (the last assessment of this version, if any) anchors the verdict:
-    a released version is immutable, so the model should hold its prior call unless the
-    evidence materially changed — this is what stops the verdict flip-flopping run-to-run.
+    `prev_verdict` (the last assessment of this version, if any) is a continuity
+    reference, NOT a lock. A released version is immutable, so the model holds its prior
+    call against NOISE (reaction drift, re-ordering, top-N churn) — but the recommendation
+    still tracks what is currently BROKEN and must move when the aggregate severity
+    materially changes (e.g. ⚠️→⏸️ as high/critical regressions accumulate). This kills
+    noise-driven flip-flopping without letting a stale verdict ride over a worsening release.
     """
     sources = raw["sources"]
     version = raw.get("target_version", "unknown")
@@ -190,20 +193,32 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
             f"This contains fixes pending for the next stable release."
         )
 
-    # Continuity — anchor the verdict so it doesn't flip-flop on noise.
+    # Continuity — a reference against NOISE, not a lock. The verdict tracks what is
+    # currently BROKEN: it must move when the aggregate severity materially changes
+    # (e.g. ⚠️→⏸️ as high/critical regressions pile up) and hold only against reaction
+    # drift / re-ordering / top-N churn. Symmetric anchor (was one-directional "KEEP").
     if prev_verdict and prev_verdict.get("recommendation"):
         parts.append(
             "## Continuity — IMPORTANT\n"
             f"A previous assessment of v{version} exists: verdict "
             f"{prev_verdict.get('recommendation')} ({prev_verdict.get('confidence', '?')}), made "
             f"{str(prev_verdict.get('assessed_at', ''))[:10]}.\n"
-            "This version is already RELEASED and immutable — it won't be patched until the next "
-            "release, so its known issues only ACCUMULATE; they don't vanish between runs. Treat the "
-            "issue list as a growing ledger, not a fresh snapshot.\n"
-            "KEEP the previous verdict UNLESS the evidence has materially changed since then — e.g. a "
-            "NEW high/critical regression affecting this version, or NEW pre-release fixes for its "
-            "blockers. Do NOT change the verdict over noise (reaction-count drift, re-ordering, or "
-            "issues you simply didn't list last time). If you do change it, justify the change in the thesis."
+            "This version is RELEASED and immutable — it won't be patched until the next release, so "
+            "its known issues persist and accumulate; they don't vanish between runs. Use the prior "
+            "verdict ONLY to avoid flip-flopping on NOISE: do NOT change it for reaction-count drift, "
+            "re-ordering, or issues you simply didn't enumerate last run, and do NOT upgrade it just "
+            "because fewer issues surfaced this run (that's top-N truncation, not a fix).\n"
+            "BUT the recommendation is a function of what is currently BROKEN, not of the prior "
+            "verdict. Re-judge from the current evidence and MOVE the verdict when the broken-state "
+            "has materially changed since then:\n"
+            "- DOWNGRADE to a more cautious verdict (⚠️→⏸️, or →🔄 if a fix-bearing pre-release now "
+            "exists) when what's broken has worsened — more confirmed high/critical regressions "
+            "affecting this version, a newly-blocked subsystem, or an aggregate severity load the "
+            "prior verdict now understates. A materially worse overall picture is enough; you do NOT "
+            "need one single dramatic new regression.\n"
+            "- UPGRADE only on real improvement — blockers fixed in a pre-release, or a severe issue "
+            "debunked/downgraded on the evidence.\n"
+            "Either way, justify the call against the current broken-state in the thesis."
         )
 
     # Issues — ordered by the collector as severity → version-relevance → impact.
