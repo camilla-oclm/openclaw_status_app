@@ -233,6 +233,41 @@ def test_build_context_continuity_is_symmetric_not_a_lock():
     assert "KEEP the previous verdict" not in ctx
 
 
+def test_build_context_no_prerelease_disables_wait_verdict():
+    # With no pre-release, the context must explicitly tell the analyst that 🔄
+    # "wait for next release" is unavailable (there is nothing to wait for).
+    ctx = agent.build_context(_raw_with_n_issues(2))  # latest_prerelease is None
+    assert "no pre-release" in ctx.lower()
+    assert "NOT an available verdict" in ctx
+    # When a real ahead-of-stable pre-release exists, the pre-release block shows instead.
+    raw = _raw_with_n_issues(2)
+    raw["sources"]["latest_prerelease"] = {"tag": "v2026.6.9-beta.1",
+                                           "published_at": "2026-06-18T00:00:00Z"}
+    ctx2 = agent.build_context(raw)
+    assert "v2026.6.9-beta.1" in ctx2
+    assert "fixes pending for the next stable release" in ctx2
+
+
+def test_enforce_prerelease_verdict_downgrades_stuck_wait():
+    # 🔄 ("wait for next release") with no pre-release to wait for is incoherent
+    # → the backstop downgrades it to ⏸️.
+    a = {"recommendation": "🔄"}
+    assert agent._enforce_prerelease_verdict(a, None) is True
+    assert a["recommendation"] == "⏸️"
+    a = {"recommendation": "🔄"}
+    assert agent._enforce_prerelease_verdict(a, {}) is True          # empty pre-release dict
+    assert a["recommendation"] == "⏸️"
+    # A genuine ahead-of-stable pre-release legitimately keeps 🔄.
+    a = {"recommendation": "🔄"}
+    assert agent._enforce_prerelease_verdict(a, {"tag": "v2026.6.9-beta.1"}) is False
+    assert a["recommendation"] == "🔄"
+    # Every other verdict is left untouched, with or without a pre-release.
+    for v in ("✅", "⚠️", "⏸️"):
+        a = {"recommendation": v}
+        assert agent._enforce_prerelease_verdict(a, None) is False
+        assert a["recommendation"] == v
+
+
 # ── model config ────────────────────────────────────────────────────────────
 
 def test_fallback_models_have_valid_slug_shape():
