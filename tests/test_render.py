@@ -408,6 +408,20 @@ def test_release_freshness_clamps_future_publish_to_zero():
     assert f["fresh"] is True and f["days_since_release"] == 0
 
 
+def test_release_freshness_retires_after_max_runs():
+    # Even inside the publish-date window, the banner retires once the version has been
+    # assessed MORE than FRESH_RELEASE_MAX_RUNS times (the 4th run ≈ 24h at 6h cadence) —
+    # by then enough version-specific bugs are filed that "early read" is stale.
+    lr = {"tag": "v2026.6.8", "published_at": "2026-06-16"}
+    assert config.FRESH_RELEASE_MAX_RUNS == 3
+    third = render._release_freshness("2026.6.8", "2026-06-16", lr, [], run_count=3)
+    fourth = render._release_freshness("2026.6.8", "2026-06-16", lr, [], run_count=4)
+    assert third["fresh"] is True and third["runs_assessed"] == 3
+    assert fourth["fresh"] is False and fourth["runs_assessed"] == 4
+    # run_count=0 means "unknown" (e.g. no timeline yet) and must NOT retire the banner.
+    assert render._release_freshness("2026.6.8", "2026-06-16", lr, [], run_count=0)["fresh"] is True
+
+
 def test_build_exposes_freshness():
     raw = {"sources": {"latest_release": {
         "tag": "v9.9", "url": "https://gh/r/v9.9", "published_at": "2026-06-16T00:00:00Z"}}}

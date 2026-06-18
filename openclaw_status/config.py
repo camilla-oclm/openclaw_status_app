@@ -151,3 +151,11 @@ ARCHIVE_KEEP = 30
 # cadence this spans the first several re-assessments — long enough for reports to
 # start landing and the picture to firm up.
 FRESH_RELEASE_DAYS = 2
+
+# Also retire the fresh-release banner once this version has been assessed MORE than
+# this many times. By the 4th run (~24h at the 6h cadence) enough version-specific
+# bugs have been filed that the verdict no longer leans on carried-over issues, so the
+# "early read / preliminary" framing is stale even if the publish date is < 2 days old.
+# Whichever fires first — this OR FRESH_RELEASE_DAYS — hides the banner. So with =3 the
+# banner shows on runs 1–3 and hides from the 4th run onward.
+FRESH_RELEASE_MAX_RUNS = 3
