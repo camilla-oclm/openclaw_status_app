@@ -13,7 +13,8 @@ monotonic instead of a coin flip.
 Fix detection is cheap by design: an issue is flagged fixed only when a release /
 pre-release explicitly closes it or Clawsweeper says so — we never silently drop it.
 A pre-release fix does NOT fix the *current* (released) version, so the issue stays,
-flagged "fixed in next pre-release" — which is exactly the 🔄 "wait for next" signal.
+flagged "fixed in next pre-release" — the page surfaces that as a staged-fix signal
+while the verdict still treats the shipped release as carrying the issue.
 """
 
 from openclaw_status import config, github

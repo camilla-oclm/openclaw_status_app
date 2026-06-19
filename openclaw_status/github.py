@@ -226,10 +226,10 @@ def latest_prerelease(releases: list[dict] = None, stable: dict | str | None = N
 
     A pre-release whose base version is <= the current stable — e.g.
     ``v2026.6.8-beta.2`` once ``v2026.6.8`` has shipped — is the beta that
-    *preceded* that stable, not a future fix-bearing release. Surfacing it makes
-    the page tell users to "wait for next release" for something already out, so
-    such pre-releases are dropped. ``stable`` may be a release dict or a tag
-    string; when omitted, no version filter is applied (legacy behaviour)."""
+    *preceded* that stable, not a future fix-bearing release. Surfacing it would
+    flag a "staged fix" for something already out, so such pre-releases are
+    dropped. ``stable`` may be a release dict or a tag string; when omitted, no
+    version filter is applied (legacy behaviour)."""
     releases = releases if releases is not None else list_releases()
     pres = [r for r in releases if r.get("prerelease") and not r.get("draft")]
     stable_tag = stable.get("tag", "") if isinstance(stable, dict) else (stable or "")

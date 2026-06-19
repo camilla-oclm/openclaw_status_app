@@ -295,7 +295,7 @@ def test_latest_prerelease_none_when_no_prereleases():
 def test_latest_prerelease_drops_beta_of_shipped_stable():
     # A pre-release of the already-shipped stable (base == stable) is the beta
     # that PRECEDED it, not a future release — it must not be surfaced as a
-    # "wait for next release" target.
+    # newer "staged fix" signal.
     releases = [
         {"tag": "v2026.6.8-beta.2", "prerelease": True, "draft": False, "published_at": "2026-06-16"},
         {"tag": "v2026.6.8", "prerelease": False, "draft": False, "published_at": "2026-06-16"},

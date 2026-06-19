@@ -811,18 +811,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     {
       "version": "2026.5.27",
       "assessed_at": "2026-05-30T15:03:29.326544+00:00",
-      "recommendation": "🔄",
+      "recommendation": "⏸️",
       "confidence": "high",
-      "headline": "Multiple critical regressions in v2026.5.27 across channels and platforms; pre-release with fixes available, wait for next stable.",
-      "reason": "14 regressions, fixes in beta",
+      "headline": "Multiple critical regressions in v2026.5.27 across channels and platforms; a fix is staged in a pre-release but not yet shipped.",
+      "reason": "14 regressions, fix staged in beta",
       "cost_usd": 0.0033
     },
     {
       "version": "2026.5.28",
       "assessed_at": "2026-06-03T17:52:49.678380+00:00",
-      "recommendation": "🔄",
+      "recommendation": "⏸️",
       "confidence": "medium",
-      "headline": "v2026.5.28 introduces critical regressions; fixes available in beta pre-release — wait for next stable",
+      "headline": "v2026.5.28 introduces critical regressions; a fix is staged in a beta pre-release but not yet shipped.",
       "reason": "v2026.5.28 introduces critical regressions",
       "cost_usd": 0.00173474
     },
@@ -1067,8 +1067,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   var VERDICTS = {
     "✅": {label:"Update now",              tone:"tone-good", blurb:"Safe to update — no blocking issues found in this release."},
     "⚠️": {label:"Update with precautions", tone:"tone-warn", blurb:"Worthwhile, but back up first — some real risk remains."},
-    "⏸️": {label:"Skip this version",       tone:"tone-bad",  blurb:"Hold off — the open issues outweigh the benefits right now."},
-    "🔄": {label:"Wait for next release",   tone:"tone-info", blurb:"Hold for the next stable — a pre-release is in the works, but its fixes aren't confirmed yet."}
+    "⏸️": {label:"Skip this version",       tone:"tone-bad",  blurb:"Hold off — the open issues outweigh the benefits right now."}
   };
   var CAT = {
     regression:    {icon:"🔄", label:"Regression",      cls:"t-bad",  desc:"Confirmed regression — worked before, broken by a recent release."},
@@ -1178,7 +1177,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return false;
   }
   // Risk height (%) per verdict for the release-health trend — taller = riskier.
-  var RISK = {"✅":18,"⚠️":52,"🔄":74,"⏸️":100};
+  var RISK = {"✅":18,"⚠️":52,"⏸️":100};
 
   // ── sections ──────────────────────────────────────────────────────────────
   function sectionHead(title, count, note){
@@ -1310,8 +1309,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       el("span",{"class":"chip"},[document.createTextNode("Assessed "), el("b",null,timeAgo(DATA.assessed_at))])
     ];
     if (pre.tag){
-      var preTip = "A newer pre-release exists, but it's unverified — its fixes for the issues below aren't confirmed.";
-      var preKids = [el("b",null,"Pre-release "+pre.tag)," available"];
+      var preTip = "A newer release is staged in pre-release. Until those fixes ship in a stable release, the current version still carries the issues below — so the verdict stays Skip / Update-with-care.";
+      var preKids = [el("b",null,"Fix staged: "+pre.tag),document.createTextNode(" (pre-release)")];
       chips.push(pre.url
         ? el("a",{"class":"chip chip-link", href:pre.url, title:"View "+pre.tag+" on GitHub. "+preTip},
             preKids.concat(el("span",{"class":"v-ext","aria-hidden":"true"},"↗")))
