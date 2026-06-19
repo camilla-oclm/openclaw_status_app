@@ -2120,7 +2120,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var p=tl.filter(function(r){ return !(r.approx && !r.issues); });  // same filter as siblings
     if (p.length<2) return tEmpty();
     var n=p.length, c=chartSVG();
-    [[0,35,"var(--good)","update"],[35,63,"var(--warn)","care"],[63,88,"var(--info)","wait"],[88,100,"var(--bad)","skip"]].forEach(function(bd){
+    [[0,35,"var(--good)","update"],[35,70,"var(--warn)","care"],[70,100,"var(--bad)","skip"]].forEach(function(bd){
       var y1=py(c,bd[1],100), y2=py(c,bd[0],100);
       c.svg.appendChild(svgEl("rect",{x:c.l,y:y1,width:c.r-c.l,height:(y2-y1),fill:bd[2],opacity:"0.10"}));
       var lab=svgEl("text",{"class":"taxis2", x:c.r-2, y:(y1+y2)/2+3, "text-anchor":"end", fill:bd[2]}); lab.textContent=bd[3]; c.svg.appendChild(lab);
