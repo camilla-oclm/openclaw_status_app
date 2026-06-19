@@ -446,7 +446,7 @@ def _timeline_from_history(h: dict) -> dict:
     return {
         "t": h.get("assessed_at", ""),
         "version": h.get("version", ""),
-        "recommendation": h.get("recommendation", "?"),
+        "recommendation": _norm_rec(h.get("recommendation", "?")),
         "confidence": h.get("confidence", "medium"),
         "issues": issues,
         "regressions": h.get("regressions", 0) or 0,
@@ -542,7 +542,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         except Exception:
             raw_history = []
     # Run cost is internal — keep it out of the public per-version payload.
-    version_history = [{k: v for k, v in h.items() if k != "cost_usd"} for h in raw_history]
+    version_history = [{**{k: v for k, v in h.items() if k != "cost_usd"},
+                        "recommendation": _norm_rec(h.get("recommendation", "?"))}
+                       for h in raw_history]
 
     # Per-run metric time series for the Trends charts (cost & latency are stripped below
     # — they're internal pipeline metrics, kept on disk but never shipped to the page).
@@ -610,7 +612,7 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "schema_version": SCHEMA_VERSION,
         "assessed_at": assessment_raw.get("assessed_at", ""),
         "version": assessment_raw.get("version", ""),
-        "recommendation": a.get("recommendation", "⏸️"),
+        "recommendation": _norm_rec(a.get("recommendation", "⏸️")),
         "headline": a.get("headline", ""),
         "confidence": a.get("confidence", "medium"),
         "thesis": a.get("thesis", ""),
@@ -730,6 +732,13 @@ def _write_latest_json(data: dict, output_path: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 # (short message, shields-style colour) per verdict — used by the feed + badge.
+def _norm_rec(rec: str) -> str:
+    """Map the retired 🔄 "wait for next release" verdict onto ⏸️ for display, so
+    old history entries (or any stray value) render with a known 3-verdict label
+    instead of an orphaned glyph / a broken risk bar."""
+    return "⏸️" if rec == "🔄" else rec
+
+
 _VERDICT_TEXT = {
     "✅": ("update now", "#4c1"),
     "⚠️": ("update with care", "#dfb317"),
