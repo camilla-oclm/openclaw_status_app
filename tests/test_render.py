@@ -368,6 +368,16 @@ def test_build_exposes_schema_version_and_release_urls():
     assert data["latest_prerelease"]["url"] == "https://gh/r/v2.1-beta"
 
 
+def test_build_normalizes_retired_wait_verdict():
+    # A retired 🔄 (old data / stray model output) renders as ⏸️ so the page only
+    # ever shows the 3 supported verdicts (no orphaned glyph / broken risk bar).
+    assert render._norm_rec("🔄") == "⏸️"
+    assert render._norm_rec("⚠️") == "⚠️"
+    data = render._build_assessment_data(
+        {"assessment": {"recommendation": "🔄"}, "version": "2.0"}, {"sources": {}})
+    assert data["recommendation"] == "⏸️"
+
+
 # ── release freshness (just-dropped → preliminary verdict) ───────────────────
 
 def test_release_freshness_fresh_within_window():
