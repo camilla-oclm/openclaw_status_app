@@ -463,13 +463,13 @@ def test_extract_highlights_truncates_on_word_boundary():
 def test_write_feed_emits_rss(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SITE_URL", "https://example.test")
     out = tmp_path / "index.html"
-    data = {"version": "2.0", "recommendation": "🔄", "archived_versions": [],
-            "version_history": [{"version": "2.0", "recommendation": "🔄", "headline": "wait",
+    data = {"version": "2.0", "recommendation": "⏸️", "archived_versions": [],
+            "version_history": [{"version": "2.0", "recommendation": "⏸️", "headline": "skip",
                                  "assessed_at": "2026-06-14T00:00:00+00:00"}]}
     render._write_feed(data, str(out))
     feed = (tmp_path / "feed.xml").read_text()
     assert "<rss" in feed and "<item>" in feed
-    assert "OpenClaw v2.0: wait for next" in feed
+    assert "OpenClaw v2.0: skip this version" in feed
     assert (tmp_path / "feed.xml").stat().st_mode & 0o004   # world-readable for Caddy
 
 
@@ -557,8 +557,8 @@ def test_seo_escapes_untrusted_text():
 
 
 def test_seo_includes_evergreen_targeting():
-    data = {"version": "2026.6.6", "recommendation": "🔄", "confidence": "medium",
-            "headline": "Wait for next release.", "known_issues": []}
+    data = {"version": "2026.6.6", "recommendation": "⏸️", "confidence": "medium",
+            "headline": "Skip this version.", "known_issues": []}
     # Evergreen, version-agnostic Q&A in the JSON-LD (matches generic search intent).
     ld = render._json_ld(data)
     assert "Should I update OpenClaw?" in ld

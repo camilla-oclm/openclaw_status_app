@@ -734,7 +734,6 @@ _VERDICT_TEXT = {
     "✅": ("update now", "#4c1"),
     "⚠️": ("update with care", "#dfb317"),
     "⏸️": ("skip this version", "#e05d44"),
-    "🔄": ("wait for next", "#007ec6"),
 }
 
 
@@ -808,7 +807,7 @@ def _write_feed(data: dict, output_path: str) -> None:
         "    <title>OpenClaw Status — should you update?</title>\n"
         f"    <link>{_xml_escape(site)}/</link>\n"
         "    <description>A verdict on every OpenClaw release: update now, update with care, "
-        "wait for the next, or skip.</description>\n"
+        "or skip this version.</description>\n"
         + ("\n".join(items) + "\n" if items else "")
         + "  </channel>\n</rss>\n"
     )
@@ -872,7 +871,6 @@ _VERDICT_LABEL = {
     "✅": "Update now",
     "⚠️": "Update with precautions",
     "⏸️": "Skip this version",
-    "🔄": "Wait for next release",
 }
 
 
@@ -1094,7 +1092,7 @@ def _json_ld(data: dict) -> str:
                 + (f" — currently {phrase} for v{ver}" if ver else "")
                 + ". It scouts the bugs people hit after a release, scores them by severity, and has "
                 "two independent AI models weigh the evidence before giving a clear answer: update "
-                "now, update with care, wait for the next release, or skip this version.")}},
+                "now, update with care, or skip this version.")}},
              {"@type": "Question", "name": "How do I know if a new OpenClaw release is safe to update to?",
               "acceptedAnswer": {"@type": "Answer", "text":
                ("Check ClawStat.us before you upgrade. For each OpenClaw release it gathers post-release "

@@ -24,7 +24,10 @@ renders a single decision page with a clear verdict:
 | ✅ Update now | No blocking issues found |
 | ⚠️ Update with precautions | Worthwhile, but back up first — real risk remains |
 | ⏸️ Skip this version | The open issues outweigh the benefits |
-| 🔄 Wait for next release | Fixes are already lined up in a pre-release |
+
+When a fix is already staged in a pre-release, the verdict stays ⏸️/⚠️ (the fix isn't in the
+released version yet) and the page flags the pre-release tag, so you know relief is near without
+the answer pretending the current release is safe.
 
 The verdict isn't a vibe — it's the end of an evidence pipeline that scouts real post-release
 bug reports, scores them against the repo's own severity labels, and has **two different LLM

@@ -233,39 +233,41 @@ def test_build_context_continuity_is_symmetric_not_a_lock():
     assert "KEEP the previous verdict" not in ctx
 
 
-def test_build_context_no_prerelease_disables_wait_verdict():
-    # With no pre-release, the context must explicitly tell the analyst that 🔄
-    # "wait for next release" is unavailable (there is nothing to wait for).
+def test_build_context_pre_release_framed_as_staged_fix():
+    # With no pre-release, the context just says there is none (no retired 🔄 copy).
     ctx = agent.build_context(_raw_with_n_issues(2))  # latest_prerelease is None
-    assert "no pre-release" in ctx.lower()
-    assert "NOT an available verdict" in ctx
-    # When a real ahead-of-stable pre-release exists, the pre-release block shows instead.
+    assert "no pre-release ahead of the current stable" in ctx
+    assert "🔄" not in ctx
+    # When an ahead-of-stable pre-release exists, it's framed as a STAGED fix that
+    # does not lift the verdict (the fix isn't shipped yet).
     raw = _raw_with_n_issues(2)
     raw["sources"]["latest_prerelease"] = {"tag": "v2026.6.9-beta.1",
                                            "published_at": "2026-06-18T00:00:00Z"}
     ctx2 = agent.build_context(raw)
     assert "v2026.6.9-beta.1" in ctx2
-    assert "fixes pending for the next stable release" in ctx2
+    assert "staged fix" in ctx2 and "🔄" not in ctx2
 
 
-def test_enforce_prerelease_verdict_downgrades_stuck_wait():
-    # 🔄 ("wait for next release") with no pre-release to wait for is incoherent
-    # → the backstop downgrades it to ⏸️.
-    a = {"recommendation": "🔄"}
-    assert agent._enforce_prerelease_verdict(a, None) is True
-    assert a["recommendation"] == "⏸️"
-    a = {"recommendation": "🔄"}
-    assert agent._enforce_prerelease_verdict(a, {}) is True          # empty pre-release dict
-    assert a["recommendation"] == "⏸️"
-    # A genuine ahead-of-stable pre-release legitimately keeps 🔄.
-    a = {"recommendation": "🔄"}
-    assert agent._enforce_prerelease_verdict(a, {"tag": "v2026.6.9-beta.1"}) is False
-    assert a["recommendation"] == "🔄"
-    # Every other verdict is left untouched, with or without a pre-release.
+def test_normalize_recommendation_collapses_retired_wait():
+    # 🔄 "wait for next release" is retired (3-verdict rubric ✅/⚠️/⏸️). Any stray 🔄
+    # — model output or old history — collapses to ⏸️.
+    assert agent._norm_rec("🔄") == "⏸️"
     for v in ("✅", "⚠️", "⏸️"):
-        a = {"recommendation": v}
-        assert agent._enforce_prerelease_verdict(a, None) is False
-        assert a["recommendation"] == v
+        assert agent._norm_rec(v) == v
+    a = {"recommendation": "🔄"}
+    assert agent._normalize_recommendation(a) is True
+    assert a["recommendation"] == "⏸️"
+    a = {"recommendation": "⚠️"}
+    assert agent._normalize_recommendation(a) is False
+    assert a["recommendation"] == "⚠️"
+
+
+def test_validate_assessment_rejects_retired_wait_verdict():
+    # 🔄 is no longer a valid recommendation.
+    base = {"recommendation": "🔄", "headline": "h", "thesis": "t", "confidence": "medium"}
+    assert any("recommendation" in e.lower() for e in agent.validate_assessment(base))
+    base["recommendation"] = "⏸️"
+    assert not any("recommendation" in e.lower() for e in agent.validate_assessment(base))
 
 
 # ── model config ────────────────────────────────────────────────────────────
