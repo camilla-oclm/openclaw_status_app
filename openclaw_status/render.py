@@ -569,7 +569,12 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         timeline = [_timeline_from_history(h) for h in raw_history]
     # Cost & latency are internal pipeline metrics — kept on disk (timeline.json), but
     # never shipped in the public payload (page source / latest.json).
-    timeline = [{k: v for k, v in r.items() if k not in ("cost_usd", "latency_ms")} for r in timeline]
+    # Strip internal cost/latency, and normalize any retired 🔄 (older per-run
+    # snapshots predate the 3-verdict rubric) so the Trends chart never plots an
+    # unknown verdict.
+    timeline = [{**{k: v for k, v in r.items() if k not in ("cost_usd", "latency_ms")},
+                 **({"recommendation": _norm_rec(r["recommendation"])} if "recommendation" in r else {})}
+                for r in timeline]
 
     # Known issues with clawsweeper metadata
     raw_issues = {i["number"]: i for i in sources.get("github_issues", []) if isinstance(i, dict)}

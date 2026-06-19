@@ -664,3 +664,20 @@ def test_build_data_strips_cost_from_public_payload(tmp_path, monkeypatch):
     assert data["usage"]["api_calls"] == 2
     assert data["usage"]["tokens_in"] == 9
     assert data["version_history"][0]["headline"] == "h"
+
+
+def test_build_data_normalizes_retired_wait_in_history_and_timeline(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    monkeypatch.setattr(config, "TIMELINE_FILE", tmp_path / "timeline.json")
+    (tmp_path / "history.json").write_text(json.dumps(
+        [{"version": "2026.6.6", "recommendation": "🔄", "headline": "h",
+          "assessed_at": "2026-06-16T00:00:00+00:00"}]))
+    (tmp_path / "timeline.json").write_text(json.dumps(
+        [{"t": "2026-06-16T00:00:00+00:00", "recommendation": "🔄", "issues": 5},
+         {"t": "2026-06-18T00:00:00+00:00", "recommendation": "⏸️", "issues": 7}]))
+    data = render._build_assessment_data({"assessment": {}, "version": "2026.6.6"}, {"sources": {}})
+    # Both the past-verdicts list and the Trends timeline drop the retired 🔄.
+    assert [h["recommendation"] for h in data["version_history"]] == ["⏸️"]
+    assert [t["recommendation"] for t in data["timeline"]] == ["⏸️", "⏸️"]
