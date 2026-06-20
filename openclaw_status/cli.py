@@ -8,6 +8,7 @@ Usage:
   openclaw-status assess --single      Single-call mode (skip validator)
   openclaw-status render-assessment    Render the public assessment page
   openclaw-status full                 collect → assess → render-assessment
+  openclaw-status tick                 Adaptive scheduler: assess only if due (hourly)
   openclaw-status notify-test [msg]    Send a test alert to ALERT_WEBHOOK_URL
 """
 
@@ -87,17 +88,19 @@ def cmd_notify_failure(args):
            f"(last good deploy stands). Inspect `journalctl -u {unit}` on the box.")
 
 
-def cmd_full(args):
+def cmd_full(args, trigger="manual"):
     print("\n" + "=" * 60)
     print("OpenClaw Status — Full Pipeline")
     print("=" * 60)
 
-    # Acquire pipeline lock to prevent concurrent runs
+    # Acquire pipeline lock to prevent concurrent runs. Contention is NOT a hard failure
+    # (a manual run may be in progress) — return False so a scheduled tick treats it as a
+    # benign skip rather than tripping the OnFailure alert.
     if not acquire_pipeline_lock():
-        print("❌ Another pipeline run is active (lock file exists). Aborting.")
-        sys.exit(1)
+        print("❌ Another pipeline run is active (lock held). Aborting.")
+        return False
 
-    run_log = RunLog(trigger_type="manual")
+    run_log = RunLog(trigger_type=trigger)
 
     try:
         print("\n[1/3] Collecting data...")
@@ -115,6 +118,69 @@ def cmd_full(args):
         run_log.finish()
         run_log.save()
         release_pipeline_lock()
+    return True
+
+
+def _parse_dt(s):
+    """Parse an ISO timestamp to an aware datetime; None on anything unparseable."""
+    from datetime import datetime
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _latest_assessed_version():
+    """Most recently assessed version (clean, no leading 'v') from history.json, or ''."""
+    from .lib import load_json
+    try:
+        hist = load_json(config.HISTORY_FILE)
+    except Exception:
+        return ""
+    if not isinstance(hist, list) or not hist:
+        return ""
+    latest = max(hist, key=lambda h: str(h.get("assessed_at", "")))
+    return str(latest.get("version", "") or "")
+
+
+def _last_run_started():
+    """Start time of the most recent pipeline run (any outcome) from run-log.json, or None."""
+    from .lib import load_json
+    try:
+        rl = load_json(config.DATA_DIR / "run-log.json")
+    except Exception:
+        return None
+    starts = [_parse_dt(r.get("start_time")) for r in rl] if isinstance(rl, list) else []
+    starts = [s for s in starts if s]
+    return max(starts) if starts else None
+
+
+def cmd_tick(args):
+    """Adaptive scheduler entry point — run hourly by the systemd timer.
+
+    Cheaply polls for a new release and whether the adaptive cadence is due (one GitHub
+    REST call, no LLM), then runs the full pipeline only when warranted. Otherwise it
+    exits in seconds with zero LLM cost.
+    """
+    from datetime import datetime, timezone
+    from . import github, scheduler
+
+    now = datetime.now(timezone.utc)
+    release = github.latest_release() or {}        # one GitHub REST call, no LLM
+    rel_ver = str(release.get("version", "") or "")
+    rel_pub = _parse_dt(release.get("published_at"))
+    last_assessed = _latest_assessed_version()
+    last_run = _last_run_started()
+
+    run, reason = scheduler.should_run(now, rel_pub, rel_ver, last_assessed, last_run)
+    print(f"[tick] release={rel_ver or '?'} · last_assessed={last_assessed or 'none'} · {reason}")
+    if not run:
+        return
+    print("[tick] → assessment due; running full pipeline")
+    if cmd_full(args, trigger="scheduled") is False:
+        print("[tick] a pipeline run is already in progress — skipping (not a failure)")
 
 
 def main():
@@ -127,6 +193,7 @@ def main():
     assess_p.add_argument("--single", action="store_true", help="Single-call mode (skip validator)")
     sub.add_parser("render-assessment", help="Render the public assessment page")
     sub.add_parser("full", help="Full pipeline: collect → assess → render-assessment")
+    sub.add_parser("tick", help="Adaptive scheduler: run a full assessment only if due (hourly timer)")
     nt = sub.add_parser("notify-test", help="Send a test alert to ALERT_WEBHOOK_URL")
     nt.add_argument("message", nargs="?", help="Optional custom message to send")
     nf = sub.add_parser("notify-failure", help="Send a pipeline-failure alert (systemd OnFailure=)")
@@ -134,7 +201,7 @@ def main():
 
     args = parser.parse_args()
 
-    if not config.OPENROUTER_API_KEY and args.command in ("assess", "full"):
+    if not config.OPENROUTER_API_KEY and args.command in ("assess", "full", "tick"):
         print("❌ OPENROUTER_API_KEY not set in .env")
         sys.exit(1)
 
@@ -143,12 +210,16 @@ def main():
         "assess": cmd_assess,
         "render-assessment": cmd_render_assessment,
         "full": cmd_full,
+        "tick": cmd_tick,
         "notify-test": cmd_notify_test,
         "notify-failure": cmd_notify_failure,
     }
 
     if args.command in commands:
-        commands[args.command](args)
+        result = commands[args.command](args)
+        # A manual `full` that couldn't get the lock returns False → exit non-zero.
+        if args.command == "full" and result is False:
+            sys.exit(1)
     else:
         parser.print_help()
 

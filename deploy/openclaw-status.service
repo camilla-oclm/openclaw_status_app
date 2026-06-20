@@ -1,7 +1,9 @@
-# Pulls the latest code, then runs the full collect→assess→render pipeline once.
-# Triggered by openclaw-status.timer (not enabled on its own).
+# Pulls the latest code, then runs the adaptive scheduler *tick*: it decides whether a
+# full collect→assess→render assessment is due and runs one only when warranted (a new
+# release, or the cadence in config.ASSESS_CADENCE_TIERS). Most ticks are a cheap GitHub
+# check with no LLM cost. Triggered hourly by openclaw-status.timer (not enabled alone).
 [Unit]
-Description=OpenClaw Status — pull latest code + run the assessment pipeline
+Description=OpenClaw Status — pull latest code + run the scheduler tick
 After=network-online.target
 Wants=network-online.target
 # Hard failure (git/collector crash, LLM timeout) → ping the alert webhook. The deploy
@@ -16,7 +18,8 @@ WorkingDirectory=/opt/openclaw_status_app
 Environment=PYTHONUNBUFFERED=1
 # A failed pull (e.g. offline) must not block the scheduled run, hence the "-".
 ExecStartPre=-/usr/bin/git -C /opt/openclaw_status_app pull --ff-only
-ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py full
-# The LLM steps take a few minutes; give generous headroom.
+ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py tick
+# Most ticks finish in seconds; when one decides to run, the LLM pipeline takes a few
+# minutes — keep generous headroom for that case.
 TimeoutStartSec=1200
 Nice=10
