@@ -159,3 +159,15 @@ FRESH_RELEASE_DAYS = 2
 # Whichever fires first — this OR FRESH_RELEASE_DAYS — hides the banner. So with =3 the
 # banner shows on runs 1–3 and hides from the 4th run onward.
 FRESH_RELEASE_MAX_RUNS = 3
+
+# ── Adaptive scheduling ─────────────────────────────────────────────────────
+# A cheap hourly *tick* (systemd timer) polls GitHub for a new release and decides
+# whether a full LLM assessment is due. Assessments are frequent while a release is
+# fresh and back off as it ages and the verdict stabilizes. A genuinely new release
+# is always assessed immediately (and resets the age clock to the fast tier).
+#
+# Tiers: (release_age_upper_bound_hours, assess_every_hours), first match wins; the
+# final (None, …) tier is the floor. The 48h first boundary matches FRESH_RELEASE_DAYS.
+ASSESS_CADENCE_TIERS = [(48, 6), (96, 8), (None, 12)]
+# Fire a touch early so an hourly tick never drifts a full slot late (timer jitter).
+SCHEDULE_GRACE_H = 0.5
