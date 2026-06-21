@@ -53,8 +53,9 @@ providers** argue it out before anything ships.
   the verdict firms up over the next few runs) until version-specific reports accrue.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
-the latest code and runs the full collect → assess → render pipeline every few hours, and Caddy
-serves the result over auto-HTTPS. The whole host is scripted in [`deploy/`](deploy/) (one
+the latest code and runs the full collect → assess → render pipeline on an adaptive cadence
+(an hourly tick that catches a new release within the hour and reassesses more often right after
+a release), and Caddy serves the result over auto-HTTPS. The whole host is scripted in [`deploy/`](deploy/) (one
 `provision.sh` run).
 
 ---
@@ -231,7 +232,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 206 tests, hermetic (no network)
+python3 -m pytest        # 217 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
@@ -242,7 +243,8 @@ validator, the data-injection contract, and the HTML smoke test.
 ## Deploy (self-host)
 
 The live site at <https://clawstat.us> runs on a small Ubuntu VM (AWS Lightsail): a systemd
-timer rebuilds the page every 6h and Caddy terminates HTTPS. The whole host is scripted in
+timer ticks hourly and rebuilds the page on an adaptive cadence, and Caddy terminates HTTPS.
+The whole host is scripted in
 [`deploy/`](deploy/) (provision script + systemd unit/timer + Caddyfile). On a fresh box with
 this repo cloned to `/opt/openclaw_status_app`:
 
@@ -253,10 +255,12 @@ sudo -u openclaw /opt/openclaw_status_app/.venv/bin/python run.py full   # seed 
 ```
 
 Point the domain's DNS A-record at the box and open ports 80/443 — Caddy issues the TLS cert
-automatically. After that, the timer pulls `main` and reruns the pipeline every 6h, so shipping
-a change is just `git push`. Useful on-box commands: `journalctl -u openclaw-status.service -f`
+automatically. After that, the timer ticks hourly — picking up a new release within the hour and
+otherwise reassessing on an adaptive cadence (every 6h while a release is fresh, then 8h, then 12h;
+see `config.ASSESS_CADENCE_TIERS`), so shipping a change is just `git push`. Useful on-box commands: `journalctl -u openclaw-status.service -f`
 (logs), `systemctl list-timers openclaw-status.timer` (schedule), `sudo systemctl start
-openclaw-status.service` (deploy now). Changes under `deploy/` need a re-run of `provision.sh`
+openclaw-status.service` (runs a tick now — gates; use `run.py full` to force a full assessment).
+Changes under `deploy/` need a re-run of `provision.sh`
 to reinstall the `/etc` copies.
 
 ---
