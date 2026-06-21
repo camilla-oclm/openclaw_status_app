@@ -489,10 +489,12 @@ def _days_between(later_iso: str, earlier_iso: str):
 
 
 def _within_fresh_window(version: str, assessed_at: str, latest_release: dict) -> bool:
-    """The date half of freshness: this IS the latest release AND it was published within
-    `config.FRESH_RELEASE_DAYS` of the assessment. (The run-count half lives in
-    `_release_freshness`.) Used both for the page banner and to cap a fresh release's
-    confidence in the assessment pipeline, so the two always agree."""
+    """The publish-date 'early-read window': this IS the latest release AND it was published
+    within `config.FRESH_RELEASE_DAYS` of the assessment. The assessment pipeline caps a fresh
+    release's confidence to 'medium' for this whole window (a release <2 days old shouldn't read
+    'high'). `_release_freshness` builds on this for the page banner but ALSO retires the banner
+    after `FRESH_RELEASE_MAX_RUNS` runs — so confidence can stay capped slightly longer than the
+    banner is shown."""
     rel_ver = (latest_release.get("tag", "") or "").lstrip("v")
     days = _days_between(assessed_at, latest_release.get("published_at", ""))
     return bool(version and rel_ver == version and days is not None
