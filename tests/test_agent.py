@@ -196,6 +196,53 @@ def test_build_context_caps_issues_to_top_n(monkeypatch):
         assert f"### #{n} " not in ctx
 
 
+def test_build_context_feeds_fixes_section_past_a_long_changelog():
+    # Regression: the changelog used to be head-sliced at 3000 chars, so the ### Fixes
+    # section (which sits after Highlights + a long contributor tail) never reached the
+    # analyst — fixes rendered as 0. The section-aware feed must include it regardless.
+    body = (
+        "## 1.2.3\n\n### Highlights\n\n"
+        + "- **Feature:** " + ("x" * 4000) + " (#1)\n\n"      # > 3000 chars of Highlights
+        + "### Fixes\n\n- Storage and migrations: avoid WAL on network FS (#42)\n"
+    )
+    raw = {
+        "target_version": "1.2.3",
+        "sources": {
+            "latest_release": {"tag": "v1.2.3", "published_at": "2026-06-01T00:00:00Z",
+                               "body": body},
+            "latest_prerelease": None, "github_issues": [], "clawsweeper": {},
+        },
+    }
+    ctx = agent.build_context(raw)
+    assert "Storage and migrations" in ctx     # the fix survives despite the long Highlights
+
+
+# ── _cap_fresh_confidence ───────────────────────────────────────────────────
+
+_FRESH_RELEASE = {"tag": "v2026.6.9", "published_at": "2026-06-21T01:00:00Z"}
+
+
+def test_cap_fresh_confidence_high_to_medium_when_fresh():
+    a = {"confidence": "high"}
+    capped = agent._cap_fresh_confidence(a, "2026.6.9", "2026-06-21T08:00:00Z", _FRESH_RELEASE)
+    assert capped is True
+    assert a["confidence"] == "medium"          # never trips the low-confidence deploy guard
+
+
+def test_cap_fresh_confidence_leaves_medium_and_low_alone():
+    for level in ("medium", "low"):
+        a = {"confidence": level}
+        assert agent._cap_fresh_confidence(a, "2026.6.9", "2026-06-21T08:00:00Z", _FRESH_RELEASE) is False
+        assert a["confidence"] == level
+
+
+def test_cap_fresh_confidence_no_cap_once_release_is_old():
+    a = {"confidence": "high"}
+    # assessed 10 days after publish → outside the fresh window → analyst's high stands
+    assert agent._cap_fresh_confidence(a, "2026.6.9", "2026-07-01T08:00:00Z", _FRESH_RELEASE) is False
+    assert a["confidence"] == "high"
+
+
 def test_build_context_no_truncation_note_when_under_cap(monkeypatch):
     monkeypatch.setattr(config, "MAX_ISSUES_IN_CONTEXT", 30)
     ctx = agent.build_context(_raw_with_n_issues(4))

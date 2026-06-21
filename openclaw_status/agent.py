@@ -9,7 +9,7 @@ import re
 import time
 from datetime import datetime, timezone
 
-from openclaw_status import config
+from openclaw_status import config, release_changes
 from openclaw_status.lib import (
     openrouter_call, load_json, save_json, log_usage, check_cost_thresholds, notify,
 )
@@ -36,7 +36,7 @@ _OUTPUT_SCHEMA = """{
     "title": "issue title",
     "number": 12345,
     "severity": "high | medium | low",
-    "category": "regression | diamond_lobster | active",
+    "category": "regression | post_release | diamond_lobster | active",
     "platforms": ["linux"],
     "components": ["gateway"],
     "clawsweeper_decision": "keep_open | close | unknown",
@@ -72,14 +72,18 @@ RULES:
 7. Clawsweeper decisions are expert automated analysis — weight them highly
 8. **A staged fix does NOT lift the verdict.** When the current release has blocking issues, it is ⏸️ (skip) or ⚠️ even if a fix is staged in a pre-release — the fix isn't in the released version yet. Keep the cautious verdict and call out the staged fix and its pre-release tag in the thesis/headline so users know relief is near.
 9. **Weight issues by impact and relevance.** A high-severity issue flagged "AFFECTS THIS VERSION" with many 👍 reactions / comments is a strong signal — these are what should drive the recommendation. A widely-felt regression that affects this version pushes toward ⏸️/⚠️; do not let it be outweighed by low-impact noise. Mention reaction counts when they're high.
-10. **Extract changes from the changelog.** The release body contains structured sections: "### Highlights", "### Changes", "### Fixes". Parse these into the `changes` field:
-   - `changes.breaking`: items from "### Changes" section (or items tagged as breaking)
-   - `changes.fixes`: items from "### Fixes" section, set `verified: true`
-   - `changes.features`: items from "### Highlights" that are new features (not fixes)
-   - Each item should have a concise `title` (1 line). Include the GitHub issue/PR number if referenced.
-   - If the changelog only has a "### Highlights" section with bullet points, parse EACH bullet as a change. Categorize each bullet as a fix, feature, or breaking change based on its content. Include the PR/issue numbers listed in parentheses.
-11. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
-12. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
+10. **Categorize each known issue** with one of exactly four `category` values, matching the data, and do NOT inflate:
+   - `regression`: a CONFIRMED regression — it carries a `regression` label or "regression" in its title (worked before, broken by a recent release). Do not label a bug "regression" just because it was filed after the release.
+   - `post_release`: filed after the release and affects this version, but NOT a confirmed regression.
+   - `diamond_lobster`: a top-rated tracked issue (the 🦞 quality rating).
+   - `active`: any other ongoing open issue.
+11. **Extract changes from the changelog** into the `changes` field. The release body has "### Highlights", "### Changes", and "### Fixes" sections of bullet points:
+   - `changes.features`: items from "### Highlights" (new capabilities).
+   - `changes.fixes`: items from "### Fixes", set `verified: true`.
+   - `changes.breaking`: ONLY genuine breaking changes — an explicit "### Breaking Changes" section or items clearly marked breaking. The general "### Changes" section is NOT breaking; leave those out of `breaking`.
+   - Each item has a concise `title` (1 line). (This field is also computed deterministically from the changelog, so a faithful extraction just needs to match the sections.)
+12. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
+13. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
 
 RECOMMENDATION GUIDELINES:
 - ✅ Update now: critical fix or high-value feature, no risky bugs, no open regressions
@@ -303,9 +307,14 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
         for r in rc[:10]:
             parts.append(f"- #{r['number']} reason:{r.get('reason', '?')} {r['title'][:100]}")
 
-    # Release body (changelog for the assessed version)
+    # Release body (changelog for the assessed version). Trimmed to its curated sections
+    # (Highlights/Changes/Fixes/Breaking) rather than head-sliced: a flat [:3000] cut the
+    # ### Fixes section off entirely on big releases, so the analyst never saw the fixes it
+    # was asked to weigh (and the for/against evidence missed them). See release_changes.
     if release and release.get("body"):
-        parts.append(f"\n## Release Changelog (v{version})\n{release['body'][:3000]}")
+        parts.append(
+            f"\n## Release Changelog (v{version})\n{release_changes.prompt_changelog(release['body'])}"
+        )
 
     # Previous-release highlights (the release just before the current one)
     prev = next((r for r in release_history
@@ -736,6 +745,22 @@ def _normalize_recommendation(assessment: dict) -> bool:
     return False
 
 
+def _cap_fresh_confidence(assessment: dict, version: str, assessed_at: str,
+                          latest_release: dict) -> bool:
+    """In-place: a fresh release (still inside the early-read window) is judged on sparse,
+    still-accruing data — the verdict leans on issues carried over from prior versions until
+    the community files version-specific reports — so it must NOT publish "high" confidence.
+    Cap to "medium" so the gauge agrees with the page's fresh-release banner. Returns True if
+    it capped. "medium" (not "low") never trips the low-confidence deploy guard. Deterministic
+    backstop, mirroring _normalize_recommendation."""
+    from openclaw_status.render import _within_fresh_window
+    if (assessment.get("confidence") == "high"
+            and _within_fresh_window(version, assessed_at, latest_release)):
+        assessment["confidence"] = "medium"
+        return True
+    return False
+
+
 def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict:
     """Run the LLM assessment pipeline.
 
@@ -884,16 +909,25 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
                 it["components"] = analyst_comp[it["number"]]
         final_assessment["known_issues"] = ledger_issues
 
-    # ── Deterministic, frozen changelog ──
-    # A released version's changelog is immutable, but the analyst re-extracts `changes` each
-    # run with LLM variance (drifting "fixes shipped" / "new features" counts). Freeze the first
-    # non-empty extraction per version and replay it so those counts stay static run-to-run.
-    from openclaw_status import release_changes
-    final_assessment["changes"] = release_changes.freeze(version, final_assessment.get("changes"))
+    # ── Deterministic changelog ──
+    # The release body is immutable and structured, so `changes` (breaking/fixes/features) is
+    # parsed straight from its ### sections — exact, stable, and immune to the truncation that
+    # used to drop the whole ### Fixes section (rendering "fixes shipped" as 0). The analyst's
+    # own extraction is kept only as a fallback for an unstructured body. See release_changes.
+    release_body = ((raw.get("sources") or {}).get("latest_release") or {}).get("body") or ""
+    final_assessment["changes"] = release_changes.changes_for_release(
+        release_body, fallback=final_assessment.get("changes"))
 
     # Final safety net: collapse any retired 🔄 the model still emitted (primary &
     # refined are already normalized above; this covers the agree-no-refine path).
     _normalize_recommendation(final_assessment)
+
+    # ── Fresh-release confidence cap ──
+    # Applied here so history/timeline/latest.json/llms all agree (see _cap_fresh_confidence).
+    assessed_at = datetime.now(timezone.utc).isoformat()
+    latest_release = (raw.get("sources") or {}).get("latest_release") or {}
+    if _cap_fresh_confidence(final_assessment, version, assessed_at, latest_release):
+        print("   🌿 Fresh release — capped confidence high→medium (early read)")
 
     # ── Final output ──
     rec = final_assessment.get("recommendation", "?")
@@ -909,7 +943,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     print(f"{'='*60}\n")
 
     output = {
-        "assessed_at": datetime.now(timezone.utc).isoformat(),
+        "assessed_at": assessed_at,
         "pipeline": "validated",
         "primary_model": config.PRIMARY_MODEL,
         "validator_model": config.VALIDATOR_MODEL if not single_call else None,

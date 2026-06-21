@@ -1,25 +1,38 @@
 """
-Per-version changelog freeze — capture a released version's `changes` once, replay forever.
+Deterministic changelog extraction — parse a release's `changes` straight from its body.
 
-A released version's changelog (the release body) is immutable: it won't change until the next
-release. But the analyst LLM re-parses it from scratch every run, so the extracted
-breaking/fixes/features lists drift run-to-run (run 2 and run 3 pull a slightly different set
-of bullets from identical text) and the page's "fixes shipped" / "new features" counts move
-even though nothing actually changed.
+A released version's changelog (the release body) is immutable and *structured*: OpenClaw
+release notes carry `### Highlights`, `### Changes`, and `### Fixes` sections of `- ` bullets.
+The analyst LLM used to re-parse that text every run, which (a) drifted run-to-run with model
+variance and (b) silently dropped whole sections when the body was truncated before the LLM
+ever saw them — e.g. the `### Fixes` section sits far past the first few KB on a big release,
+so "fixes shipped" rendered as 0 even though the changelog listed seven.
 
-That's the same flip-flop the issue ledger fixes for known issues, and the continuity prompt
-fixes for the verdict — applied here to `changes`. Policy: **first non-empty capture wins.**
-The first run that produces a non-empty `changes` for a version is stored and frozen; every
-later run for that version gets the stored copy back verbatim. The "non-empty" guard means a
-one-off empty extraction from a hiccuped run never freezes an empty changelog — a later, fuller
-run can still seed the slot. Keyed by version, pruned to the most-recently-captured versions.
-Runtime state; gitignored.
+So we don't ask the model for this at all. `parse_changelog` reads the sections directly:
+features ← Highlights, fixes ← Fixes, breaking ← an explicit "Breaking" section (general
+"### Changes" are NOT breaking and are intentionally left out of the counts). The result is
+exact, stable, and free — the displayed counts equal what the changelog literally says. The
+LLM's own extraction is kept only as a fallback for an unstructured/edited body that yields
+no recognizable sections (`changes_for_release`).
 """
 
-from openclaw_status import config
-from openclaw_status.lib import load_json, now_iso, save_json
+import re
 
 _KEYS = ("breaking", "fixes", "features")
+
+# Section headers (## … ####) and top-level bullets within a section.
+_HEADER_RE = re.compile(r"^#{2,4}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+_BULLET_RE = re.compile(r"^[-*][ \t]+(.+?)[ \t]*$", re.MULTILINE)
+# A bold lead-in ("**Title:** …") or a "Category: …" plain bullet.
+_BOLD_RE = re.compile(r"^\*\*(.+?)\*\*:?[ \t]*")
+# Trailing PR/issue refs "(#123, #456)" and the "Thanks @a, @b." attribution tail.
+_REFS_RE = re.compile(r"\s*\((?:\s*#\d+\s*,?)+\)")
+_THANKS_RE = re.compile(r"\s*Thanks\b.*$", re.IGNORECASE)
+
+# Map the changelog's curated sections onto the three change buckets. "### Changes" is a
+# general catch-all (providers, plugins, dashboard, QA) — real improvements, but NOT breaking
+# changes and largely a restatement of Highlights, so it is deliberately excluded from the counts.
+_BUCKET_PER_SECTION = 12      # cap items per bucket (curated sections are small anyway)
 
 
 def _norm(changes) -> dict:
@@ -34,49 +47,104 @@ def is_empty(changes) -> bool:
     return not any(n[k] for k in _KEYS)
 
 
-def load_store() -> dict:
-    """Load the on-disk freeze store, or {} if missing/corrupt."""
-    if not config.RELEASE_CHANGES_FILE.exists():
-        return {}
-    try:
-        data = load_json(config.RELEASE_CHANGES_FILE)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+def _sections(body: str) -> dict:
+    """Split a markdown body into {lowercased section name: section text}, first occurrence wins."""
+    matches = list(_HEADER_RE.finditer(body or ""))
+    out: dict = {}
+    for i, m in enumerate(matches):
+        name = m.group(1).strip().lower()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
+        out.setdefault(name, body[start:end])
+    return out
 
 
-def _prune(store: dict) -> None:
-    """Keep only the most-recently-captured LEDGER_KEEP_VERSIONS versions."""
-    if len(store) <= config.LEDGER_KEEP_VERSIONS:
-        return
-    ordered = sorted(store.items(), key=lambda kv: kv[1].get("captured_at", ""), reverse=True)
-    for v, _ in ordered[config.LEDGER_KEEP_VERSIONS:]:
-        store.pop(v, None)
+def _clean(s: str) -> str:
+    """Strip the trailing PR refs + Thanks tail and collapse whitespace."""
+    s = _REFS_RE.sub("", s or "")
+    s = _THANKS_RE.sub("", s)
+    return " ".join(s.split()).strip()
 
 
-def freeze(version: str, changes) -> dict:
-    """Return the frozen `changes` for `version`, capturing it on first non-empty sight.
+def _split_title(bullet: str) -> tuple[str, str]:
+    """Split a bullet into (title, remainder): the **bold** lead-in or the pre-colon category."""
+    b = bullet.strip()
+    m = _BOLD_RE.match(b)
+    if m:
+        return m.group(1).strip().rstrip(":").strip(), b[m.end():]
+    if ":" in b[:90]:                       # "Category: description" — colon early in the line
+        head, rest = b.split(":", 1)
+        return head.strip(), rest
+    return b, ""
 
-    First-non-empty-wins: once a version has a stored non-empty changes, that copy is returned
-    verbatim on every later run (so the fixes/features counts are static). Until then (no
-    capture, or only an empty placeholder), the current run's changes are stored and returned —
-    so a later, fuller extraction can still seed an empty slot. Falsy `version` → nothing to
-    freeze; the input is returned normalized.
+
+def _bullets(text: str, extra_key: str | None, extra_val=None) -> list[dict]:
+    """Each `- ` bullet in `text` → {title, <extra_key>: …}; skips blank titles."""
+    items = []
+    for raw in _BULLET_RE.findall(text or ""):
+        title, rest = _split_title(raw)
+        title = _clean(title)
+        if not title:
+            continue
+        item = {"title": title}
+        if extra_key == "verified":
+            item["verified"] = True
+        elif extra_key:                      # "value" (features) / "impact" (breaking)
+            item[extra_key] = _clean(rest)
+        items.append(item)
+        if len(items) >= _BUCKET_PER_SECTION:
+            break
+    return items
+
+
+def parse_changelog(body: str) -> dict:
+    """Extract {breaking, fixes, features} straight from a release body's sections."""
+    secs = _sections(body or "")
+    breaking_text = next((v for k, v in secs.items() if "breaking" in k), "")
+    return {
+        "breaking": _bullets(breaking_text, "impact"),
+        "fixes": _bullets(secs.get("fixes", ""), "verified"),
+        "features": _bullets(secs.get("highlights", ""), "value"),
+    }
+
+
+def changes_for_release(body: str, fallback=None) -> dict:
+    """The deterministic `changes` for a release body, or the LLM `fallback` if the body has
+    no recognizable sections (unstructured / edited changelog)."""
+    parsed = parse_changelog(body)
+    return parsed if not is_empty(parsed) else _norm(fallback)
+
+
+# The curated sections — the part of a release body worth keeping (the rest is the long
+# contributor list / full PR log). Highlights + Changes + Fixes + any explicit Breaking.
+_CURATED_SECTIONS = ("highlights", "changes", "fixes")
+
+
+def _curated_chunks(body: str, per_section: int | None) -> list[str]:
+    """The curated sections as "### Name\\n<text>" chunks, each optionally capped to per_section."""
+    chunks = []
+    for name, text in _sections(body or "").items():
+        if name in _CURATED_SECTIONS or "breaking" in name:
+            text = text.strip()
+            chunks.append(f"### {name.title()}\n{text[:per_section] if per_section else text}")
+    return chunks
+
+
+def curated_changelog(body: str, cap: int = 20000) -> str:
+    """A release body trimmed to its curated sections — what's worth storing.
+
+    The raw body is tens of KB (contributor lists, the full PR log) but the meaningful content
+    is the Highlights/Changes/Fixes/Breaking sections (~a few KB). Storing only those keeps the
+    *whole* ### Fixes section so the fix/feature counts parsed downstream are complete (a flat
+    head-truncation used to slice ### Fixes off, rendering fixes as 0), while dropping the bulky
+    tail. Full sections (not per-section capped); total bounded by `cap`. Returns the body
+    unchanged (capped) if it has no recognizable sections.
     """
-    norm = _norm(changes)
-    if not version:
-        return norm
+    chunks = _curated_chunks(body, per_section=None)
+    return ("\n\n".join(chunks) if chunks else (body or "")).strip()[:cap]
 
-    store = load_store()
-    existing = store.get(version)
-    if existing and not is_empty(existing):
-        return _norm(existing)            # already frozen — replay it verbatim (drop captured_at)
 
-    # Not frozen yet (absent, or a stored-empty placeholder). Persist only a non-empty capture —
-    # an empty extraction isn't worth a write and must not freeze the slot.
-    if is_empty(norm):
-        return norm
-    store[version] = {**norm, "captured_at": now_iso()}
-    _prune(store)
-    save_json(config.RELEASE_CHANGES_FILE, store)
-    return norm
+def prompt_changelog(body: str, per_section: int = 2500, fallback_chars: int = 3000) -> str:
+    """The curated sections for the LLM prompt, each capped (token control). Head-slice fallback."""
+    chunks = _curated_chunks(body, per_section=per_section)
+    return "\n\n".join(chunks) if chunks else (body or "")[:fallback_chars]

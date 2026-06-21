@@ -380,6 +380,18 @@ def test_build_normalizes_retired_wait_verdict():
 
 # ── release freshness (just-dropped → preliminary verdict) ───────────────────
 
+def test_within_fresh_window_basic():
+    lr = {"tag": "v2026.6.8", "published_at": "2026-06-16"}
+    assert render._within_fresh_window("2026.6.8", "2026-06-16T10:00:00+00:00", lr) is True
+    # outside the publish-date window
+    assert render._within_fresh_window("2026.6.8", "2026-06-20", lr) is False
+    # not the latest release
+    assert render._within_fresh_window("2026.6.6", "2026-06-16", lr) is False
+    # unknown publish date
+    assert render._within_fresh_window("2026.6.8", "2026-06-16",
+                                       {"tag": "v2026.6.8", "published_at": ""}) is False
+
+
 def test_release_freshness_fresh_within_window():
     ki = [{"affects_version": True}, {"affects_version": False}, {"affects_version": False}]
     f = render._release_freshness(

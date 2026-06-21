@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import quote
 
-from openclaw_status import config
+from openclaw_status import config, release_changes
 from openclaw_status.lib import _retry, sanitize, load_json, save_json
 
 
@@ -193,7 +193,12 @@ def _norm_release(d: dict | None) -> dict | None:
         "version": tag.lstrip("v"),
         "name": d.get("name", ""),
         "published_at": d.get("published_at", "") or "",
-        "body": sanitize(d.get("body", ""), 5000),
+        # Store the curated sections (Highlights/Changes/Fixes/Breaking), not a flat head-slice:
+        # the old 5000-char cut dropped the whole ### Fixes section on big releases, so "fixes
+        # shipped" rendered as 0. Curate first (the raw body still has the ### headers), then
+        # sanitize. (Issue-closing "fixes #N" refs live only in the dropped PR-log tail and were
+        # already past the old 5000 cap, so extract_closing_refs is unaffected.)
+        "body": sanitize(release_changes.curated_changelog(d.get("body", "")), 20000),
         "url": d.get("html_url", ""),
         "prerelease": d.get("prerelease", False),
         "draft": d.get("draft", False),
