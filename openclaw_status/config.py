@@ -106,13 +106,6 @@ ISSUE_LEDGER_FILE = DATA_DIR / "issue-ledger.json"
 LEDGER_MAX_ISSUES_PER_VERSION = 60   # cap per version (keep the highest-ranked)
 LEDGER_KEEP_VERSIONS = 12            # prune the ledger to the most-recently-seen versions
 
-# Per-version changelog freeze. A released version's changelog is immutable, but the analyst
-# re-extracts `changes` (breaking/fixes/features) each run with LLM variance, so the displayed
-# "fixes shipped" / "new features" counts drift run-to-run. This stores the first non-empty
-# extraction per version and replays it verbatim thereafter (see release_changes.py). Keyed by
-# version; pruned to LEDGER_KEEP_VERSIONS. Runtime state; gitignored (data/ is ignored wholesale).
-RELEASE_CHANGES_FILE = DATA_DIR / "release-changes.json"
-
 # ── API endpoints ───────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"

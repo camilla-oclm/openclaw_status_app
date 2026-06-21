@@ -488,6 +488,17 @@ def _days_between(later_iso: str, earlier_iso: str):
     return max((a - b).days, 0)
 
 
+def _within_fresh_window(version: str, assessed_at: str, latest_release: dict) -> bool:
+    """The date half of freshness: this IS the latest release AND it was published within
+    `config.FRESH_RELEASE_DAYS` of the assessment. (The run-count half lives in
+    `_release_freshness`.) Used both for the page banner and to cap a fresh release's
+    confidence in the assessment pipeline, so the two always agree."""
+    rel_ver = (latest_release.get("tag", "") or "").lstrip("v")
+    days = _days_between(assessed_at, latest_release.get("published_at", ""))
+    return bool(version and rel_ver == version and days is not None
+                and days <= config.FRESH_RELEASE_DAYS)
+
+
 def _release_freshness(version: str, assessed_at: str, latest_release: dict,
                        known_issues: list, run_count: int = 0) -> dict:
     """Is this a just-dropped release we don't have version-specific data on yet?
@@ -504,12 +515,9 @@ def _release_freshness(version: str, assessed_at: str, latest_release: dict,
     community has filed version-specific bugs, so the banner hides even though the
     publish date is still < 2 days old. `run_count` = times this version has been
     assessed so far (incl. this run); 0 = unknown, so it never retires the banner."""
-    rel_ver = (latest_release.get("tag", "") or "").lstrip("v")
     days = _days_between(assessed_at, latest_release.get("published_at", ""))
-    is_latest = bool(version) and rel_ver == version
     runs_exhausted = run_count > config.FRESH_RELEASE_MAX_RUNS
-    fresh = bool(is_latest and days is not None and days <= config.FRESH_RELEASE_DAYS
-                 and not runs_exhausted)
+    fresh = bool(_within_fresh_window(version, assessed_at, latest_release) and not runs_exhausted)
     # Of the issues we *are* showing, how many actually name this release vs. are
     # carried over from prior versions — drives the honest "N mention this version".
     specific = sum(1 for i in known_issues if i.get("affects_version"))
