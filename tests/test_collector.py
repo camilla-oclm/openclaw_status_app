@@ -66,3 +66,18 @@ def test_fetch_github_issues_marks_fixed_from_release_body(monkeypatch):
     fixed = {i["number"]: i["fixed_in"] for i in out}
     assert fixed[42] == ["stable"]
     assert fixed[99] == []
+
+
+def test_fetch_github_issues_uses_pre_extracted_closing_refs(monkeypatch):
+    """Pre-extracted closing refs (from the raw body, via _norm_release) take precedence
+    over the curated release_body — which no longer carries the 'fixes #N' tail. This is
+    the path that fixes the latent inert-fixed_in bug."""
+    issues = [{"number": 777, "affects_version": True}, {"number": 42, "affects_version": True}]
+    monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: issues)
+    out = collector.fetch_github_issues(
+        release_body="### Fixes\n- tidy things (#42)",   # curated body — no 'fixes #777'
+        stable_closing_refs=["777"],                     # recovered from the dropped tail
+    )
+    fixed = {i["number"]: i["fixed_in"] for i in out}
+    assert fixed[777] == ["stable"]   # picked up despite not being in release_body
+    assert fixed[42] == []            # bare "(#42)" is not a closing keyword

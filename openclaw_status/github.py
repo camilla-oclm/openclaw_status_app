@@ -196,9 +196,13 @@ def _norm_release(d: dict | None) -> dict | None:
         # Store the curated sections (Highlights/Changes/Fixes/Breaking), not a flat head-slice:
         # the old 5000-char cut dropped the whole ### Fixes section on big releases, so "fixes
         # shipped" rendered as 0. Curate first (the raw body still has the ### headers), then
-        # sanitize. (Issue-closing "fixes #N" refs live only in the dropped PR-log tail and were
-        # already past the old 5000 cap, so extract_closing_refs is unaffected.)
+        # sanitize.
         "body": sanitize(release_changes.curated_changelog(d.get("body", "")), 20000),
+        # Issue-closing "fixes/closes/resolves #N" refs live in the PR-log tail that
+        # curated_changelog() drops, so they must be extracted from the RAW body HERE —
+        # re-parsing the curated `body` downstream finds nothing (the latent bug that left
+        # every issue's fixed_in inert). Strings, sorted for a stable/serializable value.
+        "closing_refs": sorted(extract_closing_refs(d.get("body", ""))),
         "url": d.get("html_url", ""),
         "prerelease": d.get("prerelease", False),
         "draft": d.get("draft", False),

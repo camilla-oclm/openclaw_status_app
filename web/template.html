@@ -185,6 +185,11 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .verdict-blurb{margin-top:.85rem; color:var(--text); font-weight:600; font-size:1.02rem}
 .hero-headline{margin-top:.5rem; color:var(--muted); font-size:.95rem; max-width:60ch}
 .conf-row{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.1rem; align-items:center}
+/* hero CTA → jump to "Your setup"; becomes a live per-setup verdict once a stack is picked */
+.setup-cta{margin-top:.95rem; display:inline-flex; align-items:center; gap:.4rem; font:inherit; font-size:.82rem; cursor:pointer; background:transparent; border:1px dashed var(--tone-bd); color:var(--muted); padding:.4rem .85rem; border-radius:999px; transition:.15s var(--ease)}
+.setup-cta:hover{color:var(--text); border-color:var(--tone); background:var(--tone-bg)}
+.setup-cta .sv-em{font-size:1rem; line-height:1}
+.setup-cta b{color:var(--tone)}
 .chip{
   display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; font-weight:600;
   padding:.34rem .72rem; border-radius:999px; border:1px solid var(--border2);
@@ -352,6 +357,10 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .tag.t-comp{color:var(--accent2); font-weight:700; border-color:color-mix(in srgb,var(--accent2) 38%,transparent); background:color-mix(in srgb,var(--accent2) 13%,transparent)}
 .issue.mine{border-color:var(--info-bd); box-shadow:0 0 0 1px var(--info-bd), var(--shadow-1)}
 .tag.t-me{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
+/* heuristic (auto-detected) platform/subsystem tags read quieter than asserted ones */
+.tag.t-auto{color:var(--faint); border-style:dashed}
+/* raw maintainer-assigned GitHub labels — a verifiable FACT, shown mono + muted */
+.tag.tag-raw{color:var(--muted); background:var(--card); border-color:var(--border); font-family:var(--mono); font-weight:500; font-size:.66rem}
 
 /* ── tabs (changes) ────────────────────────────────────────────────────── */
 .tabs{display:flex; gap:.4rem; margin-bottom:1rem; flex-wrap:wrap}
@@ -480,6 +489,12 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .setup .risk{padding:.9rem 1.1rem; border-radius:var(--r-md); font-size:.9rem; color:var(--text); background:var(--tone-bg); border:1px solid var(--tone-bd)}
 .setup .risk .rh{font-weight:700; margin-bottom:.2rem}
 .setup .hint{color:var(--faint); font-size:.84rem}
+/* per-setup verdict — a conservative refinement of the global verdict for the user's stack */
+.setup .risk .sv{display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; margin-bottom:.7rem; padding-bottom:.7rem; border-bottom:1px solid var(--tone-bd)}
+.sv .sv-k{font-family:var(--mono); font-size:.62rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-weight:700}
+.sv .sv-em{font-size:1.2rem; line-height:1}
+.sv .sv-l{font-weight:800; color:var(--tone); font-size:1.02rem}
+.sv .sv-note{font-size:.72rem; color:var(--muted); font-weight:600}
 .risk .prow-list{margin-top:.85rem; display:flex; flex-direction:column; gap:.45rem}
 .risk .prow{display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; font-size:.85rem}
 .risk .ppn{font-weight:700; min-width:7rem}
@@ -1176,6 +1191,37 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     for (var m=0;m<selC.length;m++){ if (cs.indexOf(selC[m]) >= 0) return true; }
     return false;
   }
+  // ── per-setup verdict ───────────────────────────────────────────────────────
+  // A CONSERVATIVE, fail-closed refinement of the global verdict for the user's stack:
+  // it softens the global verdict by AT MOST one step, and ONLY when no BLOCKING issue
+  // touches them. A blocker = a high/critical issue that is confirmed for THIS version
+  // (affects_version) — or that hits every install ("all") — and that lands on a picked
+  // platform/channel/component (or is cross-cutting). Fresh releases never soften (the
+  // data is still arriving); the result is never harsher than the global verdict. Shared
+  // by the panel + the hero CTA so they can't disagree. latest.json/badge/RSS/SSR keep
+  // the canonical GLOBAL verdict — this refinement is page-only and device-local.
+  var VERDICT_ORDER = ["✅","⚠️","⏸️"];   // increasing caution
+  function setupBlockers(){
+    var fresh = !!(DATA.freshness && DATA.freshness.fresh);
+    return (DATA.known_issues || []).filter(function(i){
+      var s = String(i.severity||"low").toLowerCase();
+      if (s !== "high" && s !== "critical") return false;
+      if (!i.affects_version && !fresh) return false;        // only version-confirmed counts
+      if (issuePlatforms(i).indexOf("all") >= 0) return true; // cross-cutting → hits everyone
+      return issueHitsStack(i);
+    });
+  }
+  function setupVerdict(){
+    var fresh = !!(DATA.freshness && DATA.freshness.fresh);
+    var gRec = DATA.recommendation, gIdx = VERDICT_ORDER.indexOf(gRec);
+    var blockers = setupBlockers();
+    var rec = gRec, softened = false;
+    if (stackActive() && !fresh && !blockers.length && gIdx > 0){
+      rec = VERDICT_ORDER[gIdx - 1];   // soften exactly one notch
+      softened = true;
+    }
+    return {rec:rec, global:gRec, softened:softened, fresh:fresh, blockers:blockers};
+  }
   // Risk height (%) per verdict for the release-health trend — taller = riskier.
   var RISK = {"✅":18,"⚠️":52,"⏸️":100};
 
@@ -1316,6 +1362,24 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
             preKids.concat(el("span",{"class":"v-ext","aria-hidden":"true"},"↗")))
         : el("span",{"class":"chip", title:preTip}, preKids));
     }
+    // Dual-model review outcome — the central reason to trust an automated verdict: show
+    // that a second, independent model concurred, or that the verdict was REVISED after it
+    // pushed back, rather than asking the user to take the first analyst on faith.
+    var rv = DATA.review || {};
+    if (rv.validated){
+      var rvText, rvTip;
+      if (rv.refined && rv.primary_recommendation && rv.primary_recommendation !== (DATA.recommendation||"")){
+        rvText = "Revised "+rv.primary_recommendation+"→"+(DATA.recommendation||"")+" on review";
+        rvTip = "The first analyst model said "+rv.primary_recommendation+"; an independent second model challenged it and the verdict was revised."+(rv.critique?(" Validator: "+rv.critique):"");
+      } else if (rv.agreed){
+        rvText = "2nd model agreed";
+        rvTip = "An independent second model reviewed this verdict and concurred."+(rv.critique?(" Validator: "+rv.critique):"");
+      } else {
+        rvText = "2nd model flagged; held";
+        rvTip = "An independent second model flagged details, but the verdict held after re-check."+(rv.critique?(" Validator: "+rv.critique):"");
+      }
+      chips.push(el("span",{"class":"chip", title:rvTip},[document.createTextNode("⚖︎ "), el("b",null,rvText)]));
+    }
 
     var main = el("div",{"class":"hero-main"},[
       el("div",{"class":"eyebrow"},"Release assessment"),
@@ -1327,9 +1391,31 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         : el("div",{"class":"verdict "+v.tone},[el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label)])),
       el("div",{"class":"verdict-blurb"}, v.blurb),
       DATA.headline ? el("div",{"class":"hero-headline"}, DATA.headline) : null,
-      el("div",{"class":"conf-row"}, chips)
+      el("div",{"class":"conf-row"}, chips),
+      setupCta()
     ]);
     return el("div",{"class":"hero "+v.tone},[ main, signalPanel(v) ]);
+  }
+  // Hero → "Your setup" CTA. Before a stack is picked it nudges; once picked it shows a
+  // live per-setup verdict mini-summary (kept in sync by applyStack()). A button (not an
+  // <a href="#setup">) so it scrolls in-page instead of opening a new tab.
+  function setupCtaLabel(){
+    if (!stackActive())
+      return [document.createTextNode("This verdict is for everyone — "), el("b",null,"check your setup →")];
+    var svd = setupVerdict(), v = VERDICTS[svd.rec] || {label:String(svd.rec||"")};
+    return [el("span",{"class":"sv-em","aria-hidden":"true"}, svd.rec),
+            document.createTextNode(" For your setup: "), el("b",null, v.label),
+            document.createTextNode(" →")];
+  }
+  function setupCta(){
+    var b = el("button",{"class":"setup-cta", type:"button", id:"setup-cta",
+                         title:"Tailor the verdict to the platforms, channels and components you run"},
+              setupCtaLabel());
+    b.addEventListener("click", function(){
+      var t = document.getElementById("setup");
+      if (t) t.scrollIntoView({behavior:"smooth", block:"start"});
+    });
+    return b;
   }
 
   function lowConfBanner(){
@@ -1478,7 +1564,17 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var sevCls = (sev==="critical"||sev==="high")?"t-bad":(sev==="medium"?"t-warn":"");
     tags.push(el("span",{"class":"tag "+sevCls}, sev+" severity"));
-    if (i.first_seen) tags.push(el("span",{"class":"tag"}, "tracked "+timeAgo(i.first_seen)));
+    // True bug age: when it was opened on GitHub (a verifiable fact), with first-tracked as fallback.
+    if (i.created_at) tags.push(el("span",{"class":"tag", title:"When this issue was opened on GitHub"}, "opened "+fmtDate(i.created_at)));
+    else if (i.first_seen) tags.push(el("span",{"class":"tag"}, "first tracked "+timeAgo(i.first_seen)));
+    // Mark heuristic platform/subsystem tags so a keyword guess doesn't read as an assertion.
+    if (i.tag_source && i.tag_source !== "analyst"){
+      tags.push(el("span",{"class":"tag t-auto", title:"The platform/subsystem tags here were auto-detected from the issue's text and labels — not asserted by the analyst. Verify on GitHub."}, "🔍 auto-detected"));
+    }
+    // Raw maintainer-assigned GitHub labels — the verifiable facts the severity is scored from.
+    (i.labels||[]).forEach(function(lbl){
+      tags.push(el("span",{"class":"tag tag-raw", title:"Maintainer-assigned GitHub label"}, String(lbl)));
+    });
     if (mine) tags.unshift(el("span",{"class":"tag t-me"}, "★ your stack"));
     if (i.is_new) tags.unshift(el("span",{"class":"tag t-good"}, "🆕 new"));
 
@@ -1953,6 +2049,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (oldP){ var fp = platforms(); if (fp) oldP.parentNode.replaceChild(fp, oldP); }
     var oldC = document.getElementById("components");
     if (oldC){ var fc = componentHealth(); if (fc) oldC.parentNode.replaceChild(fc, oldC); }
+    // Keep the hero CTA's live per-setup verdict mini-summary in sync with the stack.
+    var cta = document.getElementById("setup-cta");
+    if (cta){
+      cta.textContent = "";
+      setupCtaLabel().forEach(function(n){
+        cta.appendChild(typeof n === "object" ? n : document.createTextNode(String(n)));
+      });
+    }
     addAnchors();   // rebuilt sections lost their permalink "#" — re-add (idempotent)
   }
   function personalRisk(){
@@ -1991,16 +2095,31 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     });
     rows.sort(function(a,b){ return b.w-a.w || b.iss.length-a.iss.length; });
 
-    var worst = rows.length ? rows[0].w : 0;
     var hot = rows.filter(function(r){ return r.w>=2; }).map(function(r){ return r.label; });
-    var verdict = (VERDICTS[DATA.recommendation]||{label:String(DATA.recommendation||"")}).label;
-    var tone, head;
-    if (worst>=3){ tone="tone-bad";
-      head = "Your stack takes the brunt — "+hot.join(", ")+" "+(hot.length>1?"are":"is")+" among the hardest hit, so the “"+verdict+"” verdict applies squarely to you."; }
-    else if (worst===2){ tone="tone-warn";
-      head = "Moderate risk for your stack — "+hot.join(", ")+" show real exposure; weigh the “"+verdict+"” verdict accordingly."; }
-    else { tone="tone-good";
-      head = "Your stack looks largely spared — the issues behind the “"+verdict+"” verdict mostly land elsewhere."; }
+
+    // The per-setup VERDICT drives the tone + headline (and the badge below) so the copy
+    // can never contradict the glyph — e.g. claim "spared" while still showing the global
+    // Skip. See setupVerdict(): conservative, one-notch, fail-closed, never harsher.
+    var svd = setupVerdict();
+    var gv = VERDICTS[svd.global] || {label:String(svd.global||""), tone:"tone-warn"};
+    var sv = VERDICTS[svd.rec] || {label:String(svd.rec||""), tone:"tone-warn"};
+    var tone = sv.tone, head;
+    if (svd.fresh){
+      tone = gv.tone;
+      head = "Too new to call for your stack — v"+(DATA.version||"")+" is a fresh release and "
+           + "version-specific reports are still arriving, so we can't clear your setup yet. "
+           + "Back up before updating.";
+    } else if (svd.softened){
+      head = "Lower risk for your stack — none of this release's blocking issues are confirmed "
+           + "to hit what you run. The global “"+gv.label+"” verdict is driven by issues outside "
+           + "your setup, so for you it eases to “"+sv.label+".” Back up before updating anyway.";
+    } else if (svd.blockers.length){
+      head = "The “"+gv.label+"” verdict applies squarely to you — "
+           + svd.blockers.length+" blocking "+(svd.blockers.length===1?"issue":"issues")
+           + " hit "+(hot.length?hot.join(", "):"your stack")+" or every install.";
+    } else {
+      head = "Your stack looks clear for this release — this matches the global “"+gv.label+"” verdict.";
+    }
 
     function issueLinks(items, n){
       var kids = [];
@@ -2049,7 +2168,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       ]));
     }
 
-    return el("div",{"class":"risk "+tone},[ el("div",{"class":"rh"}, head), list ]);
+    var badge = el("div",{"class":"sv"},[
+      el("span",{"class":"sv-k"}, "For your setup"),
+      el("span",{"class":"sv-em","aria-hidden":"true"}, svd.rec),
+      el("span",{"class":"sv-l"}, sv.label),
+      svd.softened ? el("span",{"class":"sv-note"}, "refined from “"+gv.label+"” (global)") : null
+    ]);
+    return el("div",{"class":"risk "+tone},[ badge, el("div",{"class":"rh"}, head), list ]);
   }
 
   // ── release-health trend (verdicts over time) ───────────────────────────────

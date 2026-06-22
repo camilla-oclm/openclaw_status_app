@@ -65,6 +65,23 @@ def test_closing_refs_empty():
     assert github.extract_closing_refs(None) == set()
 
 
+def test_norm_release_closing_refs_from_raw_body():
+    """closing_refs are extracted from the RAW body: the 'fixes #N' lines live in the
+    PR-log tail that curated_changelog() drops, so re-parsing the stored body would miss
+    them (the latent bug that left every issue's fixed_in inert)."""
+    raw_body = (
+        "### Fixes\n- Patch the thing (#42)\n\n"
+        "## Pull requests\n- chore: tidy things up, fixes #777\n- feat: add x (#888)\n"
+    )
+    r = github._norm_release({"tag_name": "v1.2.3", "body": raw_body})
+    # The closing ref from the dropped tail is captured...
+    assert "777" in r["closing_refs"]
+    # ...even though that line is NOT in the stored (curated) body.
+    assert "fixes #777" not in r["body"].lower()
+    # Bare "(#42)" / "(#888)" are not closing keywords, so they are not refs.
+    assert "42" not in r["closing_refs"] and "888" not in r["closing_refs"]
+
+
 # ── is_diamond ───────────────────────────────────────────────────────────────
 
 def test_is_diamond():
