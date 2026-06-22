@@ -344,6 +344,81 @@ def test_build_passes_issue_platforms_through():
     assert ki["platforms"] == ["linux", "all"]
 
 
+def test_build_tags_untagged_blocker_as_all():
+    """A high-severity issue that resolves to no platform AND no component must NOT
+    silently vanish from the per-setup read — it gets tagged 'all' so it surfaces in the
+    cross-cutting row and blocks a false 'you're spared'. tag_source records it was untagged."""
+    raw = {"sources": {"github_issues": [
+        {"number": 50, "title": "App freezes randomly after upgrade", "severity": "high"}]}}
+    a = {"assessment": {"known_issues": [
+        {"number": 50, "title": "App freezes randomly after upgrade",
+         "severity": "high", "category": "post_release"}]}, "version": "2.0"}
+    ki = render._build_assessment_data(a, raw)["known_issues"][0]
+    assert ki["platforms"] == ["all"]
+    assert ki["tag_source"] == "untagged"
+
+
+def test_build_does_not_force_all_on_nonblocking_untagged():
+    """The guard only fires for blockers — a low-severity untagged issue stays untagged
+    (forcing 'all' on everything would saturate every platform meter with noise)."""
+    raw = {"sources": {"github_issues": [
+        {"number": 51, "title": "Minor visual glitch sometimes", "severity": "low"}]}}
+    a = {"assessment": {"known_issues": [
+        {"number": 51, "title": "Minor visual glitch sometimes",
+         "severity": "low", "category": "active"}]}, "version": "2.0"}
+    ki = render._build_assessment_data(a, raw)["known_issues"][0]
+    assert ki["platforms"] == []
+    assert ki["tag_source"] == "untagged"
+
+
+def test_build_tag_source_analyst_vs_derived():
+    raw = {"sources": {"github_issues": [
+        {"number": 7, "title": "Docker build broken", "severity": "high", "category": "regression"},
+        {"number": 8, "title": "Discord delivery flaky", "severity": "high"}]}}
+    a = {"assessment": {"known_issues": [
+        {"number": 7, "title": "Docker build broken", "severity": "high", "category": "regression"},
+        {"number": 8, "title": "Discord delivery flaky", "severity": "high",
+         "platforms": ["discord"]}]}, "version": "2.0"}
+    ki = {i["number"]: i for i in render._build_assessment_data(a, raw)["known_issues"]}
+    assert ki[7]["tag_source"] == "derived"    # no analyst tag → derived from text
+    assert ki[8]["tag_source"] == "analyst"    # analyst supplied platforms
+
+
+def test_build_surfaces_raw_labels_and_created_at():
+    raw = {"sources": {"github_issues": [
+        {"number": 9, "title": "boom", "labels": ["bug", "P1", "impact:message-loss"],
+         "created_at": "2026-06-01T12:00:00Z"}]}}
+    a = {"assessment": {"known_issues": [{"number": 9, "title": "boom"}]}, "version": "2.0"}
+    ki = render._build_assessment_data(a, raw)["known_issues"][0]
+    assert ki["labels"] == ["bug", "P1", "impact:message-loss"]
+    assert ki["created_at"] == "2026-06-01T12:00:00Z"
+
+
+def test_build_surfaces_review_outcome():
+    """The dual-model review outcome is surfaced so the verdict isn't taken on faith."""
+    assessment_raw = {
+        "assessment": {"recommendation": "⏸️", "known_issues": []},
+        "version": "2.0",
+        "validator_model": "qwen",
+        "validator_agrees": False,
+        "refined": True,
+        "primary_recommendation": "⚠️",
+        "validator_critique": "Missed a critical regression in #123.",
+    }
+    rv = render._build_assessment_data(assessment_raw, {"sources": {}})["review"]
+    assert rv["validated"] is True
+    assert rv["refined"] is True
+    assert rv["primary_recommendation"] == "⚠️" and rv["agreed"] is False
+    assert "critical regression" in rv["critique"]
+
+
+def test_build_review_single_call_not_validated():
+    assessment_raw = {"assessment": {"recommendation": "✅", "known_issues": []},
+                      "version": "2.0", "validator_model": None}
+    rv = render._build_assessment_data(assessment_raw, {"sources": {}})["review"]
+    assert rv["validated"] is False
+
+
 def test_build_detects_workaround_signal():
     raw = {"sources": {"github_issues": [
         {"number": 1, "title": "crash on start", "body": "No fix yet, but as a workaround you can downgrade."},

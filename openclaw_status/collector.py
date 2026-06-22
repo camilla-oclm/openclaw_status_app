@@ -140,9 +140,16 @@ def fetch_clawsweeper_records(issue_numbers: list[int],
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fetch_github_issues(release_body: str = "", prerelease_body: str = "", release_date: str = "",
-                        version: str = "", status: "SourceStatus | None" = None) -> list[dict]:
+                        version: str = "", status: "SourceStatus | None" = None,
+                        stable_closing_refs=None, prerelease_closing_refs=None) -> list[dict]:
     """Scout the repo for issues impacting the assessed version (see github.py),
-    then mark which ones the release/pre-release explicitly closes."""
+    then mark which ones the release/pre-release explicitly closes.
+
+    `*_closing_refs` are the issue numbers the release/pre-release body says it fixes,
+    pre-extracted from the RAW body in github._norm_release (the "fixes #N" lines live in
+    the PR-log tail that curation drops, so they're gone from `release_body` by the time it
+    reaches here). When omitted, we fall back to parsing the bodies for backward compatibility.
+    """
     import time as _time
     t0 = _time.time()
     print("🐛 Scouting GitHub issues...")
@@ -154,9 +161,12 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
 
     # Cross-reference fixes: an issue is "fixed" only if the release/pre-release
     # body explicitly closes it (fixes/closes/resolves #N) — not any bare #N,
-    # which is usually a PR number.
-    stable_fixed = github.extract_closing_refs(release_body)
-    prerelease_fixed = github.extract_closing_refs(prerelease_body)
+    # which is usually a PR number. Prefer the refs pre-extracted from the raw body
+    # (see github._norm_release); fall back to parsing the passed bodies.
+    stable_fixed = set(map(str, stable_closing_refs)) if stable_closing_refs is not None \
+        else github.extract_closing_refs(release_body)
+    prerelease_fixed = set(map(str, prerelease_closing_refs)) if prerelease_closing_refs is not None \
+        else github.extract_closing_refs(prerelease_body)
     for item in issues:
         num_str = str(item["number"])
         item["fixed_in"] = []
@@ -266,6 +276,8 @@ def collect(output_path=None) -> dict:
             release_date=release.get("published_at", "") if release else "",
             version=version,
             status=source_status,
+            stable_closing_refs=release.get("closing_refs") if release else None,
+            prerelease_closing_refs=prerelease.get("closing_refs") if prerelease else None,
         )
 
         # 7. Enrich issues with clawsweeper records (decision, fixed_release)

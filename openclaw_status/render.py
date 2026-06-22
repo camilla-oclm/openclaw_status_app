@@ -592,6 +592,34 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     for issue in a.get("known_issues", []):
         num = issue.get("number")
         raw_i = raw_issues.get(num, {})
+        sev = str(issue.get("severity", "medium")).lower()
+        cat = str(issue.get("category", raw_i.get("category", "unknown"))).lower()
+
+        # Surfaces this issue hits: the analyst's tags if it emitted any, else a
+        # deterministic derivation from the issue's title/body/labels.
+        analyst_plats = _norm_platforms(issue.get("platforms"))
+        analyst_comps = _norm_components(issue.get("components"))
+        plats = analyst_plats or _derive_platforms(raw_i, issue.get("severity"), issue.get("category"))
+        comps = analyst_comps or _derive_components(raw_i)
+        # tag_source distinguishes an ASSERTED classification (analyst/maintainer label) from a
+        # heuristic guess off an untagged issue — the page marks the latter "auto-detected" so a
+        # keyword guess never reads as authoritative as a real label.
+        if analyst_plats or analyst_comps:
+            tag_source = "analyst"
+        elif plats or comps:
+            tag_source = "derived"
+        else:
+            tag_source = "untagged"
+        # GUARD (the most dangerous failure for the per-setup read): a BLOCKING issue
+        # — high/critical, or a confirmed/post-release regression — that resolves to NO
+        # platform AND NO component would silently drop out of every per-setup row and the
+        # cross-cutting row, telling a user they're "spared" when we simply couldn't classify
+        # a serious bug. Tag it "all" so it flows into the severity-weighted cross-cutting row
+        # (and platform_impact, latest.json, SSR — all derive from this) instead of vanishing.
+        if not plats and not comps and (sev in ("critical", "high")
+                                        or cat in ("regression", "post_release")):
+            plats = ["all"]
+
         known_issues.append({
             "number": num,
             "title": issue.get("title", ""),
@@ -605,12 +633,15 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "reactions": raw_i.get("reactions", 0),
             "impact": raw_i.get("impact"),
             "affects_version": raw_i.get("affects_version", False),
-            # Surfaces this issue hits: the analyst's tags if it emitted any, else a
-            # deterministic derivation from the issue's title/body/labels.
-            "platforms": _norm_platforms(issue.get("platforms"))
-                         or _derive_platforms(raw_i, issue.get("severity"), issue.get("category")),
-            # Subsystem(s) this issue touches (orthogonal facet) — analyst tags ∥ derivation.
-            "components": _norm_components(issue.get("components")) or _derive_components(raw_i),
+            "platforms": plats,
+            "components": comps,
+            # How the platform/component tags were assigned (analyst | derived | untagged).
+            "tag_source": tag_source,
+            # Raw maintainer-assigned GitHub labels — a verifiable FACT the verdict is scored
+            # from, shown distinctly from the derived severity/category tags (capped for size).
+            "labels": [str(l) for l in (raw_i.get("labels") or [])][:6],
+            # When the bug was actually opened (true issue age) — vs first_seen (first tracked).
+            "created_at": raw_i.get("created_at") or "",
             # Ledger-derived: "new since last run" badge + issue age.
             "is_new": bool(issue.get("is_new")),
             "first_seen": issue.get("first_seen") or raw_i.get("first_seen"),
@@ -631,6 +662,18 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "headline": a.get("headline", ""),
         "confidence": a.get("confidence", "medium"),
         "thesis": a.get("thesis", ""),
+        # The adversarial dual-model review outcome — the central reason to trust an
+        # automated verdict. Surfaced so the user can see the second model concurred, or
+        # that the verdict was REVISED after the validator pushed back, rather than taking
+        # it on faith. `validated` is False only in single-call mode (no validator ran).
+        "review": {
+            "validated": bool(assessment_raw.get("validator_model")),
+            "agreed": bool(assessment_raw.get("validator_agrees", True)),
+            "refined": bool(assessment_raw.get("refined", False)),
+            "primary_recommendation": _norm_rec(
+                assessment_raw.get("primary_recommendation") or a.get("recommendation", "")),
+            "critique": _truncate(str(assessment_raw.get("validator_critique") or ""), 280),
+        },
         "evidence": a.get("evidence", {"for_updating": [], "against_updating": [], "neutral": []}),
         "known_issues": known_issues,
         "changes": a.get("changes", {"breaking": [], "fixes": [], "features": []}),
@@ -950,6 +993,19 @@ def _llms_txt(data: dict) -> str:
                  "version; the rest are carried over from earlier releases. Bug reports keep "
                  "arriving after a release, so the verdict firms up over the next few "
                  "re-assessments as users report in. Back up before updating.")
+    rv = data.get("review") or {}
+    if rv.get("validated"):
+        if rv.get("refined") and rv.get("primary_recommendation") and rv["primary_recommendation"] != rec:
+            L.append(f"- Review: revised from {rv['primary_recommendation']} to {rec} after an "
+                     "independent second model challenged the first analyst's reasoning.")
+        elif rv.get("agreed"):
+            L.append("- Review: an independent second model reviewed and concurred with this verdict.")
+        else:
+            L.append("- Review: an independent second model flagged details; the verdict held after re-check.")
+    L.append("- Your setup: the web page refines this global verdict for your own stack — it can "
+             "soften the verdict by one step when none of the blocking, version-confirmed issues "
+             "touch your selected platforms, channels, or components (each issue's platforms, "
+             "components, severity and affects_version are in latest.json so you can check yourself).")
     L += [
         "",
         "## Resources",
