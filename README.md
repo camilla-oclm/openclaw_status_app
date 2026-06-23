@@ -159,7 +159,8 @@ block) and writes **`web/index.html`** — a zero-dependency, dark/light, mobile
 that builds its DOM with `textContent` (XSS-safe) and no inline handlers (CSP-clean). A **deploy
 guard** refuses to publish a low-confidence or invalid assessment, and an **HTML smoke test**
 validates the page before it overwrites the previous one. The page leads with the decision
-(verdict, key-metric tiles, **Your setup** stack personalisation, reasoning) and groups the
+(verdict, key-metric tiles, **Your setup** — a conservative *per-setup verdict* that softens the
+global one by at most one step when no version-confirmed blocking issue hits your stack — reasoning) and groups the
 supporting detail — Impact meters, changelog, Trends charts, past verdicts — behind tabs, with
 the filterable Known-issues list below. A just-dropped release (published within
 `config.FRESH_RELEASE_DAYS` of the run) leads with a **fresh-release notice** and tempers the
@@ -232,7 +233,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 228 tests, hermetic (no network)
+python3 -m pytest        # 236 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
