@@ -1442,14 +1442,25 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       ? ("So far " + spec + " of the issues below " + (spec === 1 ? "names" : "name") +
          " this exact release; the rest are carried over from earlier versions.")
       : "No issues have been filed against this exact release yet, so the list below is carried over from earlier versions — a reporting lag as people upgrade, not a gap in the analysis.";
+    // The "early read" caveat must agree with the verdict's DIRECTION. On a skip the evidence
+    // is early but already negative — "the verdict will firm up" reads as "the skip is soft and
+    // might flip," which contradicts the flat "Skip this version" above. Reports only accumulate,
+    // so the case for waiting firms; a non-skip early read genuinely could degrade.
+    var skip = (DATA.recommendation === "⏸️");
+    var tail = skip
+      ? "Bug reports keep arriving in the days after a release, so the issue list usually grows rather than shrinks — the case for waiting only gets firmer."
+      : "Bug reports keep arriving in the days after a release, so more problems may still surface; treat this as provisional and re-check over the next few runs.";
+    var baTail = skip
+      ? " and don't expect a quick reversal — more reports usually add to the problem list in the first few days, rather than clearing it."
+      : " and check back over the next few runs — confidence builds as users report in and we re-assess.";
     return el("div",{"class":"banner banner-fresh"},[
       el("span",{"class":"bi","aria-hidden":"true"},"🆕"),
       el("div",{"class":"banner-body"},[
         el("div",{"class":"banner-title"},"Fresh release — this is an early read."),
-        el("div",null,"OpenClaw v"+ver+" was published "+when+". "+detail+" Bug reports keep arriving in the days after a release, so the verdict will firm up over the next few runs."),
+        el("div",null,"OpenClaw v"+ver+" was published "+when+". "+detail+" "+tail),
         el("div",{"class":"ba"},[
           el("strong",null,"Back up before you update,"),
-          document.createTextNode(" and check back over the next few runs — confidence builds as users report in and we re-assess.")
+          document.createTextNode(baTail)
         ])
       ])
     ]);
