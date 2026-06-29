@@ -14,12 +14,12 @@ def ago(h):
 # ── cadence_hours ────────────────────────────────────────────────────────────
 
 def test_cadence_tiers_decay_with_age():
-    assert scheduler.cadence_hours(0) == 6
-    assert scheduler.cadence_hours(47) == 6
-    assert scheduler.cadence_hours(48) == 8        # boundary rolls into the next tier
-    assert scheduler.cadence_hours(95) == 8
-    assert scheduler.cadence_hours(96) == 12
-    assert scheduler.cadence_hours(10_000) == 12   # floor tier (upper is None)
+    assert scheduler.cadence_hours(0) == 8
+    assert scheduler.cadence_hours(47) == 8
+    assert scheduler.cadence_hours(48) == 12       # boundary rolls into the next tier
+    assert scheduler.cadence_hours(95) == 12
+    assert scheduler.cadence_hours(96) == 24
+    assert scheduler.cadence_hours(10_000) == 24   # floor tier (upper is None)
 
 
 def test_first_tier_matches_fresh_release_window():
@@ -39,33 +39,34 @@ def test_no_prior_run_runs():
     assert run is True
 
 
-def test_fresh_window_paces_at_6h():
-    # release age 10h → 6h cadence
-    assert scheduler.should_run(NOW, ago(10), "x", "x", ago(5))[0] is False   # 5 < 6 − grace
-    assert scheduler.should_run(NOW, ago(10), "x", "x", ago(6))[0] is True
+def test_fresh_window_paces_at_8h():
+    # release age 10h → 8h cadence
+    assert scheduler.should_run(NOW, ago(10), "x", "x", ago(7))[0] is False   # 7 < 8 − grace
+    assert scheduler.should_run(NOW, ago(10), "x", "x", ago(8))[0] is True
 
 
-def test_mid_window_paces_at_8h():
-    # release age 60h → 8h cadence
-    assert scheduler.should_run(NOW, ago(60), "x", "x", ago(7))[0] is False
-    assert scheduler.should_run(NOW, ago(60), "x", "x", ago(8))[0] is True
+def test_mid_window_paces_at_12h():
+    # release age 60h → 12h cadence
+    assert scheduler.should_run(NOW, ago(60), "x", "x", ago(11))[0] is False
+    assert scheduler.should_run(NOW, ago(60), "x", "x", ago(12))[0] is True
 
 
-def test_old_window_paces_at_12h():
-    # release age 200h → 12h cadence
-    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(11))[0] is False
-    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(12))[0] is True
+def test_old_window_paces_at_24h():
+    # release age 200h → 24h cadence
+    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(23))[0] is False
+    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(24))[0] is True
 
 
 def test_grace_fires_a_touch_early():
     # exactly interval − grace counts as due, so an hourly tick never drifts a slot late.
-    assert scheduler.should_run(NOW, ago(10), "x", "x", ago(5.5))[0] is True
+    # release age 10h → 8h cadence → due at 8 − 0.5 = 7.5h since last run.
+    assert scheduler.should_run(NOW, ago(10), "x", "x", ago(7.5))[0] is True
 
 
 def test_unknown_publish_date_uses_floor_cadence():
-    # No publish date → treat as old → 12h floor (conservative, avoids over-running).
-    assert scheduler.should_run(NOW, None, "x", "x", ago(11))[0] is False
-    assert scheduler.should_run(NOW, None, "x", "x", ago(12))[0] is True
+    # No publish date → treat as old → 24h floor (conservative, avoids over-running).
+    assert scheduler.should_run(NOW, None, "x", "x", ago(23))[0] is False
+    assert scheduler.should_run(NOW, None, "x", "x", ago(24))[0] is True
 
 
 # ── cmd_tick wiring ──────────────────────────────────────────────────────────
