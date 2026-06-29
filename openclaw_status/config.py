@@ -161,6 +161,10 @@ FRESH_RELEASE_MAX_RUNS = 3
 #
 # Tiers: (release_age_upper_bound_hours, assess_every_hours), first match wins; the
 # final (None, …) tier is the floor. The 48h first boundary matches FRESH_RELEASE_DAYS.
-ASSESS_CADENCE_TIERS = [(48, 6), (96, 8), (None, 12)]
+# Intervals are tuned for cost: a NEW release is still caught within the hour by the
+# tick (cheap, no LLM), so these only govern how often an ALREADY-seen release is
+# re-assessed — its verdict is stable, so a fresh release gets ~3 reads/day and an aged
+# one ~1/day. (Was 6/8/12; relaxed to 8/12/24 to keep monthly LLM spend in the $5–10 band.)
+ASSESS_CADENCE_TIERS = [(48, 8), (96, 12), (None, 24)]
 # Fire a touch early so an hourly tick never drifts a full slot late (timer jitter).
 SCHEDULE_GRACE_H = 0.5
