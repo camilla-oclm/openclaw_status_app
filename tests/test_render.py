@@ -537,6 +537,23 @@ def test_seo_body_includes_fresh_note_only_when_fresh():
     assert "Fresh release." not in stale
 
 
+def test_fresh_note_direction_matches_verdict():
+    # The fresh "early read" caveat must cohere with the verdict's direction. On a skip,
+    # "the verdict firms up" wrongly implies it might flip to a green light — the evidence is
+    # early but already negative, so the case for waiting only firms as reports accumulate.
+    fr = {"fresh": True, "days_since_release": 0, "version_specific_issues": 25}
+    skip = render._seo_body({"version": "2026.6.10", "recommendation": "⏸️",
+                             "known_issues": [], "freshness": fr})
+    soft = render._seo_body({"version": "2026.6.10", "recommendation": "⚠️",
+                             "known_issues": [], "freshness": fr})
+    # Skip: the list grows / waiting firms — NOT "the verdict firms up" (which reads as a flip).
+    assert "the case for waiting only gets firmer" in skip
+    assert "grows rather than shrinks" in skip
+    # Non-skip: stays provisional (could degrade as reports arrive).
+    assert "treat this as provisional" in soft
+    assert "grows rather than shrinks" not in soft
+
+
 # ── shareable artifacts + changelog ──────────────────────────────────────────
 
 def test_extract_highlights_pulls_bullets():

@@ -989,10 +989,16 @@ def _llms_txt(data: dict) -> str:
     fr = data.get("freshness") or {}
     if fr.get("fresh"):
         spec = fr.get("version_specific_issues") or 0
+        # Direction-aware (see _seo_body): a skip's early evidence is already negative, so the
+        # case for waiting firms as reports accumulate; a non-skip stays provisional.
+        fresh_tail = ("the issue list usually grows rather than shrinks — the case for waiting "
+                      "only gets firmer over the next few re-assessments"
+                      if rec == "⏸️" else
+                      "more problems may still surface, so treat this as provisional and re-check "
+                      "over the next few re-assessments")
         L.append(f"- Note: Fresh release — early read. {spec} issue(s) so far name this exact "
                  "version; the rest are carried over from earlier releases. Bug reports keep "
-                 "arriving after a release, so the verdict firms up over the next few "
-                 "re-assessments as users report in. Back up before updating.")
+                 f"arriving after a release, so {fresh_tail}. Back up before updating.")
     rv = data.get("review") or {}
     if rv.get("validated"):
         if rv.get("refined") and rv.get("primary_recommendation") and rv["primary_recommendation"] != rec:
@@ -1232,10 +1238,20 @@ def _seo_body(data: dict) -> str:
                 if spec else "No issues have been filed against this exact release yet, so the "
                 "list below is carried over from earlier versions — a reporting lag as people "
                 "upgrade, not a gap in the analysis.")
+        # The "early read" caveat must agree with the verdict's DIRECTION. On a skip, the
+        # evidence is early but already negative — "the verdict firms up" would wrongly imply
+        # the skip is soft and might flip to a green light. Reports only accumulate, so the
+        # case for waiting firms; a non-skip early read genuinely could degrade, so it stays
+        # provisional. (Copy-only — does not touch verdict computation.)
+        fresh_tail = ("Bug reports keep arriving in the days after a release, so the issue "
+                      "list usually grows rather than shrinks — the case for waiting only "
+                      "gets firmer over the next few re-assessments."
+                      if data.get("recommendation") == "⏸️" else
+                      "Bug reports keep arriving in the days after a release, so more problems "
+                      "may still surface; treat this as provisional and re-check over the next "
+                      "few re-assessments.")
         out.append(f"<p><strong>Fresh release.</strong> OpenClaw v{e(ver)} was published "
-                   f"{when} — an early read. {body} Bug reports keep arriving in the days after "
-                   "a release, so the verdict firms up over the next few re-assessments. Back up "
-                   "before you update.</p>")
+                   f"{when} — an early read. {body} {fresh_tail} Back up before you update.</p>")
     if data.get("headline"):
         out.append(f"<p>{e(data['headline'].strip())}</p>")
     thesis = (data.get("thesis") or "").strip()
