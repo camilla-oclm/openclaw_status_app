@@ -349,3 +349,45 @@ def test_no_token_means_unavailable(monkeypatch):
     assert github.gh_rest("/rate_limit") is None
     assert github.search_issues("repo:x is:issue") is None
     assert github.scout_issues("2026-06-03", "2026.6.1") is None
+
+
+def _scout_node(num, title, labels, thumbs=0, created="2026-06-25T00:00:00Z", body=""):
+    return {"number": num, "title": title, "url": f"https://gh/{num}",
+            "bodyText": body, "createdAt": created, "updatedAt": created,
+            "labels": {"nodes": [{"name": l} for l in labels]},
+            "reactions": {"totalCount": thumbs}, "thumbsUp": {"totalCount": thumbs},
+            "comments": {"totalCount": 0}, "author": {"login": "u"}}
+
+
+def test_scout_fresh_window_ranks_by_recency_not_reactions(monkeypatch):
+    # On a fresh release every issue sits at ~0 reactions, so the post-release window must
+    # be fetched by RECENCY (else the limit cut drops severe regressions arbitrarily), and
+    # confirmed-breakage labels must get their own guaranteed searches.
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+    seen_queries = []
+
+    def fake_search(q, limit, timeout=30):
+        seen_queries.append(q)
+        if "label:regression" in q:
+            return [_scout_node(101, "Build breaks on startup", ["regression"], thumbs=0)]
+        if 'label:"bug:crash"' in q:
+            return []
+        if "label:P1" in q:
+            return [_scout_node(102, "P1 thing", ["P1"], thumbs=0)]
+        # plain post-release recency window + all-open reactions
+        return [_scout_node(200, "Some minor cosmetic glitch", ["bug"], thumbs=1)]
+
+    monkeypatch.setattr(github, "search_issues", fake_search)
+    out = github.scout_issues("2026-06-24", "2026.6.10")
+
+    # The post-release window is fetched newest-first, not by reactions.
+    fresh = [q for q in seen_queries if "created:>=2026-06-24" in q]
+    assert fresh and all("sort:created-desc" in q for q in fresh)
+    assert not any("created:>=2026-06-24" in q and "sort:reactions" in q for q in seen_queries)
+    # Confirmed-breakage labels get dedicated guaranteed searches.
+    assert any("label:regression" in q for q in fresh)
+    assert any('label:"bug:crash"' in q for q in fresh)
+    # The zero-reaction confirmed regression survives and outranks the 1-thumb cosmetic bug.
+    nums = [i["number"] for i in out]
+    assert 101 in nums
+    assert nums.index(101) < nums.index(200)

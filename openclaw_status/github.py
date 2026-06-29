@@ -432,12 +432,23 @@ def rank_key(issue: dict):
 def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> list | None:
     """Scout the repo's issues via the direct API, ranked by impact.
 
-    Runs three searches (all sorted by 👍 so the most-felt issues come first, and
-    all excluding `enhancement` so feature requests don't drown out defects):
-      1. opened since the release  — candidate regressions (NOT gated on label:bug,
-         so freshly-filed un-triaged breakage is still caught)
-      2. maintainer-flagged top priority (label:P1)
-      3. most-reacted open issues overall (ongoing majors of any age)
+    These searches decide only which issues are ELIGIBLE to rank — the severity-aware
+    rank_key (below) does the final ordering. All exclude `enhancement` so feature
+    requests don't drown out defects:
+      1. opened since the release, newest first — candidate regressions (NOT gated on
+         label:bug, so freshly-filed un-triaged breakage is still caught)
+      2. opened since the release + label:regression — confirmed regressions, guaranteed in
+      3. opened since the release + label:bug:crash — crashes/data-loss, guaranteed in
+      4. maintainer-flagged top priority (label:P1) — newest first in the post-release
+         window (most-reacted instead when no release date is known)
+      5. most-reacted open issues overall (ongoing majors of any age)
+
+    The post-release window (1–3) is sorted by RECENCY, not reactions: on a fresh release
+    every new issue still sits at ~0 👍, so a reaction sort there degenerates into an
+    arbitrary cut that drops severe regressions purely because nobody has thumbed them yet
+    (the `limit` cap then makes it worse). Recency is the real signal for "what just broke";
+    the narrow label searches (2–3) backstop it so confirmed breakage can't fall outside the
+    cut. For aged issues (4–5), reactions ARE meaningful — they've had time to accumulate.
 
     Feature requests / proposals are dropped (a wished-for feature is no reason to
     skip an update). Only `stale` issues are skipped — NOT `clawsweeper:no-new-fix-pr`,
@@ -449,8 +460,16 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> 
     no_feat = "-label:enhancement"
     queries = []
     if release_date:
-        queries.append(f"{repo} is:issue is:open created:>={release_date[:10]} {no_feat} sort:reactions-+1-desc")
-    queries.append(f"{repo} is:issue is:open label:P1 {no_feat} sort:reactions-+1-desc")
+        since = f"created:>={release_date[:10]}"
+        queries.append(f"{repo} is:issue is:open {since} {no_feat} sort:created-desc")
+        queries.append(f"{repo} is:issue is:open {since} label:regression {no_feat} sort:created-desc")
+        queries.append(f'{repo} is:issue is:open {since} label:"bug:crash" {no_feat} sort:created-desc')
+        # Newest maintainer-flagged P1s in the post-release window. Repo-wide P1 is huge and
+        # reaction-flat for new releases, so sort these by recency too; aged P1s that still
+        # matter resurface via the most-reacted search below.
+        queries.append(f"{repo} is:issue is:open {since} label:P1 {no_feat} sort:created-desc")
+    else:
+        queries.append(f"{repo} is:issue is:open label:P1 {no_feat} sort:reactions-+1-desc")
     queries.append(f"{repo} is:issue is:open {no_feat} sort:reactions-+1-desc")
 
     seen, issues, any_ok = set(), [], False
