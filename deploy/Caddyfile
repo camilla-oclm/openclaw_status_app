@@ -6,10 +6,29 @@
 # open) before Caddy can issue the certificate.
 __DOMAIN__ {
 	root * /opt/openclaw_status_app/web
+
+	# Security headers — a server-side backstop to the page's client-side (textContent)
+	# XSS posture, so an XSS regression can't execute, the verdict page can't be framed
+	# for clickjacking, and the version string / referrer don't leak. The page is a single
+	# self-contained file with inline <script>/<style>, so script/style-src must allow
+	# 'unsafe-inline'; everything else is locked down (no plugins, base-tag hijack, framing).
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
 	encode gzip
 	# Every public page is a real file (index.html for "/", archive/<version>.html,
 	# llms.txt, robots.txt, sitemap.xml, …), so serve them directly and let unknown
 	# paths return a real 404. No SPA fallback — a blanket fallback to /index.html
 	# turns every junk URL into a 200 soft-404 (duplicate content) that dilutes SEO.
-	file_server
+	file_server {
+		# "Served" is opt-in, not "everything under web/": never expose the rollback
+		# backups (web/index.html.prev — a copy of the prior page) or any dotfile. The
+		# "never published" guarantee was enforced only by .gitignore, not the serving layer.
+		hide *.prev .*
+	}
 }

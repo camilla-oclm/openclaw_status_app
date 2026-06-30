@@ -10,4 +10,10 @@ User=openclaw
 Group=openclaw
 WorkingDirectory=/opt/openclaw_status_app
 Environment=PYTHONUNBUFFERED=1
+# Sandboxed like the main unit — it only reads .env (the webhook URL) and POSTs an alert,
+# so it needs no write access at all.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
 ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py notify-failure openclaw-status.service
