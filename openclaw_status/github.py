@@ -270,6 +270,17 @@ _SERIOUS_IMPACT = (
 )
 _BUG_KEYWORDS = ("regression", "crash", "data-loss", "data loss", "dataloss")
 
+# Labels the severity model trusts as critical/high signals. Each gets its OWN guaranteed
+# inclusion search in the scout so a severe-but-unpopular issue can't fall outside the broad
+# recency cut (audit H2: P0 — the most-severe priority — and the serious-impact labels were
+# missing as guaranteed searches while the LESS-severe P1 was guaranteed in).
+_GUARANTEED_LABELS = ("regression", "bug:crash", "P0", "P1") + _SERIOUS_IMPACT
+
+
+def _label_q(name: str) -> str:
+    """A GitHub search label qualifier, quoting names that contain a colon (bug:crash, impact:*)."""
+    return f'label:"{name}"' if ":" in name else f"label:{name}"
+
 # Feature/proposal markers — these are NOT issues impacting the version, so the
 # scout drops them (a wished-for feature is no reason to skip an update).
 _FEATURE_LABELS = ("enhancement", "feature", "feature request", "proposal")
@@ -436,20 +447,21 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25,
     These searches decide only which issues are ELIGIBLE to rank — the severity-aware
     rank_key (below) does the final ordering. All exclude `enhancement` so feature
     requests don't drown out defects:
-      1. opened since the release, newest first — candidate regressions (NOT gated on
-         label:bug, so freshly-filed un-triaged breakage is still caught)
-      2. opened since the release + label:regression — confirmed regressions, guaranteed in
-      3. opened since the release + label:bug:crash — crashes/data-loss, guaranteed in
-      4. maintainer-flagged top priority (label:P1) — newest first in the post-release
-         window (most-reacted instead when no release date is known)
-      5. most-reacted open issues overall (ongoing majors of any age)
+      1. opened since the release, newest first — the broad sweep; candidate regressions
+         (NOT gated on label:bug, so freshly-filed un-triaged breakage is still caught)
+      2. one guaranteed-inclusion search per severity-critical label (`_GUARANTEED_LABELS`:
+         regression, bug:crash, P0, P1, and the serious `impact:*` labels), newest first —
+         so a severe issue can't be dropped just for being unpopular or past the broad cut
+      3. most-reacted open issues overall (ongoing majors of any age)
 
-    The post-release window (1–3) is sorted by RECENCY, not reactions: on a fresh release
+    The post-release window (1–2) is sorted by RECENCY, not reactions: on a fresh release
     every new issue still sits at ~0 👍, so a reaction sort there degenerates into an
     arbitrary cut that drops severe regressions purely because nobody has thumbed them yet
     (the `limit` cap then makes it worse). Recency is the real signal for "what just broke";
-    the narrow label searches (2–3) backstop it so confirmed breakage can't fall outside the
-    cut. For aged issues (4–5), reactions ARE meaningful — they've had time to accumulate.
+    the per-label searches (2) backstop it so a severe-but-unpopular issue can't fall outside
+    the cut. For the aged most-reacted search (3), reactions ARE meaningful — issues have had
+    time to accumulate them. When no release date is known, the priority labels (P0 then P1)
+    are searched by reactions instead.
 
     Feature requests / proposals are dropped (a wished-for feature is no reason to
     skip an update). Only `stale` issues are skipped — NOT `clawsweeper:no-new-fix-pr`,
@@ -469,15 +481,20 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25,
     queries = []
     if release_date:
         since = f"created:>={release_date[:10]}"
+        # Query #0: the broad, no-label recency sweep — the only search that surfaces
+        # freshly-filed, un-triaged, 0-reaction breakage. (Tracked apart for coverage below.)
         queries.append(f"{repo} is:issue is:open {since} {no_feat} sort:created-desc")
-        queries.append(f"{repo} is:issue is:open {since} label:regression {no_feat} sort:created-desc")
-        queries.append(f'{repo} is:issue is:open {since} label:"bug:crash" {no_feat} sort:created-desc')
-        # Newest maintainer-flagged P1s in the post-release window. Repo-wide P1 is huge and
-        # reaction-flat for new releases, so sort these by recency too; aged P1s that still
-        # matter resurface via the most-reacted search below.
-        queries.append(f"{repo} is:issue is:open {since} label:P1 {no_feat} sort:created-desc")
+        # Guaranteed-inclusion: one recency search per severity-critical label, so a severe
+        # issue can't be dropped just because it's unpopular or sits past the broad cut. Repo
+        # priority labels are reaction-flat on a fresh release, so sort these by recency too;
+        # aged ones that still matter resurface via the most-reacted search below.
+        for lbl in _GUARANTEED_LABELS:
+            queries.append(f"{repo} is:issue is:open {since} {_label_q(lbl)} {no_feat} sort:created-desc")
     else:
-        queries.append(f"{repo} is:issue is:open label:P1 {no_feat} sort:reactions-+1-desc")
+        # No release date known: rank the top priority labels by reactions (aged issues have
+        # had time to accumulate them). P0 first so the most-severe is guaranteed in.
+        queries.append(f"{repo} is:issue is:open {_label_q('P0')} {no_feat} sort:reactions-+1-desc")
+        queries.append(f"{repo} is:issue is:open {_label_q('P1')} {no_feat} sort:reactions-+1-desc")
     queries.append(f"{repo} is:issue is:open {no_feat} sort:reactions-+1-desc")
 
     seen, issues, any_ok = set(), [], False
