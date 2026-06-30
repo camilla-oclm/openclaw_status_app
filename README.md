@@ -97,13 +97,20 @@ release fail) and a pipeline timeout.
 
 ### 2. Issue scouting — `openclaw_status/github.py` (the core)
 
-This is what makes the verdict trustworthy. For the assessed version it runs three GitHub
-searches, **all sorted by 👍 reactions** and excluding feature requests:
+This is what makes the verdict trustworthy. For the assessed version it runs several GitHub
+searches, all excluding feature requests:
 
-1. issues opened **since the release** (candidate regressions — not gated on any `bug`
-   label, so freshly-filed, un-triaged breakage is still caught),
-2. issues the maintainers flagged **top priority** (`label:P1`),
+1. a **broad sweep** of issues opened **since the release**, newest first — candidate
+   regressions, not gated on any `bug` label, so freshly-filed, un-triaged breakage is caught;
+2. a **guaranteed-inclusion** search per severity-critical label — `regression`, `bug:crash`,
+   `P0`, `P1`, and the serious `impact:*` labels — also newest first, so a severe-but-unpopular
+   issue can't fall outside the broad cut;
 3. the **most-reacted open issues** overall (ongoing majors of any age).
+
+The post-release window (1–2) is sorted by **recency, not reactions**: on a fresh release every
+new issue still sits at ~0 👍, so a reaction sort there would arbitrarily drop severe regressions
+nobody has thumbed yet. The aged most-reacted search (3) *does* sort by reactions — those issues
+have had time to accumulate them.
 
 Each issue is then scored from the repo's real labels:
 
@@ -233,7 +240,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 238 tests, hermetic (no network)
+python3 -m pytest        # 261 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output

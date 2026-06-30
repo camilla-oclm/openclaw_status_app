@@ -425,3 +425,51 @@ def test_scout_coverage_all_ok_when_every_query_succeeds(monkeypatch):
     github.scout_issues("2026-06-24", "2026.6.10", coverage=cov)
     assert cov["broad_ok"] is True
     assert cov["queries_ok"] == cov["queries_total"]
+
+
+def test_scout_guarantees_p0_and_impact_searches(monkeypatch):
+    # H2: P0 (the most-severe priority) and the serious-impact labels each get a dedicated
+    # recency search in the post-release window — not just regression/crash/P1.
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+    seen = []
+    monkeypatch.setattr(github, "search_issues",
+                        lambda q, limit, timeout=30: seen.append(q) or [])
+    github.scout_issues("2026-06-24", "2026.6.10")
+    fresh = [q for q in seen if "created:>=2026-06-24" in q]
+    assert any("label:P0" in q and "sort:created-desc" in q for q in fresh)
+    for lbl in ("impact:security", "impact:data", "impact:message-loss",
+                "impact:session-state", "impact:auth-provider"):
+        assert any(f'label:"{lbl}"' in q for q in fresh), f"no guaranteed search for {lbl}"
+
+
+def test_scout_no_release_date_includes_p0(monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+    seen = []
+    monkeypatch.setattr(github, "search_issues",
+                        lambda q, limit, timeout=30: seen.append(q) or [])
+    github.scout_issues("", "2026.6.10")          # no release date
+    assert any("label:P0" in q for q in seen)
+
+
+def test_scout_surfaces_unpopular_p0_outside_broad_cut(monkeypatch):
+    """H2 failure scenario: a P0 data-loss issue with 0 reactions, crowded out of the broad
+    recency results and lacking a regression/crash label, must still enter the scout via the
+    guaranteed P0 search — and be scored 'critical'."""
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+
+    def is_unlabeled(q):                            # broad sweep / all-open: no positive label
+        return "label:" not in q.replace("-label:enhancement", "")
+
+    def fake_search(q, limit, timeout=30):
+        if "label:P0" in q:                         # the only search that returns the critical
+            return [_scout_node(555, "Data loss on sync", ["P0", "impact:data"], thumbs=0)]
+        if is_unlabeled(q):                         # broad/all-open: 25 newer, noisier issues
+            return [_scout_node(n, f"noise {n}", ["bug"], thumbs=0) for n in range(600, 625)]
+        return []
+
+    monkeypatch.setattr(github, "search_issues", fake_search)
+    out = github.scout_issues("2026-06-24", "2026.6.10")
+    nums = [i["number"] for i in out]
+    assert 555 in nums                              # the unpopular P0 is captured…
+    crit = next(i for i in out if i["number"] == 555)
+    assert crit["severity"] == "critical"           # …and correctly scored as critical
