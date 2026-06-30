@@ -220,6 +220,7 @@ def _can_deploy(assessment_raw: dict) -> tuple[bool, list[str]]:
     """Check if the assessment is safe to deploy.
 
     Refuses to overwrite if:
+    - the assessed version is empty or 'unknown' (degraded/aborted collection)
     - confidence is 'low'
     - there are validation errors in the assessment
 
@@ -228,6 +229,10 @@ def _can_deploy(assessment_raw: dict) -> tuple[bool, list[str]]:
     """
     reasons = []
     a = assessment_raw.get("assessment", {})
+
+    version = assessment_raw.get("version", "")
+    if not version or version == "unknown":
+        reasons.append("Assessment version is empty/'unknown' — refusing to publish")
 
     if a.get("confidence") == "low":
         reasons.append("Assessment confidence is 'low' — refusing to overwrite")
@@ -665,9 +670,14 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         # The adversarial dual-model review outcome — the central reason to trust an
         # automated verdict. Surfaced so the user can see the second model concurred, or
         # that the verdict was REVISED after the validator pushed back, rather than taking
-        # it on faith. `validated` is False only in single-call mode (no validator ran).
+        # it on faith. `validated` is False when no validator ran: single-call mode OR a
+        # validator call that FAILED (`validator_unreviewed`) — in the latter case the page
+        # shows an explicit "single-model — validator unavailable" state instead of a false
+        # "2nd model agreed" chip.
         "review": {
-            "validated": bool(assessment_raw.get("validator_model")),
+            "validated": bool(assessment_raw.get("validator_model"))
+                         and not assessment_raw.get("validator_unreviewed"),
+            "unreviewed": bool(assessment_raw.get("validator_unreviewed")),
             "agreed": bool(assessment_raw.get("validator_agrees", True)),
             "refined": bool(assessment_raw.get("refined", False)),
             "primary_recommendation": _norm_rec(
@@ -1333,6 +1343,21 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
         raw = load_json(config.RAW_DATA_FILE)
 
     out = output_path or str(config.OUTPUT_HTML)
+
+    # ── Fail closed on degraded / stale collected data ──
+    # render runs unconditionally after collect+assess (cmd_full), so guard here too: if the
+    # collection aborted (no usable version), or the on-disk assessment is for a DIFFERENT
+    # release than the one just collected (e.g. a standalone render-assessment after a newer
+    # collect with no successful assess), keep the last good page rather than publishing a
+    # stale or empty verdict labelled against the wrong release.
+    if raw.get("pipeline_aborted") or not raw.get("target_version"):
+        print("  ⛔ DEPLOY BLOCKED: collected data is aborted/degraded — keeping previous page")
+        return ""
+    a_ver, r_ver = assessment_raw.get("version") or "", raw.get("target_version") or ""
+    if a_ver and r_ver and a_ver != r_ver:
+        print(f"  ⛔ DEPLOY BLOCKED: assessment is for v{a_ver} but collected data is v{r_ver} "
+              f"(stale) — keeping previous page")
+        return ""
 
     # ── Deploy Guard: check if assessment is safe to deploy ──
     can_deploy, deploy_reasons = _can_deploy(assessment_raw)

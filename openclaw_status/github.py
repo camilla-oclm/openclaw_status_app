@@ -429,7 +429,8 @@ def rank_key(issue: dict):
     return (-score, -impact)
 
 
-def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> list | None:
+def scout_issues(release_date: str = "", version: str = "", limit: int = 25,
+                 coverage: dict | None = None) -> list | None:
     """Scout the repo's issues via the direct API, ranked by impact.
 
     These searches decide only which issues are ELIGIBLE to rank — the severity-aware
@@ -455,6 +456,13 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> 
     which marks issues that have no fix yet (exactly the ones we care about).
 
     Returns ranked, de-duplicated issue dicts, or None if the API is unavailable.
+
+    `coverage` (optional, mutated in place) reports search completeness so the caller can
+    fail closed on a partial scout: `queries_total`, `queries_ok`, and `broad_ok` (whether
+    the broad post-release recency sweep — query #1, the only one that catches freshly-filed,
+    un-triaged, 0-reaction breakage — succeeded; None when no release date is known). A
+    GitHub search secondary-rate-limit returns an `errors` payload with HTTP 200, so a single
+    dropped query would otherwise look identical to a genuinely clean release.
     """
     repo = f"repo:{config.REPO_OWNER}/{config.REPO_NAME}"
     no_feat = "-label:enhancement"
@@ -473,11 +481,17 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> 
     queries.append(f"{repo} is:issue is:open {no_feat} sort:reactions-+1-desc")
 
     seen, issues, any_ok = set(), [], False
-    for q in queries:
+    ok_count, broad_ok = 0, None
+    for idx, q in enumerate(queries):
         nodes = search_issues(q, limit)
+        # Query #1 in the post-release window is the broad, no-label recency sweep — the only
+        # search that surfaces un-triaged, un-thumbed, freshly-filed breakage. Track it apart.
+        if release_date and idx == 0:
+            broad_ok = nodes is not None
         if nodes is None:
             continue
         any_ok = True
+        ok_count += 1
         for node in nodes:
             num = node.get("number")
             if num is None or num in seen:
@@ -489,6 +503,11 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25) -> 
                 continue
             seen.add(num)
             issues.append(normalize_node(node, release_date, version))
+
+    if coverage is not None:
+        coverage["queries_total"] = len(queries)
+        coverage["queries_ok"] = ok_count
+        coverage["broad_ok"] = broad_ok
 
     if not any_ok:
         return None  # API totally unavailable

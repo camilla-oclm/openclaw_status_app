@@ -59,6 +59,31 @@ def test_fetch_github_issues_no_status_does_not_crash(monkeypatch):
     assert collector.fetch_github_issues() == []
 
 
+def test_fetch_github_issues_marks_degraded_on_partial_scout(monkeypatch):
+    """M6 regression: when the broad post-release recency sweep failed but other searches
+    returned issues, the source is recorded 'degraded' (not 'ok') so the assessment's
+    thin-evidence floor caps confidence — an incomplete scout can't read as genuinely clean."""
+    def fake_scout(release_date, version, coverage=None, **k):
+        if coverage is not None:
+            coverage.update(queries_total=5, queries_ok=4, broad_ok=False)
+        return [{"number": 1, "affects_version": True}]
+    monkeypatch.setattr(collector.github, "scout_issues", fake_scout)
+    status = SourceStatus()
+    collector.fetch_github_issues(status=status)
+    assert status.results["github_issues"]["status"] == "degraded"
+
+
+def test_fetch_github_issues_ok_on_full_scout(monkeypatch):
+    def fake_scout(release_date, version, coverage=None, **k):
+        if coverage is not None:
+            coverage.update(queries_total=5, queries_ok=5, broad_ok=True)
+        return [{"number": 1, "affects_version": True}]
+    monkeypatch.setattr(collector.github, "scout_issues", fake_scout)
+    status = SourceStatus()
+    collector.fetch_github_issues(status=status)
+    assert status.results["github_issues"]["status"] == "ok"
+
+
 def test_fetch_github_issues_marks_fixed_from_release_body(monkeypatch):
     issues = [{"number": 42, "affects_version": True}, {"number": 99, "affects_version": False}]
     monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: issues)

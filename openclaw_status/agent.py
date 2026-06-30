@@ -761,6 +761,44 @@ def _cap_fresh_confidence(assessment: dict, version: str, assessed_at: str,
     return False
 
 
+def _cap_thin_evidence_confidence(assessment: dict, *, validator_unreviewed: bool,
+                                  scout_degraded: bool) -> str | None:
+    """In-place deterministic floor: a verdict resting on thin evidence — the independent
+    validator was unavailable (single-model), or the issue scout came back incomplete —
+    must NOT publish "high" confidence. Cap to "medium" so the gauge matches the page's
+    "single-model" / degraded state. "medium" never trips the low-confidence deploy guard,
+    so the page still publishes (kept fresh) but honestly. Mirrors _cap_fresh_confidence.
+    Returns a short reason if it capped, else None."""
+    if assessment.get("confidence") != "high":
+        return None
+    if validator_unreviewed:
+        assessment["confidence"] = "medium"
+        return "validator unavailable"
+    if scout_degraded:
+        assessment["confidence"] = "medium"
+        return "issue scout was incomplete"
+    return None
+
+
+def _degraded_input_reason(raw: dict, version: str) -> str | None:
+    """Why the collected data is too degraded to assess (fail closed), or None if usable.
+
+    A timed-out or aborted collect (collector._save_partial / the completeness gate) writes
+    raw-data with pipeline_aborted=True, an empty target_version and empty sources. Driving
+    the LLM over that empty context can produce a confident "no issues" verdict that
+    overwrites the live page for a blank version — the worst failure for a trust product.
+    This mirrors the collector's own abort conditions so neither path can silently publish."""
+    if raw.get("pipeline_aborted"):
+        return f"collection aborted ({raw.get('abort_reason', 'unknown')})"
+    if not version or version == "unknown":
+        return "no resolved target version"
+    if not (raw.get("sources") or {}):
+        return "no collected sources"
+    if not ((raw.get("sources") or {}).get("latest_release") or {}).get("tag"):
+        return "no usable latest_release"
+    return None
+
+
 def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict:
     """Run the LLM assessment pipeline.
 
@@ -774,6 +812,17 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         raw = load_json(config.RAW_DATA_FILE)
 
     version = raw.get("target_version", "unknown")
+
+    # ── Fail closed on degraded collection ──
+    # Refuse before any LLM spend (and before build_context, which can't be trusted on
+    # empty sources) if the collect aborted or left us without a usable version/release —
+    # keep the last good page rather than publishing a verdict over empty data.
+    degraded = _degraded_input_reason(raw, version)
+    if degraded:
+        print(f"   🛑 FAIL-CLOSED: {degraded} — refusing to assess, keeping last good page")
+        notify(f"🛑 OpenClaw Status: {degraded} — skipped assessment, kept last good page")
+        return {"success": False, "error": f"degraded input: {degraded}"}
+
     prev_verdict = _previous_verdict(version)
     context = build_context(raw, prev_verdict)
 
@@ -837,6 +886,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         refined = False
         v_agrees = True
         validator_critique = ""
+        validator_unreviewed = False
         print(f"\n{'─'*60}")
         print("Single-call mode — skipping validator")
         print(f"{'─'*60}")
@@ -855,6 +905,9 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         needs_refine = _validator_disagrees(validator_review)
         v_agrees = not needs_refine
         validator_critique = validator_review.get("critique", "")
+        # An unavailable validator (failed call) is recorded so the page can show a
+        # "single-model" state and the thin-evidence floor can cap confidence.
+        validator_unreviewed = bool(validator_review.get("unreviewed", False))
 
         # ── Step 3: Refinement (conditional) ──
         final_assessment = primary_assessment
@@ -929,6 +982,16 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     if _cap_fresh_confidence(final_assessment, version, assessed_at, latest_release):
         print("   🌿 Fresh release — capped confidence high→medium (early read)")
 
+    # ── Thin-evidence confidence floor ──
+    # A single-model verdict (validator unavailable) or an incomplete issue scout must not
+    # publish "high". Deterministic, applied here so history/timeline/latest.json/llms agree.
+    scout_degraded = (((raw.get("source_status") or {}).get("github_issues") or {})
+                      .get("status") == "degraded")
+    thin_reason = _cap_thin_evidence_confidence(
+        final_assessment, validator_unreviewed=validator_unreviewed, scout_degraded=scout_degraded)
+    if thin_reason:
+        print(f"   ⚖️  Thin evidence ({thin_reason}) — capped confidence high→medium")
+
     # ── Final output ──
     rec = final_assessment.get("recommendation", "?")
     conf = final_assessment.get("confidence", "?")
@@ -957,21 +1020,22 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         "validator_critique": validator_critique,
         "refined": refined,
         "primary_recommendation": primary_assessment.get("recommendation"),
+        # Validator availability — surfaced so the page can show a "single-model" state
+        # instead of a false "2nd model agreed" chip when the validator call failed.
+        "validator_unreviewed": validator_unreviewed,
     }
 
     # ── Diff Notification ──
     # Compare new assessment vs previous and compute change summary (kept for
     # future change-alerting; the page itself is re-rendered every run so the
-    # freshness timestamp stays current).
+    # freshness timestamp stays current). Reads the PREVIOUS assessment.json — must run
+    # before the save below overwrites it.
     diff = _compute_assessment_diff(final_assessment)
     if diff:
         output["diff"] = diff
         print(f"  📊 Diff: recommendation={diff.get('recommendation_changed', False)}, "
               f"new_issues={len(diff.get('new_issues', []))}, "
               f"resolved={len(diff.get('resolved_issues', []))}")
-
-    save_json(config.ASSESSMENT_FILE, output)
-    print(f"💾 Saved to: {config.ASSESSMENT_FILE}")
 
     # Only fold this run into the persistent record (Past verdicts + Trends) if it's
     # actually publishable. Otherwise the render-time deploy guard blocks the PAGE while
@@ -994,13 +1058,18 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         print(f"   🚨 COST ALERT: {alert}")
         notify(f"🚨 OpenClaw Status cost alert: {alert}")
 
-    # Track validator reliability
-    validator_unreviewed = validator_review.get("unreviewed", False) if not single_call else False
+    # Track validator reliability (validator_unreviewed was computed at the validator step).
     if validator_unreviewed:
         print("   ⚠️ Assessment published WITHOUT validator review (validator was unavailable)")
 
-    output["validator_unreviewed"] = validator_unreviewed
     output["cost_alerts"] = alerts
+
+    # Persist the complete record AFTER every post-run field (validator_unreviewed,
+    # cost_alerts) is set, so assessment.json on disk is exactly what render / history /
+    # latest.json read. (The diff above already read the previous file before this write;
+    # nothing between here and there reads assessment.json.)
+    save_json(config.ASSESSMENT_FILE, output)
+    print(f"💾 Saved to: {config.ASSESSMENT_FILE}")
 
     # Run-completion confirmation: verdict + this run's cost + running totals.
     # (No-op unless ALERT_WEBHOOK_URL is set; daily/monthly already include this run.)

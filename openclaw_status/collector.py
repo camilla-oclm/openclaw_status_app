@@ -154,7 +154,8 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
     t0 = _time.time()
     print("🐛 Scouting GitHub issues...")
 
-    issues = github.scout_issues(release_date, version)
+    coverage = {}
+    issues = github.scout_issues(release_date, version, coverage=coverage)
     if issues is None:
         print("  ❌ GitHub API unavailable (no token?) — no issues collected", file=sys.stderr)
         issues = []
@@ -178,9 +179,21 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
     elapsed = _time.time() - t0
     n_relevant = sum(1 for i in issues if i.get("affects_version"))
     print(f"  Found {len(issues)} issues ({n_relevant} reference this version)")
+    # A partial scout (the broad recency sweep dropped, or some searches failed) is recorded
+    # as "degraded", NOT "ok", so the assessment's thin-evidence floor caps confidence and we
+    # never read an incomplete issue set as a genuinely clean release. See github.scout_issues.
+    broad_ok = coverage.get("broad_ok")
+    some_failed = coverage.get("queries_ok", 0) < coverage.get("queries_total", 0)
+    degraded = broad_ok is False or (broad_ok is None and some_failed)
     if status is not None:
-        status.record("github_issues", "ok" if issues else "empty",
-                      f"{len(issues)} issues ({n_relevant} version-relevant)", elapsed)
+        if issues and degraded:
+            status.record("github_issues", "degraded",
+                          f"{len(issues)} issues — PARTIAL scout "
+                          f"({coverage.get('queries_ok')}/{coverage.get('queries_total')} searches ok)",
+                          elapsed)
+        else:
+            status.record("github_issues", "ok" if issues else "empty",
+                          f"{len(issues)} issues ({n_relevant} version-relevant)", elapsed)
     return issues
 
 
