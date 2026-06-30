@@ -391,3 +391,37 @@ def test_scout_fresh_window_ranks_by_recency_not_reactions(monkeypatch):
     nums = [i["number"] for i in out]
     assert 101 in nums
     assert nums.index(101) < nums.index(200)
+
+
+def test_scout_reports_coverage_and_flags_broad_failure(monkeypatch):
+    # M6: a dropped broad post-release sweep (the only un-triaged-breakage catcher) must be
+    # reported via `coverage` so the caller can fail closed, even though other searches
+    # succeed and the function still returns a (partial) list.
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+
+    def is_broad(q):
+        return ("created:>=2026-06-24" in q and "sort:created-desc" in q
+                and "label:regression" not in q and 'label:"bug:crash"' not in q
+                and "label:P1" not in q)
+
+    def fake_search(q, limit, timeout=30):
+        if is_broad(q):
+            return None                      # the broad recency sweep transiently fails
+        return [_scout_node(1, "x", ["bug"])]
+
+    monkeypatch.setattr(github, "search_issues", fake_search)
+    cov = {}
+    out = github.scout_issues("2026-06-24", "2026.6.10", coverage=cov)
+    assert out is not None                   # other queries returned issues — looks "clean"…
+    assert cov["broad_ok"] is False          # …but the critical broad sweep was dropped
+    assert cov["queries_ok"] < cov["queries_total"]
+
+
+def test_scout_coverage_all_ok_when_every_query_succeeds(monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(github, "search_issues",
+                        lambda q, limit, timeout=30: [_scout_node(1, "x", ["bug"])])
+    cov = {}
+    github.scout_issues("2026-06-24", "2026.6.10", coverage=cov)
+    assert cov["broad_ok"] is True
+    assert cov["queries_ok"] == cov["queries_total"]

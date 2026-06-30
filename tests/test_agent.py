@@ -251,6 +251,76 @@ def test_build_context_no_truncation_note_when_under_cap(monkeypatch):
         assert f"### #{n} " in ctx
 
 
+# ── _cap_thin_evidence_confidence ────────────────────────────────────────────
+
+def test_cap_thin_evidence_when_validator_unreviewed():
+    a = {"confidence": "high"}
+    reason = agent._cap_thin_evidence_confidence(a, validator_unreviewed=True, scout_degraded=False)
+    assert reason == "validator unavailable"
+    assert a["confidence"] == "medium"          # single-model → never "high"
+
+
+def test_cap_thin_evidence_when_scout_degraded():
+    a = {"confidence": "high"}
+    reason = agent._cap_thin_evidence_confidence(a, validator_unreviewed=False, scout_degraded=True)
+    assert reason == "issue scout was incomplete"
+    assert a["confidence"] == "medium"
+
+
+def test_cap_thin_evidence_no_cap_when_full_evidence():
+    a = {"confidence": "high"}
+    assert agent._cap_thin_evidence_confidence(
+        a, validator_unreviewed=False, scout_degraded=False) is None
+    assert a["confidence"] == "high"            # a fully-reviewed, fully-scouted high stands
+
+
+def test_cap_thin_evidence_leaves_medium_and_low_alone():
+    for level in ("medium", "low"):
+        a = {"confidence": level}
+        assert agent._cap_thin_evidence_confidence(
+            a, validator_unreviewed=True, scout_degraded=True) is None
+        assert a["confidence"] == level
+
+
+# ── _degraded_input_reason / fail closed on degraded collection ──────────────
+
+def _good_raw():
+    return {"target_version": "1.0",
+            "sources": {"latest_release": {"tag": "v1.0"}, "github_issues": []}}
+
+
+def test_degraded_input_none_when_usable():
+    assert agent._degraded_input_reason(_good_raw(), "1.0") is None
+
+
+@pytest.mark.parametrize("mutate,version", [
+    (lambda r: r.update(pipeline_aborted=True, abort_reason="timeout after npm"), "1.0"),
+    (lambda r: r.update(sources={}), "1.0"),
+    (lambda r: r.update(sources={"latest_release": {}}), "1.0"),  # release without a tag
+    (lambda r: None, ""),          # empty version
+    (lambda r: None, "unknown"),   # unresolved version
+])
+def test_degraded_input_flags_bad_collections(mutate, version):
+    raw = _good_raw()
+    mutate(raw)
+    assert agent._degraded_input_reason(raw, version) is not None
+
+
+def test_pipeline_fails_closed_on_aborted_collection_without_spending(tmp_path, monkeypatch):
+    """H3 regression: a timed-out/aborted collect (pipeline_aborted, empty sources) must NOT
+    drive the LLM — the pipeline returns success:False before any openrouter_call, so the
+    last good page is kept rather than overwritten with a verdict over empty data."""
+    monkeypatch.setattr(config, "ASSESSMENT_FILE", tmp_path / "assessment.json")
+    monkeypatch.setattr(agent, "openrouter_call",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no LLM on degraded input")))
+    raw = {"target_version": "", "sources": {}, "pipeline_aborted": True,
+           "abort_reason": "timeout after npm"}
+    result = agent.run_assessment_pipeline(raw=raw)
+    assert result["success"] is False
+    assert "degraded input" in result["error"]
+    assert not config.ASSESSMENT_FILE.exists()   # nothing published / overwritten
+
+
 def test_build_context_includes_ongoing_majors_as_context():
     raw = _raw_with_n_issues(2)
     raw["sources"]["ongoing_majors"] = [
@@ -424,7 +494,8 @@ def test_budget_gate_aborts_without_spending(tmp_path, monkeypatch):
     monkeypatch.setattr(agent, "openrouter_call", _boom)
 
     raw = {"target_version": "1.0", "sources": {
-        "latest_release": {}, "latest_prerelease": None, "github_issues": [],
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [],
         "clawsweeper": {}, "release_history": [],
     }}
     result = agent.run_assessment_pipeline(raw=raw)
@@ -448,7 +519,8 @@ def test_budget_gate_emits_no_real_webhook_post(tmp_path, monkeypatch):
                         lambda *a, **k: posted.append(a))
 
     raw = {"target_version": "1.0", "sources": {
-        "latest_release": {}, "latest_prerelease": None, "github_issues": [],
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [],
         "clawsweeper": {}, "release_history": [],
     }}
     result = agent.run_assessment_pipeline(raw=raw)

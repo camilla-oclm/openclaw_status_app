@@ -9,23 +9,63 @@ from openclaw_status import config, render
 # ── _can_deploy ─────────────────────────────────────────────────────────────
 
 def test_can_deploy_ok():
-    ok, reasons = render._can_deploy({"assessment": {"confidence": "high"}, "validation_errors": []})
+    ok, reasons = render._can_deploy(
+        {"version": "2026.6.1", "assessment": {"confidence": "high"}, "validation_errors": []})
     assert ok is True
     assert reasons == []
 
 
 def test_can_deploy_blocks_low_confidence():
-    ok, reasons = render._can_deploy({"assessment": {"confidence": "low"}, "validation_errors": []})
+    ok, reasons = render._can_deploy(
+        {"version": "2026.6.1", "assessment": {"confidence": "low"}, "validation_errors": []})
     assert ok is False
     assert any("low" in r for r in reasons)
 
 
 def test_can_deploy_blocks_validation_errors():
     ok, reasons = render._can_deploy(
-        {"assessment": {"confidence": "high"}, "validation_errors": ["bad field"]}
+        {"version": "2026.6.1", "assessment": {"confidence": "high"},
+         "validation_errors": ["bad field"]}
     )
     assert ok is False
     assert any("validation error" in r for r in reasons)
+
+
+@pytest.mark.parametrize("version", ["", "unknown"])
+def test_can_deploy_blocks_empty_or_unknown_version(version):
+    # Fail closed: a degraded/aborted collection yields an empty or 'unknown' assessed
+    # version — publishing it would label a verdict against a blank release.
+    ok, reasons = render._can_deploy(
+        {"version": version, "assessment": {"confidence": "high"}, "validation_errors": []})
+    assert ok is False
+    assert any("version" in r for r in reasons)
+
+
+# ── render_assessment_page fail-closed (keep last good page) ─────────────────
+
+def test_render_keeps_previous_page_on_aborted_collection(tmp_path):
+    """H3/M2: render runs unconditionally after collect+assess, so an aborted collection
+    (pipeline_aborted, empty target_version) must keep the previously-published page rather
+    than rendering a stale verdict against blank data."""
+    out = tmp_path / "index.html"
+    out.write_text("GOOD PAGE")
+    assessment_raw = {"version": "2.0", "assessment": {"confidence": "high"}, "validation_errors": []}
+    raw = {"pipeline_aborted": True, "target_version": "", "sources": {}}
+    result = render.render_assessment_page(assessment_raw, raw, output_path=str(out))
+    assert result == ""
+    assert out.read_text() == "GOOD PAGE"          # untouched
+
+
+def test_render_keeps_previous_page_on_stale_assessment(tmp_path):
+    """M2: a standalone render after a NEWER collect (assessment still for the old release)
+    must not publish the stale verdict labelled against the freshly-collected version."""
+    out = tmp_path / "index.html"
+    out.write_text("GOOD PAGE")
+    assessment_raw = {"version": "1.9", "assessment": {"confidence": "high"}, "validation_errors": []}
+    raw = {"target_version": "2.0", "sources": {"latest_release": {"tag": "v2.0"}}}
+    result = render.render_assessment_page(assessment_raw, raw, output_path=str(out))
+    assert result == ""
+    assert out.read_text() == "GOOD PAGE"
 
 
 # ── _deep_sanitize_markdown ─────────────────────────────────────────────────
@@ -417,6 +457,23 @@ def test_build_review_single_call_not_validated():
                       "version": "2.0", "validator_model": None}
     rv = render._build_assessment_data(assessment_raw, {"sources": {}})["review"]
     assert rv["validated"] is False
+
+
+def test_build_review_unreviewed_validator_not_marked_validated():
+    """H1 regression: when the validator call FAILED (validator_unreviewed), the page must
+    NOT claim a passed dual-model review ("2nd model agreed") — no second model actually ran.
+    `validated` must be False even though a validator_model is configured, and `unreviewed`
+    True so the template can show the explicit 'single-model' state."""
+    assessment_raw = {
+        "assessment": {"recommendation": "⏸️", "known_issues": []},
+        "version": "2.0",
+        "validator_model": "qwen",          # configured…
+        "validator_agrees": True,           # …and "agrees" defaults True on a failed call
+        "validator_unreviewed": True,       # …but the call never produced a real review
+    }
+    rv = render._build_assessment_data(assessment_raw, {"sources": {}})["review"]
+    assert rv["validated"] is False         # the chip's gate — no false "2nd model agreed"
+    assert rv["unreviewed"] is True
 
 
 def test_build_detects_workaround_signal():

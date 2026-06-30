@@ -1379,6 +1379,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         rvTip = "An independent second model flagged details, but the verdict held after re-check."+(rv.critique?(" Validator: "+rv.critique):"");
       }
       chips.push(el("span",{"class":"chip", title:rvTip},[document.createTextNode("⚖︎ "), el("b",null,rvText)]));
+    } else if (rv.unreviewed){
+      // The validator call failed this run — be honest that only one model looked at it,
+      // rather than dropping the chip (which would read as a plain single-call page).
+      chips.push(el("span",{"class":"chip", title:"The independent validator model was unavailable on this run, so this verdict reflects a single model — confidence is capped and you should sanity-check it against the linked issues."},
+        [document.createTextNode("⚠︎ "), el("b",null,"single-model — validator unavailable")]));
     }
 
     var main = el("div",{"class":"hero-main"},[
