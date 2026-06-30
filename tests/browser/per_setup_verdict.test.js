@@ -1,0 +1,106 @@
+// Headless matrix test for the per-setup ("Your setup") verdict — audit M8.
+//
+// Drives the REAL shipped setupVerdict()/setupBlockers() from web/template.html via the
+// guarded window.__perSetupTest hook (no Python re-implementation that could drift from the
+// client-only JS). NOT part of the hermetic pytest suite — the deploy box has no Node — so
+// run it on demand where puppeteer + Chrome exist:  node tests/browser/per_setup_verdict.test.js
+//
+// Verifies the conservative invariants: softens by at most one notch, never harsher than the
+// global verdict, never ⏸️→✅, fresh never softens, no-stack never softens, and a version-
+// confirmed high/critical blocker that hits the stack (or is cross-cutting "all") blocks softening.
+
+const path = require("path");
+const fs = require("fs");
+const puppeteer = require(process.env.PUPPETEER_PATH ||
+  "/home/user/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer");
+const CHROME = process.env.CHROME_PATH ||
+  "/home/user/.cache/puppeteer/chrome/linux-149.0.7827.22/chrome-linux64/chrome";
+
+const TEMPLATE = fs.readFileSync(path.join(__dirname, "..", "..", "web", "template.html"), "utf8");
+const ORDER = ["✅", "⚠️", "⏸️"];
+const ci = (r) => ORDER.indexOf(r);
+
+function pageFor(data) {
+  // Replace the inline assessment-data JSON with the case's DATA.
+  return TEMPLATE.replace(
+    /(<script id="assessment-data" type="application\/json">)[\s\S]*?(<\/script>)/,
+    (_, a, b) => a + "\n" + JSON.stringify(data) + "\n" + b);
+}
+
+const issue = (o) => Object.assign(
+  { number: 1, title: "x", severity: "low", affects_version: false, platforms: [], components: [] }, o);
+
+// version, freshness, known_issues for the page DATA
+const D = (rec, fresh, issues) => ({
+  schema_version: 6, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",
+  recommendation: rec, confidence: "high", headline: "t", thesis: "t",
+  freshness: { fresh: !!fresh }, known_issues: issues || [], evidence: {}, changes: {},
+});
+
+// [name, DATA, stack, expectedRec]
+const CASES = [
+  ["⏸️ softens one notch for an unaffected stack",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["macos"] })]),
+   ["linux"], "⚠️"],
+  ["⏸️ blocked by a version-confirmed critical ON the stack",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["linux"] })]),
+   ["linux"], "⏸️"],
+  ["⏸️ blocked by a cross-cutting 'all' critical",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"] })]),
+   ["windows"], "⏸️"],
+  ["a NON-version-confirmed critical does NOT block softening",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: false, platforms: ["linux"] })]),
+   ["linux"], "⚠️"],
+  ["fresh release never softens",
+   D("⏸️", true, []), ["linux"], "⏸️"],
+  ["no stack picked never softens",
+   D("⏸️", false, []), [], "⏸️"],
+  ["⚠️ softens to ✅ when clear",
+   D("⚠️", false, []), ["discord"], "✅"],
+  ["✅ cannot soften below ✅",
+   D("✅", false, []), ["linux"], "✅"],
+  ["component-only stack hit blocks softening",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, components: ["auth"] })]),
+   ["auth"], "⏸️"],
+];
+
+(async () => {
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new", args: ["--no-sandbox"] });
+  let failures = 0;
+  for (const [name, data, stack, expected] of CASES) {
+    const page = await browser.newPage();
+    const errs = [];
+    page.on("pageerror", (e) => errs.push(String(e)));
+    const tmp = path.join(require("os").tmpdir(), "psv_" + Math.abs(hash(name)) + ".html");
+    fs.writeFileSync(tmp, pageFor(data));
+    await page.goto("file://" + tmp, { waitUntil: "networkidle0" });
+    const svd = await page.evaluate((ks) => {
+      window.__perSetupTest.setStack(ks);
+      return window.__perSetupTest.setupVerdict();
+    }, stack);
+    fs.unlinkSync(tmp);
+    await page.close();
+
+    const checks = [];
+    checks.push(["rec is valid", ci(svd.rec) >= 0]);
+    checks.push(["expected " + expected, svd.rec === expected]);
+    checks.push(["never harsher than global", ci(svd.rec) <= ci(svd.global)]);
+    checks.push(["at most one notch", ci(svd.global) - ci(svd.rec) <= 1]);
+    checks.push(["never ⏸️→✅", !(svd.global === "⏸️" && svd.rec === "✅")]);
+    checks.push(["no page errors", errs.length === 0]);
+
+    const bad = checks.filter(([, ok]) => !ok);
+    if (bad.length) {
+      failures++;
+      console.log(`✗ ${name}  (got ${svd.rec}, global ${svd.global})`);
+      bad.forEach(([d]) => console.log(`    - ${d}`));
+    } else {
+      console.log(`✓ ${name}  → ${svd.rec}`);
+    }
+  }
+  await browser.close();
+  console.log(failures ? `\n${failures} FAILED` : `\nAll ${CASES.length} per-setup cases passed`);
+  process.exit(failures ? 1 : 0);
+})();
+
+function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return h; }
