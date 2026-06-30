@@ -68,6 +68,33 @@ def test_render_keeps_previous_page_on_stale_assessment(tmp_path):
     assert out.read_text() == "GOOD PAGE"
 
 
+def test_render_keeps_previous_page_when_smoke_test_fails(tmp_path, monkeypatch):
+    """M7: the product's core trust invariant — a freshly-rendered page that FAILS the smoke
+    test must NOT overwrite the previously-published page. Forces smoke_test_html to fail and
+    asserts the existing page is left byte-unchanged."""
+    out = tmp_path / "index.html"
+    out.write_text("GOOD PAGE")
+    monkeypatch.setattr(config, "WEB_DIR", tmp_path)               # temp render file lands here
+    monkeypatch.setattr(render, "smoke_test_html",
+                        lambda path, expected_version="": {"pass": False,
+                            "checks": [{"name": "forced", "passed": False, "detail": "test"}]})
+    assessment_raw = {"version": "2.0", "validation_errors": [],
+                      "assessment": {"confidence": "high", "recommendation": "✅", "known_issues": []}}
+    raw = {"target_version": "2.0", "sources": {"latest_release": {"tag": "v2.0"}}}
+    result = render.render_assessment_page(assessment_raw, raw, output_path=str(out))
+    assert result == ""
+    assert out.read_text() == "GOOD PAGE"                          # last good page untouched
+
+
+# ── verdict-label consistency across surfaces ───────────────────────────────
+
+def test_verdict_text_and_label_name_the_same_verdict():
+    """L3: the badge/feed verdict text and the SSR/llms/page label must name the SAME verdict
+    (modulo case) — they once diverged ('update with care' vs 'Update with precautions')."""
+    for rec in ("✅", "⚠️", "⏸️"):
+        assert render._VERDICT_TEXT[rec][0].lower() == render._VERDICT_LABEL[rec].lower()
+
+
 # ── _deep_sanitize_markdown ─────────────────────────────────────────────────
 
 def test_deep_sanitize_unescapes_markdown():
