@@ -53,3 +53,34 @@ def test_populate_run_log_survives_missing_files(tmp_path, monkeypatch):
     rl = RunLog(trigger_type="manual")
     cli._populate_run_log(rl)  # must not raise
     assert rl.recommendation == ""  # untouched default
+
+
+# ── _latest_assessed_version (M3: don't re-fire on a non-deployable new release) ──
+
+def test_latest_assessed_version_reads_assessment_json(tmp_path, monkeypatch):
+    """M3: a non-deployable run still writes assessment.json, so last_assessed reflects the
+    just-assessed version — the scheduler won't re-detect it as 'new' every hourly tick and
+    re-spend the full pipeline."""
+    monkeypatch.setattr(config, "ASSESSMENT_FILE", tmp_path / "assessment.json")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    (tmp_path / "assessment.json").write_text(json.dumps({"version": "2026.7.0"}))
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"version": "2026.6.9", "assessed_at": "2026-06-21T00:00:00Z"}]))
+    assert cli._latest_assessed_version() == "2026.7.0"   # the just-assessed (non-deployable) one
+
+
+def test_latest_assessed_version_falls_back_to_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ASSESSMENT_FILE", tmp_path / "missing.json")   # no assessment yet
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"version": "2026.6.9", "assessed_at": "2026-06-21T00:00:00Z"}]))
+    assert cli._latest_assessed_version() == "2026.6.9"
+
+
+def test_latest_assessed_version_ignores_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ASSESSMENT_FILE", tmp_path / "assessment.json")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    (tmp_path / "assessment.json").write_text(json.dumps({"version": "unknown"}))
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"version": "2026.6.9", "assessed_at": "2026-06-21T00:00:00Z"}]))
+    assert cli._latest_assessed_version() == "2026.6.9"    # 'unknown' falls through to history

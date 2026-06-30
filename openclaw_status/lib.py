@@ -398,7 +398,14 @@ def notify(text: str) -> bool:
 
 
 def check_cost_thresholds():
-    """Check daily and monthly costs against limits. Returns (daily_total, monthly_total, alerts)."""
+    """Check daily and monthly costs against limits. Returns (daily_total, monthly_total, alerts).
+
+    Money accounting counts EVERY logged ``cost_usd`` regardless of the ``success`` flag:
+    OpenRouter bills a call whose HTTP succeeded but whose JSON was unparseable (logged
+    ``success=False``), so excluding those would let repeated parse-error runs spend real
+    money invisibly to this budget gate — the exact runaway the gate exists to stop. The
+    ``success`` flag is for quality/value accounting, not for money.
+    """
     alerts = []
     now = datetime.now(timezone.utc)
 
@@ -413,7 +420,7 @@ def check_cost_thresholds():
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     daily = sum(
         entry.get("cost_usd", 0) for entry in log
-        if entry.get("timestamp", "") >= today_start and entry.get("success", False)
+        if entry.get("timestamp", "") >= today_start
     )
     if daily > DAILY_COST_LIMIT:
         alerts.append(f"Daily cost ${daily:.4f} exceeds ${DAILY_COST_LIMIT} limit")
@@ -422,7 +429,7 @@ def check_cost_thresholds():
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
     monthly = sum(
         entry.get("cost_usd", 0) for entry in log
-        if entry.get("timestamp", "") >= month_start and entry.get("success", False)
+        if entry.get("timestamp", "") >= month_start
     )
     if monthly > MONTHLY_COST_LIMIT:
         alerts.append(f"Monthly cost ${monthly:.4f} exceeds ${MONTHLY_COST_LIMIT} limit")

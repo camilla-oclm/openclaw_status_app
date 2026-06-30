@@ -67,14 +67,22 @@ FALLBACK_MODELS = [
 # it this same budget (its JSON would otherwise truncate behind the reasoning tokens).
 ASSESSMENT_MAX_TOKENS = 16000
 
+# Cooperative wall-clock budget for the COLLECT phase (PipelineTimer, checked between
+# fetches). Collection is normally seconds, but the issue scout now runs ~11 searches each
+# with their own socket timeout, so allow headroom. See the TimeoutStartSec invariant below.
+COLLECT_TIMEOUT_S = 480
+
 # Wall-clock budget for the whole LLM pipeline (primary + validator + refine, incl.
 # retries). Each openrouter_call is hard-bounded to the time left in this budget, so
 # a trickling/hung response can't block forever — urllib's socket `timeout` is only a
 # per-read idle timeout, not a total deadline, so a model that dribbles tokens resets
-# it on every byte (this once hung a run ~17 min until systemd SIGKILLed it). Keep
-# this comfortably UNDER the systemd unit's TimeoutStartSec (currently 20 min) so the
-# pipeline bows out gracefully (validator → "unreviewed" → publish primary) instead of
-# being killed mid-run with nothing published.
+# it on every byte (this once hung a run ~17 min until systemd SIGKILLed it).
+#
+# INVARIANT (a `full`/`tick` runs collect+assess+render in one process):
+#   COLLECT_TIMEOUT_S + PIPELINE_BUDGET_S + render margin  <  unit TimeoutStartSec
+# so the in-process budgets always bow out gracefully (validator → "unreviewed" → publish
+# primary, keep last good page) BEFORE systemd SIGKILLs the run with nothing published.
+# With 480 + 900 + ~60 ≈ 1440 the unit's TimeoutStartSec is set to 1800 (deploy/*.service).
 PIPELINE_BUDGET_S = 900
 
 # Cap on how many issues are fed into the LLM prompt. The collector persists the

@@ -133,8 +133,22 @@ def _parse_dt(s):
 
 
 def _latest_assessed_version():
-    """Most recently assessed version (clean, no leading 'v') from history.json, or ''."""
+    """Most recently ASSESSED version (clean, no leading 'v'), or ''.
+
+    Reads assessment.json first — it's written on EVERY completed run, deployable or not —
+    so a new release whose assessment came back non-deployable (low-confidence / invalid)
+    isn't re-detected as 'new' on every hourly tick, which would bypass the adaptive cadence
+    and re-spend the full pipeline each hour. Falls back to history.json (deployable runs only)
+    when no assessment.json exists yet.
+    """
     from .lib import load_json
+    try:
+        a = load_json(config.ASSESSMENT_FILE)
+        v = str((a or {}).get("version", "") or "")
+        if v and v != "unknown":
+            return v
+    except Exception:
+        pass
     try:
         hist = load_json(config.HISTORY_FILE)
     except Exception:

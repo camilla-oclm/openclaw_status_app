@@ -216,7 +216,7 @@ def collect(output_path=None) -> dict:
     print(f"Time: {now}")
     print(f"{'='*60}\n")
 
-    timer = PipelineTimer(timeout=900)
+    timer = PipelineTimer(timeout=config.COLLECT_TIMEOUT_S)
     timer.__enter__()
 
     try:
