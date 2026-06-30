@@ -235,6 +235,34 @@ def test_cost_threshold_no_alert_under_limit(tmp_path, monkeypatch):
     assert alerts == []
 
 
+def test_cost_threshold_counts_billed_parse_error_runs(tmp_path, monkeypatch):
+    """M4: a parse-error run logs real cost with success=False (OpenRouter still billed it).
+    The budget gate must count it — else repeated parse failures spend money invisibly, the
+    exact runaway the gate exists to stop."""
+    usage_file = tmp_path / "usage.json"
+    _write(usage_file, [
+        {"timestamp": lib.now_iso(), "cost_usd": 2.5, "success": False},   # billed, unparseable
+    ])
+    monkeypatch.setattr(config, "USAGE_LOG_FILE", usage_file)
+    daily, monthly, alerts = lib.check_cost_thresholds()
+    assert daily >= 2.5
+    assert any("Daily" in a for a in alerts)
+
+
+def test_pipeline_budgets_fit_under_systemd_timeout():
+    """L9: collect + assess + a render margin must stay below the unit's TimeoutStartSec so
+    the in-process budgets degrade gracefully before systemd can SIGKILL the run. Guards the
+    invariant against future drift between config.py and the deploy unit."""
+    import re
+    import pathlib
+    unit = pathlib.Path(__file__).resolve().parent.parent / "deploy" / "openclaw-status.service"
+    m = re.search(r"TimeoutStartSec=(\d+)", unit.read_text())
+    assert m, "TimeoutStartSec not found in the systemd unit"
+    timeout = int(m.group(1))
+    render_margin = 120
+    assert config.COLLECT_TIMEOUT_S + config.PIPELINE_BUDGET_S + render_margin <= timeout
+
+
 # ── wall-clock deadline (the hung-validator guard) ───────────────────────────
 
 def test_call_with_wallclock_returns_value_within_budget():

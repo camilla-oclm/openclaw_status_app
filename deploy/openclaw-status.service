@@ -19,7 +19,9 @@ Environment=PYTHONUNBUFFERED=1
 # A failed pull (e.g. offline) must not block the scheduled run, hence the "-".
 ExecStartPre=-/usr/bin/git -C /opt/openclaw_status_app pull --ff-only
 ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py tick
-# Most ticks finish in seconds; when one decides to run, the LLM pipeline takes a few
-# minutes — keep generous headroom for that case.
-TimeoutStartSec=1200
+# Most ticks finish in seconds; when one decides to run, the full pipeline takes a few
+# minutes. Must stay ABOVE config.COLLECT_TIMEOUT_S + PIPELINE_BUDGET_S + render margin
+# (480 + 900 + ~60 ≈ 1440) so the in-process budgets degrade gracefully — publishing the
+# primary / keeping the last good page — before this SIGKILL can pre-empt them.
+TimeoutStartSec=1800
 Nice=10

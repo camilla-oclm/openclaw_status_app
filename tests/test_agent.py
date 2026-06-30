@@ -567,6 +567,34 @@ def test_refined_validation_errors_reflect_final_not_primary(tmp_path, monkeypat
 
 # ── run-completion summary message ───────────────────────────────────────────
 
+def test_discarded_primary_spend_is_logged_and_counted(tmp_path, monkeypatch):
+    """M5: a primary that HTTP-succeeds but parse-fails, then a fallback succeeds — the
+    primary's real billed cost must still reach the usage log / budget tracker and the run's
+    reported total, not vanish because only the final attempt is returned."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    valid = _valid_assessment()
+
+    def fake_call(model, system, user, **kw):
+        if model == config.PRIMARY_MODEL:                       # billed, but unparseable
+            return {"success": True, "parsed": {"error": "unparseable"}, "model": model,
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.04, "latency_ms": 1}}
+        return {"success": True, "parsed": valid, "model": model,   # fallback succeeds
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.03, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [], "clawsweeper": {}, "release_history": [],
+    }}
+    result = agent.run_assessment_pipeline(raw=raw, single_call=True)
+    assert result["success"] is True
+
+    costs = sorted(e.get("cost_usd", 0) for e in json.loads(config.USAGE_LOG_FILE.read_text()))
+    assert 0.04 in costs and 0.03 in costs           # discarded primary AND kept fallback logged
+    assert result["usage"]["cost_usd"] == pytest.approx(0.07)   # run total includes both
+
+
 def test_run_summary_message_includes_run_and_total_cost():
     msg = agent._run_summary_message("2026.6.6", "⏸️", 0.022, 0.13, 0.45, 7)
     assert "v2026.6.6" in msg

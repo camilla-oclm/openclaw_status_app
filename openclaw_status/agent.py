@@ -532,6 +532,11 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
     print("STEP 1/3 — Primary Assessment")
     print(f"{'─'*60}")
 
+    # Every billed call this step makes (primary + any fallbacks), so the caller can account
+    # for spend that would otherwise vanish: a primary that HTTP-succeeds but parse-fails is
+    # still billed even though its result is discarded for the fallback's. See run_assessment_pipeline.
+    attempts = []
+
     # Try primary model, fall back to alternatives if it fails
     result = openrouter_call(
         config.PRIMARY_MODEL, SYSTEM_PROMPT,
@@ -540,6 +545,7 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
         reasoning=config.PRIMARY_REASONING,
         deadline=deadline,
     )
+    attempts.append({"model": config.PRIMARY_MODEL, "usage": result.get("usage") or {}})
 
     if not result["success"] or "error" in result.get("parsed", {}):
         print(f"   ❌ Primary model failed: {result.get('error', result.get('parsed', {}).get('error', 'parse error'))}")
@@ -552,6 +558,7 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
                 reasoning=fallback.get("reasoning"),
                 deadline=deadline,
             )
+            attempts.append({"model": fallback["model"], "usage": result.get("usage") or {}})
             if result["success"] and "error" not in result.get("parsed", {}):
                 print(f"   ✓ Fallback {fallback['model']} succeeded")
                 break
@@ -568,6 +575,7 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
     else:
         print(f"   ❌ Failed: {result['error'][:200]}")
 
+    result["attempts"] = attempts
     return result
 
 
@@ -859,8 +867,22 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
 
     # ── Step 1: Primary ──
     primary_result = _step_primary(context, deadline=deadline)
+
+    # Account for billed-but-discarded attempts (a primary that HTTP-succeeded but parse-failed,
+    # then a fallback ran): their spend is real and must not vanish from the cost log / budget
+    # tracker. The final/used attempt is accounted for below as usual.
+    attempts = primary_result.get("attempts") or [
+        {"model": config.PRIMARY_MODEL, "usage": primary_result.get("usage") or {}}]
+    for att in attempts[:-1]:
+        u = att.get("usage") or {}
+        for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):
+            total_usage[k] += u.get(k, 0)
+        total_usage["api_calls"] += 1
+        log_usage(att["model"], u, False)   # billed but discarded — count the money
+    final_model = attempts[-1]["model"]
+
     if not primary_result["success"]:
-        log_usage(config.PRIMARY_MODEL, {}, False)
+        log_usage(final_model, primary_result.get("usage") or {}, False)   # real spend, not {}
         notify(f"❌ OpenClaw Status: assessment failed — {str(primary_result.get('error'))[:200]}")
         return {"success": False, "error": primary_result["error"]}
 
@@ -870,10 +892,10 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):
         total_usage[k] += primary_usage.get(k, 0)
     total_usage["api_calls"] += 1
-    pipeline_steps.append({"step": "primary", "model": config.PRIMARY_MODEL, "usage": primary_usage})
+    pipeline_steps.append({"step": "primary", "model": final_model, "usage": primary_usage})
 
     if "error" in primary_assessment:
-        log_usage(config.PRIMARY_MODEL, primary_usage, False)
+        log_usage(final_model, primary_usage, False)
         return {"success": False, "error": "Primary returned unparseable JSON"}
 
     validation_errors = validate_assessment(primary_assessment)
