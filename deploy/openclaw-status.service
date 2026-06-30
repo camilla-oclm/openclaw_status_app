@@ -25,3 +25,14 @@ ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py tick
 # primary / keeping the last good page — before this SIGKILL can pre-empt them.
 TimeoutStartSec=1800
 Nice=10
+# ── Sandboxing (contain the blast radius) ──
+# This unit parses untrusted LLM JSON + GitHub issue/release text and pulls PyPI deps, while
+# the openclaw uid holds the secrets (.env) and writes the public web/ tree — so an RCE here
+# could exfiltrate keys AND deface the page. Lock it down: no privilege escalation, the rest of
+# the filesystem read-only, homes read-only, a private /tmp. Writes are confined to the app dir
+# (git pull rewrites the repo; the pipeline writes data/ + web/ — all under it).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/opt/openclaw_status_app

@@ -263,6 +263,34 @@ def test_pipeline_budgets_fit_under_systemd_timeout():
     assert config.COLLECT_TIMEOUT_S + config.PIPELINE_BUDGET_S + render_margin <= timeout
 
 
+def _deploy_file(name):
+    import pathlib
+    return (pathlib.Path(__file__).resolve().parent.parent / "deploy" / name).read_text()
+
+
+def test_caddyfile_has_security_headers_and_hides_backups():
+    """L6/L7: the live site must send a CSP + nosniff/HSTS/frame-ancestors and must NOT serve
+    the *.prev rollback backups or dotfiles."""
+    cf = _deploy_file("Caddyfile")
+    assert "Content-Security-Policy" in cf
+    assert "frame-ancestors 'none'" in cf
+    assert "X-Content-Type-Options" in cf
+    assert "Strict-Transport-Security" in cf
+    assert "hide *.prev" in cf
+
+
+def test_systemd_units_are_sandboxed():
+    """L8: both units run the untrusted-input / secret-holding pipeline, so they must carry the
+    sandboxing that contains an RCE's blast radius."""
+    for name in ("openclaw-status.service", "openclaw-status-failure.service"):
+        unit = _deploy_file(name)
+        for directive in ("NoNewPrivileges=true", "ProtectSystem=strict",
+                          "ProtectHome=read-only", "PrivateTmp=true"):
+            assert directive in unit, f"{name} missing {directive}"
+    # The main unit must keep the app dir writable (git pull rewrites it; the pipeline writes data/+web/).
+    assert "ReadWritePaths=/opt/openclaw_status_app" in _deploy_file("openclaw-status.service")
+
+
 # ── wall-clock deadline (the hung-validator guard) ───────────────────────────
 
 def test_call_with_wallclock_returns_value_within_budget():
