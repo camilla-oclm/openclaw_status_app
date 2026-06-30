@@ -32,7 +32,6 @@ _THANKS_RE = re.compile(r"\s*Thanks\b.*$", re.IGNORECASE)
 # Map the changelog's curated sections onto the three change buckets. "### Changes" is a
 # general catch-all (providers, plugins, dashboard, QA) — real improvements, but NOT breaking
 # changes and largely a restatement of Highlights, so it is deliberately excluded from the counts.
-_BUCKET_PER_SECTION = 12      # cap items per bucket (curated sections are small anyway)
 
 
 def _norm(changes) -> dict:
@@ -48,14 +47,16 @@ def is_empty(changes) -> bool:
 
 
 def _sections(body: str) -> dict:
-    """Split a markdown body into {lowercased section name: section text}, first occurrence wins."""
+    """Split a markdown body into {lowercased section name: section text}. Same-named sections
+    are CONCATENATED, not first-wins — a body that repeats '### Fixes' (split notes) must not
+    silently drop the later block from the parsed counts or the curated changelog."""
     matches = list(_HEADER_RE.finditer(body or ""))
     out: dict = {}
     for i, m in enumerate(matches):
         name = m.group(1).strip().lower()
         start = m.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
-        out.setdefault(name, body[start:end])
+        out[name] = out.get(name, "") + body[start:end]
     return out
 
 
@@ -79,7 +80,12 @@ def _split_title(bullet: str) -> tuple[str, str]:
 
 
 def _bullets(text: str, extra_key: str | None, extra_val=None) -> list[dict]:
-    """Each `- ` bullet in `text` → {title, <extra_key>: …}; skips blank titles."""
+    """Each `- ` bullet in `text` → {title, <extra_key>: …}; skips blank titles.
+
+    No per-bucket cap: the displayed fix/feature counts must equal what the changelog literally
+    lists (a 12-item cap silently undercounted a large release), and the input is already bounded
+    — parse_changelog runs on the curated, size-capped body, not the tens-of-KB raw one.
+    """
     items = []
     for raw in _BULLET_RE.findall(text or ""):
         title, rest = _split_title(raw)
@@ -92,19 +98,23 @@ def _bullets(text: str, extra_key: str | None, extra_val=None) -> list[dict]:
         elif extra_key:                      # "value" (features) / "impact" (breaking)
             item[extra_key] = _clean(rest)
         items.append(item)
-        if len(items) >= _BUCKET_PER_SECTION:
-            break
     return items
+
+
+def _match(secs: dict, *needles: str) -> str:
+    """All sections whose lowercased name contains any needle, concatenated — so heading variants
+    ('Fixes' / 'Bug Fixes', 'Highlights' / 'What's New' / 'Features') all land in the right
+    bucket instead of a renamed section silently parsing to zero."""
+    return "\n".join(v for k, v in secs.items() if any(n in k for n in needles))
 
 
 def parse_changelog(body: str) -> dict:
     """Extract {breaking, fixes, features} straight from a release body's sections."""
     secs = _sections(body or "")
-    breaking_text = next((v for k, v in secs.items() if "breaking" in k), "")
     return {
-        "breaking": _bullets(breaking_text, "impact"),
-        "fixes": _bullets(secs.get("fixes", ""), "verified"),
-        "features": _bullets(secs.get("highlights", ""), "value"),
+        "breaking": _bullets(_match(secs, "breaking"), "impact"),
+        "fixes": _bullets(_match(secs, "fix"), "verified"),
+        "features": _bullets(_match(secs, "highlight", "feature", "what's new"), "value"),
     }
 
 
@@ -116,15 +126,20 @@ def changes_for_release(body: str, fallback=None) -> dict:
 
 
 # The curated sections — the part of a release body worth keeping (the rest is the long
-# contributor list / full PR log). Highlights + Changes + Fixes + any explicit Breaking.
-_CURATED_SECTIONS = ("highlights", "changes", "fixes")
+# contributor list / full PR log). Highlights/Changes/Fixes/Features/Breaking and their variants.
+def _is_curated_section(name: str) -> bool:
+    n = name.strip()
+    if "changelog" in n:        # the "Full Changelog" PR-log tail — explicitly NOT curated
+        return False
+    return ("breaking" in n or n == "changes"
+            or any(k in n for k in ("highlight", "fix", "feature", "what's new")))
 
 
 def _curated_chunks(body: str, per_section: int | None) -> list[str]:
     """The curated sections as "### Name\\n<text>" chunks, each optionally capped to per_section."""
     chunks = []
     for name, text in _sections(body or "").items():
-        if name in _CURATED_SECTIONS or "breaking" in name:
+        if _is_curated_section(name):
             text = text.strip()
             chunks.append(f"### {name.title()}\n{text[:per_section] if per_section else text}")
     return chunks
