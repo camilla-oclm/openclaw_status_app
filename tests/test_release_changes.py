@@ -112,3 +112,38 @@ def test_norm_coerces_shape_and_drops_junk():
     assert rc._norm(None) == {"breaking": [], "fixes": [], "features": []}
     assert rc._norm({"fixes": "not-a-list", "features": [1], "junk": 2}) == {
         "breaking": [], "fixes": [], "features": [1]}
+
+
+# ── audit L4/L5/L12: no cap, merge duplicate headings, tolerate heading variants ──
+
+def test_no_per_bucket_cap_counts_all_fixes():
+    """L4: the parser must not silently cap a bucket — the displayed 'fixes shipped' count
+    has to equal what the changelog literally lists, even past a dozen."""
+    body = "### Fixes\n\n" + "".join(f"- fix number {i}\n" for i in range(1, 19))   # 18 fixes
+    ch = rc.parse_changelog(body)
+    assert len(ch["fixes"]) == 18
+
+
+def test_duplicate_same_named_sections_are_merged():
+    """L5: a body that repeats '### Fixes' (split notes) must keep BOTH blocks, not just the first."""
+    body = "### Fixes\n\n- alpha\n\n### Fixes\n\n- beta\n- gamma\n"
+    titles = [f["title"] for f in rc.parse_changelog(body)["fixes"]]
+    assert titles == ["alpha", "beta", "gamma"]
+
+
+def test_heading_variants_map_to_buckets():
+    """L12: a renamed heading ('### Bug Fixes', '### What's New') must still land in the right
+    bucket instead of parsing to zero."""
+    body = "### Bug Fixes\n\n- patched a crash\n\n### What's New\n\n- shiny thing\n"
+    ch = rc.parse_changelog(body)
+    assert [f["title"] for f in ch["fixes"]] == ["patched a crash"]
+    assert [f["title"] for f in ch["features"]] == ["shiny thing"]
+
+
+def test_full_changelog_tail_is_not_curated():
+    """The bulky '### Full Changelog' PR-log tail must stay OUT of the curated changelog even
+    though its name contains 'change'."""
+    body = "### Highlights\n\n- a feature\n\n### Full Changelog\n\n- #1 by @x\n- #2 by @y\n"
+    curated = rc.curated_changelog(body)
+    assert "a feature" in curated
+    assert "Full Changelog" not in curated
