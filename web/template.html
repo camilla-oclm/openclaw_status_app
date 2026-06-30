@@ -2564,6 +2564,20 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       })
       .catch(function(){ /* keep the inlined data */ });
   }
+
+  // Test hook (pure reads only): lets a headless test exercise the REAL per-setup verdict
+  // logic — see tests/browser/per_setup_verdict.test.js — instead of a Python re-implementation
+  // that could drift. No effect on the page; exposes nothing not already derivable from DATA.
+  try {
+    window.__perSetupTest = {
+      setupVerdict: setupVerdict,
+      setupBlockers: setupBlockers,
+      setStack: function(keys){
+        for (var k in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k)) delete STACK[k]; }
+        (keys || []).forEach(function(k){ STACK[k] = true; });
+      }
+    };
+  } catch(e){}
 })();
 </script>
 </body>
