@@ -807,9 +807,12 @@ def _norm_rec(rec: str) -> str:
     return "⏸️" if rec == "🔄" else rec
 
 
+# Badge/feed verdict text + colour. The phrasing must NAME the same verdict as _VERDICT_LABEL
+# (the SSR/llms/page label), differing only in case — they once diverged ("update with care"
+# vs "Update with precautions"), giving one verdict two names across surfaces.
 _VERDICT_TEXT = {
     "✅": ("update now", "#4c1"),
-    "⚠️": ("update with care", "#dfb317"),
+    "⚠️": ("update with precautions", "#dfb317"),
     "⏸️": ("skip this version", "#e05d44"),
 }
 
@@ -883,8 +886,8 @@ def _write_feed(data: dict, output_path: str) -> None:
         '<rss version="2.0">\n  <channel>\n'
         "    <title>OpenClaw Status — should you update?</title>\n"
         f"    <link>{_xml_escape(site)}/</link>\n"
-        "    <description>A verdict on every OpenClaw release: update now, update with care, "
-        "or skip this version.</description>\n"
+        "    <description>A verdict on every OpenClaw release: update now, update with "
+        "precautions, or skip this version.</description>\n"
         + ("\n".join(items) + "\n" if items else "")
         + "  </channel>\n</rss>\n"
     )
@@ -1188,7 +1191,7 @@ def _json_ld(data: dict) -> str:
                 + (f" — currently {phrase} for v{ver}" if ver else "")
                 + ". It scouts the bugs people hit after a release, scores them by severity, and has "
                 "two independent AI models weigh the evidence before giving a clear answer: update "
-                "now, update with care, or skip this version.")}},
+                "now, update with precautions, or skip this version.")}},
              {"@type": "Question", "name": "How do I know if a new OpenClaw release is safe to update to?",
               "acceptedAnswer": {"@type": "Answer", "text":
                ("Check ClawStat.us before you upgrade. For each OpenClaw release it gathers post-release "

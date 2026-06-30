@@ -1386,6 +1386,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         [document.createTextNode("⚠︎ "), el("b",null,"single-model — validator unavailable")]));
     }
 
+    // A fresh ✅ verdict must not read "Safe to update — no blocking issues found" while the
+    // provisional fresh-release banner says the opposite directly above it — soften to an
+    // early read. (Any "complete/cleared/safe" copy must agree with DATA.freshness.fresh.)
+    var heroBlurb = v.blurb;
+    if ((DATA.freshness||{}).fresh && DATA.recommendation === "✅"){
+      heroBlurb = "No blocking issues found yet — but this is a fresh release, still firming up. Back up before you update.";
+    }
+
     var main = el("div",{"class":"hero-main"},[
       el("div",{"class":"eyebrow"},"Release assessment"),
       el("div",{"class":"hero-version"},["OpenClaw ", el("span",{"class":"vnum"},"v"+(DATA.version||"?"))]),
@@ -1394,7 +1402,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         ? el("a",{"class":"verdict "+v.tone, href:rel.url, title:"View the OpenClaw v"+(DATA.version||"")+" release on GitHub"},
             [el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label), el("span",{"class":"v-ext","aria-hidden":"true"},"↗")])
         : el("div",{"class":"verdict "+v.tone},[el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label)])),
-      el("div",{"class":"verdict-blurb"}, v.blurb),
+      el("div",{"class":"verdict-blurb"}, heroBlurb),
       DATA.headline ? el("div",{"class":"hero-headline"}, DATA.headline) : null,
       el("div",{"class":"conf-row"}, chips),
       setupCta()
@@ -1993,6 +2001,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       tone="tone-info"; bi="🆕";
       body = [el("b",null,"v"+(DATA.version||"")+" is the latest release."),
               document.createTextNode(" It's too new to call cleared — give it a few runs of real-world reports first (see the fresh-release note above).")];
+    } else if (curSafe && DATA.recommendation === "⚠️"){
+      // ⚠️ is "back up first — real risk remains"; don't flatly call it "cleared to run".
+      tone="tone-warn"; bi="⚠️";
+      body = [el("b",null,"v"+(DATA.version||"")+" is the latest, and the best available."),
+              document.createTextNode(" But update with care — some real risk remains (see the verdict above).")];
     } else if (curSafe){
       tone="tone-good"; bi="✅";
       body = [el("b",null,"You're on the safest version."),
