@@ -34,6 +34,10 @@ const DATA = {
       affects_version: true, platforms: ["all"], components: ["memory"], reactions: 3 },
     { number: 2, title: "Second issue", severity: "high", category: "post_release",
       affects_version: false, platforms: ["linux"], components: ["gateway"] },
+    { number: 3, title: "Third issue", severity: "medium", category: "post_release",
+      affects_version: false, platforms: ["linux"], components: ["gateway"] },
+    { number: 4, title: "Fourth issue", severity: "low", category: "active",
+      affects_version: false, platforms: ["discord"], components: ["gateway"] },
   ],
   evidence: {}, changes: {},
 };
@@ -73,6 +77,22 @@ const DATA = {
   const ws = await page.evaluate(() =>
     getComputedStyle(document.querySelector(".setup-cta b")).whiteSpace);
   t("setup-CTA action phrase is nowrap", ws === "nowrap");
+
+  // 4. Impact meters: continuous proportional fill — different issue volumes must
+  //    read as different bar lengths (the old 5-segment quantizer saturated), and
+  //    the grid stays sorted hot-first.
+  const meters = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("#components .plat")).map((c) => ({
+      name: c.querySelector(".pname").textContent,
+      w: parseInt(c.querySelector(".vfill").style.width, 10),
+    })));
+  const gw = meters.find((m) => /gateway/i.test(m.name));
+  const mem = meters.find((m) => /memory/i.test(m.name));
+  t("meter fills scale with volume (gateway 3 > memory 1)", !!gw && !!mem && gw.w > mem.w);
+  t("busiest component fills the track", !!gw && gw.w === 100);
+  t("grid is sorted hot-first", meters.length > 0 && /gateway/i.test(meters[0].name));
+  t("old segmented meters are gone", await page.evaluate(() =>
+    document.querySelectorAll(".plat .seg").length) === 0);
 
   t("no page errors", errs.length === 0);
 
