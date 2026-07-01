@@ -427,6 +427,48 @@ def test_scout_coverage_all_ok_when_every_query_succeeds(monkeypatch):
     assert cov["queries_ok"] == cov["queries_total"]
 
 
+def test_scout_parallel_keeps_first_query_dedup_winner(monkeypatch):
+    # The searches now run concurrently; aggregation must still walk the ORIGINAL query
+    # order, so when two searches return the same issue number, the broad sweep's node
+    # (query #1) wins — byte-identical to the old serial loop.
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+
+    def is_broad(q):
+        # every query carries "-label:enhancement" — broad = no OTHER label filter
+        return ("created:>=" in q and "sort:created-desc" in q
+                and "label:" not in q.replace("-label:enhancement", ""))
+
+    def fake_search(q, limit, timeout=30):
+        if is_broad(q):
+            return [_scout_node(300, "broad wins", ["bug"])]
+        if "label:regression" in q:
+            return [_scout_node(300, "label version", ["regression"])]
+        return []
+
+    monkeypatch.setattr(github, "search_issues", fake_search)
+    out = github.scout_issues("2026-06-24", "2026.6.10")
+    assert [i["number"] for i in out] == [300]
+    assert out[0]["title"] == "broad wins"
+
+
+def test_scout_raising_query_counts_as_dropped_not_fatal(monkeypatch):
+    # A query that RAISES (not just returns None) is converted to a dropped query by the
+    # parallel runner — coverage reflects the drop and the scout still returns the rest
+    # (the serial loop would have crashed the whole collect).
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "tok")
+
+    def fake_search(q, limit, timeout=30):
+        if "label:P0" in q:
+            raise RuntimeError("boom")
+        return [_scout_node(1, "x", ["bug"])]
+
+    monkeypatch.setattr(github, "search_issues", fake_search)
+    cov = {}
+    out = github.scout_issues("2026-06-24", "2026.6.10", coverage=cov)
+    assert out is not None
+    assert cov["queries_ok"] == cov["queries_total"] - 1
+
+
 def test_scout_guarantees_p0_and_impact_searches(monkeypatch):
     # H2: P0 (the most-severe priority) and the serious-impact labels each get a dedicated
     # recency search in the post-release window — not just regression/crash/P1.
