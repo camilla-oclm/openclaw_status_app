@@ -415,9 +415,8 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .plat .pn{font-weight:700; font-size:.88rem; display:flex; align-items:center; gap:.4rem; min-width:0; flex:1}
 .plat .pname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .plat .pmeter{display:flex; flex-direction:column; align-items:flex-start; gap:.5rem; margin-top:.8rem}
-.plat .seg{display:flex; gap:5px; width:100%}
-.plat .seg i{flex:1; height:9px; border-radius:3px; background:var(--card3); border:1px solid var(--border)}
-.plat .seg i.on{background:var(--ic); border-color:var(--ic); box-shadow:0 0 10px -3px var(--ic)}
+.plat .vbar{display:block; width:100%; height:9px; border-radius:999px; background:var(--card3); border:1px solid var(--border); overflow:hidden}
+.plat .vbar .vfill{display:block; height:100%; border-radius:999px; background:var(--ic); box-shadow:0 0 10px -3px var(--ic)}
 .plat .pl{font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--ic)}
 .plat.you{outline:2px solid var(--accent); outline-offset:2px}
 .plat .me{flex:none; white-space:nowrap; font-size:.6rem; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:.04em}
@@ -592,6 +591,12 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   .brand .dim{display:none}
   .verdict{font-size:1.2rem}
   .sigplat{grid-template-columns:1fr}
+  /* Impact grids: 17 stacked full-width cards made the section most of the mobile
+     page — compact 2-up cards halve its height without losing the meters. */
+  .plat-grid{grid-template-columns:1fr 1fr; gap:.5rem}
+  .plat{padding:.6rem .7rem}
+  .plat .pn{font-size:.78rem}
+  .plat .pmeter{margin-top:.55rem; gap:.35rem}
 }
 </style>
 </head>
@@ -1774,6 +1779,24 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return s;
   }
 
+  // One meter card — shared by both Impact grids (platform × component differ only in
+  // aggregation + labels). Fill = issue volume relative to the grid's busiest row —
+  // CONTINUOUS, so 1 vs 7 vs 13 issues read as different bars (the old 5 coarse
+  // segments saturated: round(12/13*5) == round(13/13*5)). Colour = worst severity
+  // via the sv-* class → --ic, exactly as before.
+  function meterCard(icon, name, a, maxCount, mine, label){
+    var fill = el("i",{"class":"vfill"});
+    // Width via CSSOM (not a style attribute) so a strict CSP can't zero the bars;
+    // floor at 6% so a 1-issue row shows a visible nub rather than an empty track.
+    fill.style.width = (a.count ? Math.max(6, Math.round(a.count / (maxCount || 1) * 100)) : 0) + "%";
+    return el("div",{"class":"plat sv-"+(a.count?a.worst:"none")+(mine?" you":"")},[
+      el("div",{"class":"ph"},[
+        el("span",{"class":"pn"}, [document.createTextNode(icon+" "), el("span",{"class":"pname"}, name), mine?el("span",{"class":"me"}," ★you"):null])
+      ]),
+      el("div",{"class":"pmeter"},[ el("span",{"class":"vbar"},[fill]), el("span",{"class":"pl"}, label) ])
+    ]);
+  }
+
   function platforms(){
     var ki = DATA.known_issues || [];
     var anyTagged = ki.some(function(i){ return (i.platforms||[]).length; });
@@ -1797,29 +1820,21 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       });
       maxCount = 5;
     } else if (!maxCount){ return null; }
-    var SEG = 5;
     var s = el("div",{"class":"impact-sub", id:"platforms"});
     s.appendChild(el("div",{"class":"impact-sublabel"}, "By platform & channel"));
     // When every affected platform shows the same volume×severity, the bars carry no
-    // signal — say so and point at the component split rather than a wall of identical bars.
+    // signal — say so and point at the component split rather than a wall of identical
+    // bars. (Signature buckets the continuous fill to deciles, as the segments did.)
     var sigs = {}, nShown = 0;
-    PLAT.forEach(function(p){ var a=stat[p[0]]; if (a.count>0){ nShown++; sigs[a.worst+":"+volFill(a.count,maxCount,SEG)]=1; } });
+    PLAT.forEach(function(p){ var a=stat[p[0]]; if (a.count>0){ nShown++; sigs[a.worst+":"+Math.round(a.count/(maxCount||1)*10)]=1; } });
     if (nShown>=2 && Object.keys(sigs).length===1){
       s.appendChild(el("div",{"class":"impact-note"}, "Affects all platforms about equally — the meaningful split is by component, above."));
     }
     var g = el("div",{"class":"plat-grid"});
     PLAT.forEach(function(p){
-      var a = stat[p[0]], mine = !!STACK[p[0]];
-      var on = volFill(a.count, maxCount, SEG);
-      var seg = el("div",{"class":"seg"});
-      for (var k=0;k<SEG;k++){ seg.appendChild(el("i",{"class": k<on?"on":""}, null)); }
-      var label = a.lbl || (a.count ? issueWord(a.count) : "clear");
-      g.appendChild(el("div",{"class":"plat sv-"+(a.count?a.worst:"none")+(mine?" you":"")},[
-        el("div",{"class":"ph"},[
-          el("span",{"class":"pn"}, [document.createTextNode(p[1]+" "), el("span",{"class":"pname"}, p[2]), mine?el("span",{"class":"me"}," ★you"):null])
-        ]),
-        el("div",{"class":"pmeter"},[ seg, el("span",{"class":"pl"}, label) ])
-      ]));
+      var a = stat[p[0]];
+      g.appendChild(meterCard(p[1], p[2], a, maxCount, !!STACK[p[0]],
+                              a.lbl || (a.count ? issueWord(a.count) : "clear")));
     });
     s.appendChild(g);
     return s;
@@ -1859,20 +1874,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     keys.sort(function(a,b){ return agg[b].count-agg[a].count || agg[b].w-agg[a].w; });  // hot spots first
     var s = el("div",{"class":"impact-sub", id:"components"});
     s.appendChild(el("div",{"class":"impact-sublabel"}, "By component"));
-    var SEG = 5;
     var g = el("div",{"class":"plat-grid"});
     keys.forEach(function(k){
-      var a = agg[k], meta = COMP_LABEL[k] || ["📦", cap(k)], mine = !!STACK[k];
-      var on = volFill(a.count, maxCount, SEG);
-      var seg = el("div",{"class":"seg"});
-      for (var j=0;j<SEG;j++){ seg.appendChild(el("i",{"class": j<on?"on":""}, null)); }
-      var sub = issueWord(a.count) + (a.regr? " · "+a.regr+" regr" : "");
-      g.appendChild(el("div",{"class":"plat sv-"+a.worst+(mine?" you":"")},[
-        el("div",{"class":"ph"},[
-          el("span",{"class":"pn"}, [document.createTextNode(meta[0]+" "), el("span",{"class":"pname"}, meta[1]), mine?el("span",{"class":"me"}," ★you"):null])
-        ]),
-        el("div",{"class":"pmeter"},[ seg, el("span",{"class":"pl"}, sub) ])
-      ]));
+      var a = agg[k], meta = COMP_LABEL[k] || ["📦", cap(k)];
+      g.appendChild(meterCard(meta[0], meta[1], a, maxCount, !!STACK[k],
+                              issueWord(a.count) + (a.regr? " · "+a.regr+" regr" : "")));
     });
     s.appendChild(g);
     return s;
