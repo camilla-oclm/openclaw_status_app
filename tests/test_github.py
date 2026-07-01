@@ -229,15 +229,16 @@ def test_normalize_node_full():
     n = github.normalize_node(_node(), release_date="2026-06-03", version="2026.6.1")
     assert n["number"] == 42
     assert n["reactions"] == 15           # thumbsUp, not total
-    assert n["total_reactions"] == 22
     assert n["comments"] == 12
     assert n["author"] == "alice"
     assert n["affects_version"] is True
     assert n["impact"] == "high"          # 15 thumbs
     assert n["severity"] == "critical"    # 15👍→high, +regression label bump→critical
     assert n["category"] == "regression"  # regression label
-    assert n["is_feature"] is False
     assert n["priority"] is None          # no P-label
+    # Vestigial fields stay dropped (nothing reads them; they bloated raw-data/ledger).
+    for dead in ("total_reactions", "snippet", "comments_data", "platform", "is_feature"):
+        assert dead not in n
     assert n["source"] == "github_api"
 
 
@@ -246,8 +247,9 @@ def test_normalize_node_priority_and_feature():
                  title="[Feature]: add thing", thumbsUp={"totalCount": 0})
     n = github.normalize_node(node, release_date="2026-06-03", version="2026.6.1")
     assert n["priority"] == "medium"      # P2
-    assert n["is_feature"] is True        # enhancement label
     assert n["severity"] == "medium"      # P2, no serious-impact bump
+    # is_feature is a scout-time FILTER (features never reach storage), not a stored field.
+    assert github.is_feature("[Feature]: add thing", ["P2", "enhancement"]) is True
 
 
 def test_normalize_node_handles_missing_fields():

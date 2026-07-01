@@ -40,13 +40,16 @@ REPO_PATH = f"{REPO_OWNER}-{REPO_NAME}"
 # (the strong sibling of the flash model this project was built on — same prompt,
 # reasoning param, and JSON behaviour, a clear quality step up, still ~$0.009/run).
 PRIMARY_MODEL = "deepseek/deepseek-v4-pro"
-PRIMARY_REASONING = {"effort": "high", "exclude": False}
+# One shared reasoning config for every role (analyst / validator / fallback). Effort is
+# a parked cost lever — dropping a single role to "medium" means rebinding that role's name.
+_REASONING_HIGH = {"effort": "high", "exclude": False}
+PRIMARY_REASONING = _REASONING_HIGH
 # Independent reviewer — deliberately a *different* model from the analyst, so it
 # catches the primary's blind spots instead of rubber-stamping its own reasoning.
 # qwen3.7-plus reasons, so the validator call gets the wide token budget too
 # (see _step_validator) or its JSON would truncate like the analyst's did.
 VALIDATOR_MODEL = "qwen/qwen3.7-plus"
-VALIDATOR_REASONING = {"effort": "high", "exclude": False}
+VALIDATOR_REASONING = _REASONING_HIGH
 
 # Fallback (used if the primary fails). minimax-m3 is a third distinct provider —
 # different from both the deepseek analyst and the qwen validator — so a deepseek
@@ -54,8 +57,15 @@ VALIDATOR_REASONING = {"effort": "high", "exclude": False}
 # IDs are real OpenRouter slugs (provider/model) — a wrong slug returns HTTP 400
 # and burns a retry, so keep them in sync with https://openrouter.ai/api/v1/models.
 FALLBACK_MODELS = [
-    {"model": "minimax/minimax-m3", "reasoning": {"effort": "high", "exclude": False}},
+    {"model": "minimax/minimax-m3", "reasoning": _REASONING_HIGH},
 ]
+
+# ── Retry & cost guardrails (consumed by lib.py — kept here so every tunable policy
+#    knob lives in the central config, as this module's docstring promises) ─────────
+MAX_RETRIES = 2
+RETRY_BACKOFF = [1.0, 3.0]   # seconds between attempts
+DAILY_COST_LIMIT = 2.0       # USD — alert threshold, not a hard stop
+MONTHLY_COST_LIMIT = 30.0    # USD
 
 # Assessment output budget. The analyst/refine steps emit a full JSON document
 # (thesis + evidence + one known_issues entry per issue + changes), which blows

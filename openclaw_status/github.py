@@ -395,30 +395,27 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
     reactions, version relevance, impact, severity and category."""
     labels = [l["name"] for l in (node.get("labels") or {}).get("nodes", []) if l.get("name")]
     thumbs = (node.get("thumbsUp") or {}).get("totalCount", 0)
-    total_reactions = (node.get("reactions") or {}).get("totalCount", 0)
     comments = (node.get("comments") or {}).get("totalCount", 0)
     title = node.get("title", "") or ""
     body = node.get("bodyText", "") or ""
     created = node.get("createdAt", "")
     affects = version_relevant(title + " " + body, version)
     impact = impact_level(thumbs, comments)
+    # (Vestigial fields dropped 2026-07: snippet / comments_data / platform:"general" /
+    # is_feature / total_reactions had no readers anywhere — features are filtered out
+    # in scout_issues before storage, and the taxonomy uses per-issue platforms/components.)
     return {
         "number": node.get("number"),
         "title": sanitize(title),
         "url": node.get("url", ""),
         "body": sanitize(body, 2000),
-        "snippet": sanitize(body, 500),
         "comments": comments,
-        "comments_data": [],
         "reactions": thumbs,
-        "total_reactions": total_reactions,
         "updated_at": node.get("updatedAt", ""),
         "created_at": created,
         "labels": labels,
         "author": (node.get("author") or {}).get("login", ""),
-        "platform": "general",
         "priority": priority_of(labels),
-        "is_feature": is_feature(title, labels),
         "affects_version": affects,
         "impact": impact,
         "severity": derive_severity(labels, thumbs, comments),

@@ -30,12 +30,11 @@ from openclaw_status import config
 #  Retry helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
-MAX_RETRIES = 2
-RETRY_BACKOFF = [1.0, 3.0]  # seconds
-
-
-def _retry(func, *args, retries=MAX_RETRIES, **kwargs):
-    """Call func with retries and exponential backoff. Returns (result, attempts)."""
+def _retry(func, *args, retries=None, **kwargs):
+    """Call func with retries and exponential backoff. Returns (result, attempts).
+    `retries` defaults to config.MAX_RETRIES (resolved at call time)."""
+    if retries is None:
+        retries = config.MAX_RETRIES
     last_err = None
     for attempt in range(retries + 1):
         try:
@@ -44,7 +43,7 @@ def _retry(func, *args, retries=MAX_RETRIES, **kwargs):
         except Exception as e:
             last_err = e
             if attempt < retries:
-                wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
+                wait = config.RETRY_BACKOFF[min(attempt, len(config.RETRY_BACKOFF) - 1)]
                 print(f"  ↻ Retry {attempt+1}/{retries} in {wait}s: {e}", file=sys.stderr)
                 time.sleep(wait)
     raise last_err
@@ -89,7 +88,7 @@ def openrouter_call(
     max_tokens: int = 4000,
     reasoning: dict = None,
     temperature: float = 0.1,
-    retries: int = MAX_RETRIES,
+    retries: int | None = None,
     deadline: float | None = None,
 ) -> dict:
     """Single call to OpenRouter. Returns {success, parsed, model, usage, error?}.
@@ -255,23 +254,45 @@ def load_json(path) -> dict:
         return json.load(f)
 
 
-def save_json(path, data):
-    """Write JSON atomically: serialize to a temp file in the same directory, then
-    os.replace() it into place. A crash/kill mid-write can't leave a half-written
-    (corrupt) state file — readers see either the old file or the complete new one."""
+def load_json_or(path, default):
+    """load_json, or `default` when the file is missing/unreadable/corrupt — the
+    standard read for optional state files (history/timeline/usage/ledger)."""
+    try:
+        return load_json(path)
+    except Exception:
+        return default
+
+
+def atomic_write_text(path, text: str, mode: int | None = None):
+    """Write text atomically: temp file in the same directory, then os.replace().
+    A crash/kill mid-write can't leave a half-written file — readers see either the
+    old content or the complete new one. `mode` (e.g. 0o644) is chmod'd after the
+    replace, best-effort, for artifacts a separate server user must read."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write(text)
         os.replace(tmp, str(path))
+        if mode is not None:
+            try:
+                os.chmod(path, mode)
+            except OSError:
+                pass
     except BaseException:
         try:
             os.unlink(tmp)
         except OSError:
             pass
         raise
+
+
+def save_json(path, data):
+    """Write JSON atomically (see atomic_write_text) — a crash/kill mid-write must
+    never leave a half-written (corrupt) state file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -368,12 +389,7 @@ def strip_md_links(text: str) -> str:
 
 def log_usage(model_id: str, usage: dict, success: bool):
     now = datetime.now(timezone.utc).isoformat()
-    log = []
-    if config.USAGE_LOG_FILE.exists():
-        try:
-            log = load_json(config.USAGE_LOG_FILE)
-        except Exception:
-            log = []
+    log = load_json_or(config.USAGE_LOG_FILE, [])
     log.append({"timestamp": now, "model": model_id, "success": success, **usage})
     if len(log) > 1000:
         log = log[-1000:]
@@ -381,11 +397,8 @@ def log_usage(model_id: str, usage: dict, success: bool):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Cost tracking
+#  Cost tracking  (thresholds live in config: DAILY/MONTHLY_COST_LIMIT)
 # ═══════════════════════════════════════════════════════════════════════════
-
-DAILY_COST_LIMIT = 2.0    # USD
-MONTHLY_COST_LIMIT = 30.0  # USD
 
 
 def notify(text: str) -> bool:
@@ -423,12 +436,7 @@ def check_cost_thresholds():
     alerts = []
     now = datetime.now(timezone.utc)
 
-    log = []
-    if config.USAGE_LOG_FILE.exists():
-        try:
-            log = load_json(config.USAGE_LOG_FILE)
-        except Exception:
-            pass
+    log = load_json_or(config.USAGE_LOG_FILE, [])
 
     # Daily total
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
@@ -436,8 +444,8 @@ def check_cost_thresholds():
         entry.get("cost_usd", 0) for entry in log
         if entry.get("timestamp", "") >= today_start
     )
-    if daily > DAILY_COST_LIMIT:
-        alerts.append(f"Daily cost ${daily:.4f} exceeds ${DAILY_COST_LIMIT} limit")
+    if daily > config.DAILY_COST_LIMIT:
+        alerts.append(f"Daily cost ${daily:.4f} exceeds ${config.DAILY_COST_LIMIT} limit")
 
     # Monthly total
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
@@ -445,8 +453,8 @@ def check_cost_thresholds():
         entry.get("cost_usd", 0) for entry in log
         if entry.get("timestamp", "") >= month_start
     )
-    if monthly > MONTHLY_COST_LIMIT:
-        alerts.append(f"Monthly cost ${monthly:.4f} exceeds ${MONTHLY_COST_LIMIT} limit")
+    if monthly > config.MONTHLY_COST_LIMIT:
+        alerts.append(f"Monthly cost ${monthly:.4f} exceeds ${config.MONTHLY_COST_LIMIT} limit")
 
     return daily, monthly, alerts
 
@@ -485,6 +493,14 @@ def parallel_fetch(func, items, max_workers=4):
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def norm_rec(rec: str) -> str:
+    """Map the retired 🔄 "wait for next release" verdict onto ⏸️ "skip this version"
+    (3-verdict rubric: ✅/⚠️/⏸️). All current verdicts pass through. Keeps old 🔄
+    history entries / any stray model output coherent. The shared mapping — BOTH
+    normalizer call sites stay (agent pre-validation + render for history/timeline)."""
+    return "⏸️" if rec == "🔄" else rec
 
 
 def version_from_release(release: dict | None) -> str:
