@@ -8,6 +8,7 @@
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="fonts/SpaceGrotesk-var.woff2" as="font" type="font/woff2" crossorigin>
 <title>ClawStat.us — Should you update OpenClaw?</title>
 <link rel="alternate" type="text/markdown" href="llms-full.txt" title="Full verdict as markdown (for LLMs / agents)">
 <link rel="alternate" type="application/json" href="latest.json" title="Assessment JSON API">
@@ -163,7 +164,7 @@ body::after{
   color:var(--muted); font-weight:600;
 }
 .eyebrow::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--tone); box-shadow:0 0 8px var(--tone)}
-.hero-version{font-family:var(--display); font-size:clamp(1.6rem,4.6vw,2.3rem); font-weight:800; margin-top:.5rem; letter-spacing:-.03em; line-height:1.05}
+.hero-version{font-family:var(--display); font-size:clamp(1.6rem,4.6vw,2.3rem); font-weight:800; margin:.5rem 0 0; letter-spacing:-.03em; line-height:1.05}
 .hero-version .vnum{font-family:var(--mono); color:var(--tone); font-weight:700}
 .hero-sub{color:var(--muted); font-size:.84rem; margin-top:.3rem; font-family:var(--mono)}
 .hero-sub .sep{opacity:.45; margin:0 .45rem}
@@ -186,10 +187,10 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .hero-headline{margin-top:.5rem; color:var(--muted); font-size:.95rem; max-width:60ch}
 .conf-row{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.1rem; align-items:center}
 /* hero CTA → jump to "Your setup"; becomes a live per-setup verdict once a stack is picked */
-.setup-cta{margin-top:.95rem; display:inline-flex; align-items:center; gap:.4rem; font:inherit; font-size:.82rem; cursor:pointer; background:transparent; border:1px dashed var(--tone-bd); color:var(--muted); padding:.4rem .85rem; border-radius:999px; transition:.15s var(--ease)}
+.setup-cta{margin-top:.95rem; display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.15rem .4rem; font:inherit; font-size:.82rem; cursor:pointer; background:transparent; border:1px dashed var(--tone-bd); color:var(--muted); padding:.4rem .85rem; border-radius:999px; transition:.15s var(--ease)}
 .setup-cta:hover{color:var(--text); border-color:var(--tone); background:var(--tone-bg)}
 .setup-cta .sv-em{font-size:1rem; line-height:1}
-.setup-cta b{color:var(--tone)}
+.setup-cta b{color:var(--tone); white-space:nowrap}
 .chip{
   display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; font-weight:600;
   padding:.34rem .72rem; border-radius:999px; border:1px solid var(--border2);
@@ -226,7 +227,6 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .sparkbar i{width:4px; border-radius:1px; background:var(--ic,var(--gray)); opacity:.3}
 .sparkbar i.on{opacity:1}
 .imp-none{--ic:var(--good)} .imp-low{--ic:var(--info)} .imp-medium{--ic:var(--warn)} .imp-high{--ic:var(--bad)}
-.cs-critical{--ic:var(--bad)} .cs-high{--ic:var(--bad)} .cs-medium{--ic:var(--warn)} .cs-low{--ic:var(--gray)}
 /* severity colour ramp (worst-severity → colour): critical≠high≠medium≠low, distinct steps */
 .sv-critical{--ic:var(--bad)} .sv-high{--ic:var(--orange)} .sv-medium{--ic:var(--warn)} .sv-low{--ic:var(--gray)} .sv-none{--ic:var(--good)}
 /* signal: risk sparkline */
@@ -337,6 +337,7 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .chev{flex:none; color:var(--faint); font-size:.7rem; transition:transform .15s var(--ease)}
 .irow[aria-expanded="true"] .chev{transform:rotate(90deg)}
 .idetail{padding:.15rem .85rem .8rem 1.45rem}
+.idet-title{font-size:.88rem; font-weight:600; color:var(--text); line-height:1.45; margin-bottom:.45rem; overflow-wrap:anywhere}
 .idetail[hidden]{display:none}
 .idet-link{display:inline-block; margin-top:.55rem; font-size:.78rem; font-weight:700; color:var(--accent); text-decoration:none}
 .idet-link:hover{text-decoration:underline}
@@ -1396,7 +1397,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
     var main = el("div",{"class":"hero-main"},[
       el("div",{"class":"eyebrow"},"Release assessment"),
-      el("div",{"class":"hero-version"},["OpenClaw ", el("span",{"class":"vnum"},"v"+(DATA.version||"?"))]),
+      el("h1",{"class":"hero-version"},["OpenClaw ", el("span",{"class":"vnum"},"v"+(DATA.version||"?"))]),
       el("div",{"class":"hero-sub"}, subNodes),
       (rel.url
         ? el("a",{"class":"verdict "+v.tone, href:rel.url, title:"View the OpenClaw v"+(DATA.version||"")+" release on GitHub"},
@@ -1414,11 +1415,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // <a href="#setup">) so it scrolls in-page instead of opening a new tab.
   function setupCtaLabel(){
     if (!stackActive())
-      return [document.createTextNode("This verdict is for everyone — "), el("b",null,"check your setup →")];
+      return [document.createTextNode("This verdict is for everyone — "), el("b",null,"check your setup →")];
     var svd = setupVerdict(), v = VERDICTS[svd.rec] || {label:String(svd.rec||"")};
     return [el("span",{"class":"sv-em","aria-hidden":"true"}, svd.rec),
-            document.createTextNode(" For your setup: "), el("b",null, v.label),
-            document.createTextNode(" →")];
+            document.createTextNode(" For your setup: "), el("b",null, v.label+" →")];
   }
   function setupCta(){
     var b = el("button",{"class":"setup-cta", type:"button", id:"setup-cta",
@@ -1619,6 +1619,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       el("span",{"class":"chev","aria-hidden":"true"}, "▸")
     ]);
     var detail = el("div",{"class":"idetail", id:detId, hidden:""},[
+      // The row's .ititle is one-line ellipsized — the expanded panel is where the
+      // full untruncated title lives.
+      el("div",{"class":"idet-title"}, i.title||"(untitled)"),
       el("div",{"class":"tags"}, tags),
       el("a",{"class":"idet-link", href:issueUrl(i.number)}, "View "+num+" on GitHub ↗")
     ]);
@@ -2555,10 +2558,12 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       .then(function(d){
         if (!d || !d.recommendation) return;
         // Don't let a stale (e.g. intermediary-cached) latest.json downgrade a fresher
-        // inline copy: only swap when it isn't older than what we already rendered.
+        // inline copy — and skip the swap when it's the SAME run (the served page's
+        // inline copy already matches; a re-render would only reset open tabs,
+        // expanded issue rows, and scroll-reveal state for zero visual change).
         var cur = (DATA && DATA.assessed_at) ? Date.parse(DATA.assessed_at) : 0;
         var nxt = d.assessed_at ? Date.parse(d.assessed_at) : 0;
-        if (cur && nxt && nxt < cur) return;
+        if (cur && nxt && nxt <= cur) return;
         DATA = d; render();
         if (location.hash) setTimeout(scrollToHash, 60);
       })
