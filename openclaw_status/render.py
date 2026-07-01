@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from openclaw_status import config
-from openclaw_status.lib import load_json, strip_md_links
+from openclaw_status.lib import atomic_write_text, load_json, load_json_or, norm_rec, strip_md_links
 
 
 def _make_world_readable(path) -> None:
@@ -551,13 +551,8 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     cw = sources.get("clawsweeper", {})
 
     # Version history
-    raw_history = []
-    if config.HISTORY_FILE.exists():
-        try:
-            loaded = load_json(config.HISTORY_FILE)
-            raw_history = [h for h in loaded if isinstance(h, dict)] if isinstance(loaded, list) else []
-        except Exception:
-            raw_history = []
+    loaded = load_json_or(config.HISTORY_FILE, [])
+    raw_history = [h for h in loaded if isinstance(h, dict)] if isinstance(loaded, list) else []
     # Run cost is internal — keep it out of the public per-version payload.
     version_history = [{**{k: v for k, v in h.items() if k != "cost_usd"},
                         "recommendation": _norm_rec(h.get("recommendation", "?"))}
@@ -570,16 +565,12 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     # assess step already appended to timeline.json before render). Gates the
     # fresh-release banner — see _release_freshness / config.FRESH_RELEASE_MAX_RUNS.
     version_run_count = 0
-    if config.TIMELINE_FILE.exists():
-        try:
-            raw_tl = load_json(config.TIMELINE_FILE)
-            if isinstance(raw_tl, list):
-                rows = [r for r in raw_tl if isinstance(r, dict)]
-                timeline = rows[-config.TIMELINE_KEEP:]
-                version_run_count = sum(
-                    1 for r in rows if r.get("version") == assessment_raw.get("version", ""))
-        except Exception:
-            timeline = []
+    raw_tl = load_json_or(config.TIMELINE_FILE, None)
+    if isinstance(raw_tl, list):
+        rows = [r for r in raw_tl if isinstance(r, dict)]
+        timeline = rows[-config.TIMELINE_KEEP:]
+        version_run_count = sum(
+            1 for r in rows if r.get("version") == assessment_raw.get("version", ""))
     # Until the real per-run series has ≥2 points, synthesize a coarse per-version
     # fallback from history so the charts aren't empty (one point per release).
     if len(timeline) < 2 and raw_history:
@@ -784,17 +775,7 @@ def _write_latest_json(data: dict, output_path: str) -> None:
     as the fallback for offline / file:// viewing where fetch isn't available.
     """
     dest = Path(output_path).with_name("latest.json")
-    fd, tmp = tempfile.mkstemp(suffix=".json", dir=str(dest.parent))
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, str(dest))
-        _make_world_readable(dest)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+    _atomic_write_text(dest, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -802,11 +783,10 @@ def _write_latest_json(data: dict, output_path: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 # (short message, shields-style colour) per verdict — used by the feed + badge.
-def _norm_rec(rec: str) -> str:
-    """Map the retired 🔄 "wait for next release" verdict onto ⏸️ for display, so
-    old history entries (or any stray value) render with a known 3-verdict label
-    instead of an orphaned glyph / a broken risk bar."""
-    return "⏸️" if rec == "🔄" else rec
+# Retired-🔄→⏸️ mapping shared via lib.norm_rec; this DISPLAY call site must keep
+# normalizing independently of the agent's pre-validation one ("keep both
+# normalizers" is about the two call sites, not the copy-pasted code).
+_norm_rec = norm_rec
 
 
 # Badge/feed verdict text + colour. The phrasing must NAME the same verdict as _VERDICT_LABEL
@@ -836,18 +816,13 @@ def _rfc822(iso: str) -> str:
 
 
 def _atomic_write_text(dest: Path, text: str) -> None:
-    """Write text atomically and make it world-readable (Caddy serves it)."""
-    fd, tmp = tempfile.mkstemp(suffix=dest.suffix, dir=str(dest.parent))
+    """Write a web artifact atomically + world-readable (Caddy serves it as its own
+    user). Best-effort BY DESIGN: a failed sibling artifact (feed/badge/llms/…)
+    must not kill the pipeline that just published a good page."""
     try:
-        with os.fdopen(fd, "w") as f:
-            f.write(text)
-        os.replace(tmp, str(dest))
-        _make_world_readable(dest)
+        atomic_write_text(dest, text, mode=0o644)
     except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        pass
 
 
 def _write_feed(data: dict, output_path: str) -> None:

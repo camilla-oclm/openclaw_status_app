@@ -18,18 +18,13 @@ while the verdict still treats the shipped release as carrying the issue.
 """
 
 from openclaw_status import config, github
-from openclaw_status.lib import load_json, now_iso, save_json
+from openclaw_status.lib import load_json_or, now_iso, save_json
 
 
 def load_ledger() -> dict:
     """Load the on-disk ledger, or {} if missing/corrupt."""
-    if not config.ISSUE_LEDGER_FILE.exists():
-        return {}
-    try:
-        data = load_json(config.ISSUE_LEDGER_FILE)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    data = load_json_or(config.ISSUE_LEDGER_FILE, {})
+    return data if isinstance(data, dict) else {}
 
 
 def _merge_fixed(prev, new):
@@ -69,7 +64,6 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         "body": (it.get("body") or prev.get("body", ""))[:600],
         "comments": max(int(it.get("comments") or 0), int(prev.get("comments") or 0)),
         "reactions": max(int(it.get("reactions") or 0), int(prev.get("reactions") or 0)),
-        "total_reactions": max(int(it.get("total_reactions") or 0), int(prev.get("total_reactions") or 0)),
         "created_at": it.get("created_at") or prev.get("created_at", ""),
         # Current scout's labels win when present (even if now empty — a removed label must
         # propagate so severity/category can re-derive); fall back to prev only if absent.

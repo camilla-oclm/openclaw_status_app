@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 
 from openclaw_status import config, release_changes
 from openclaw_status.lib import (
-    openrouter_call, load_json, save_json, log_usage, check_cost_thresholds, notify,
+    openrouter_call, load_json, load_json_or, save_json, log_usage,
+    check_cost_thresholds, notify, norm_rec,
 )
 
 
@@ -471,13 +472,7 @@ def append_history(version: str, assessment: dict, usage: dict, assessed_at: str
         "cost_usd": usage.get("cost_usd", 0),
     }
 
-    history = []
-    if config.HISTORY_FILE.exists():
-        try:
-            history = load_json(config.HISTORY_FILE)
-        except Exception:
-            history = []
-
+    history = load_json_or(config.HISTORY_FILE, [])
     history = [h for h in history if h.get("version") != version]
     history.append(entry)
     # Enforce 90-day limit
@@ -514,12 +509,7 @@ def append_timeline(version: str, assessment: dict, usage: dict, assessed_at: st
         "cost_usd": round(usage.get("cost_usd", 0) or 0, 6),
         "latency_ms": int(usage.get("latency_ms", 0) or 0),
     }
-    timeline = []
-    if config.TIMELINE_FILE.exists():
-        try:
-            timeline = load_json(config.TIMELINE_FILE)
-        except Exception:
-            timeline = []
+    timeline = load_json_or(config.TIMELINE_FILE, [])
     if not isinstance(timeline, list):
         timeline = []
     timeline.append(entry)
@@ -731,11 +721,10 @@ def _run_summary_message(version, recommendation, run_cost, daily_total, monthly
 
 def _previous_verdict(version: str) -> dict | None:
     """The most recent history entry for this version (anchors the sticky verdict)."""
-    if not version or not config.HISTORY_FILE.exists():
+    if not version:
         return None
-    try:
-        hist = load_json(config.HISTORY_FILE)
-    except Exception:
+    hist = load_json_or(config.HISTORY_FILE, None)
+    if hist is None:
         return None
     for h in reversed(hist if isinstance(hist, list) else []):
         if h.get("version") == version:
@@ -743,11 +732,10 @@ def _previous_verdict(version: str) -> dict | None:
     return None
 
 
-def _norm_rec(rec: str) -> str:
-    """Map the retired 🔄 "wait for next release" verdict onto ⏸️ "skip this
-    version" (3-verdict rubric: ✅/⚠️/⏸️). All current verdicts pass through.
-    Keeps old 🔄 history entries / any stray model output coherent."""
-    return "⏸️" if rec == "🔄" else rec
+# The retired-🔄→⏸️ mapping is shared (lib.norm_rec); this call site must KEEP
+# normalizing pre-validation — render normalizes independently for history/timeline
+# (the "keep both normalizers" invariant is about the two call sites, not the code).
+_norm_rec = norm_rec
 
 
 # Caution ordering of the 3 verdicts (higher = more cautious). Used ONLY by the soft
@@ -1184,12 +1172,8 @@ def _compute_assessment_diff(new_assessment: dict) -> dict | None:
 
     Returns None if no previous assessment exists.
     """
-    if not config.ASSESSMENT_FILE.exists():
-        return None
-
-    try:
-        prev_raw = load_json(config.ASSESSMENT_FILE)
-    except Exception:
+    prev_raw = load_json_or(config.ASSESSMENT_FILE, None)
+    if prev_raw is None:
         return None
 
     prev_a = prev_raw.get("assessment", {})
