@@ -84,3 +84,36 @@ def test_latest_assessed_version_ignores_unknown(tmp_path, monkeypatch):
     (tmp_path / "history.json").write_text(
         json.dumps([{"version": "2026.6.9", "assessed_at": "2026-06-21T00:00:00Z"}]))
     assert cli._latest_assessed_version() == "2026.6.9"    # 'unknown' falls through to history
+
+
+# ── L11: lock contention is a BENIGN skip, never a hard failure ──────────────
+# The scheduled tick must not trip the systemd OnFailure alert just because a manual
+# run holds the lock. cmd_full signals this by RETURNING False (not raising / sys.exit),
+# and cmd_tick treats that False as a skip. A regression to sys.exit(1) inside cmd_full
+# would fire false "FAILED" alerts on every contended tick — these pin against it.
+
+def _boom(*a, **k):
+    raise AssertionError("pipeline stages must not run when the lock is held")
+
+
+def test_cmd_full_returns_false_on_lock_contention(monkeypatch):
+    monkeypatch.setattr(cli, "acquire_pipeline_lock", lambda: False)
+    # If contention were mishandled as "acquired", collect would run — make that loud.
+    monkeypatch.setattr(cli, "cmd_collect", _boom)
+    assert cli.cmd_full(types.SimpleNamespace()) is False   # returns, does not raise/exit
+
+
+def test_cmd_tick_skips_benignly_when_full_returns_false(monkeypatch):
+    from openclaw_status import github, scheduler
+    monkeypatch.setattr(github, "latest_release",
+                        lambda: {"version": "1.0", "published_at": "2026-06-30T00:00:00Z"})
+    monkeypatch.setattr(scheduler, "should_run", lambda *a, **k: (True, "assessment due"))
+    monkeypatch.setattr(cli, "_latest_assessed_version", lambda: "0.9")
+    monkeypatch.setattr(cli, "_last_run_started", lambda: None)
+    called = {"full": False}
+    def _full_contended(args, trigger="scheduled"):
+        called["full"] = True
+        return False   # lock held
+    monkeypatch.setattr(cli, "cmd_full", _full_contended)
+    cli.cmd_tick(types.SimpleNamespace())   # no exception / no non-zero exit = pass
+    assert called["full"] is True           # it did try, then skipped benignly

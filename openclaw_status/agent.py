@@ -436,8 +436,14 @@ def validate_assessment(assessment: dict) -> list[str]:
 #  History tracking
 # ═══════════════════════════════════════════════════════════════════════════
 
-def append_history(version: str, assessment: dict, usage: dict):
-    """Append this assessment to the version history file."""
+def append_history(version: str, assessment: dict, usage: dict, assessed_at: str | None = None):
+    """Append this assessment to the version history file.
+
+    `assessed_at` (ISO-8601) is the run's single assessment timestamp — the pipeline
+    passes the same value it stamps into assessment.json/timeline so every surface
+    (the page's "Assessed" line, the continuity reference, the RSS feed, the trend
+    point) shares ONE instant instead of drifting across three separate now() calls.
+    Defaults to now() when called standalone."""
     headline = assessment.get("headline", "")
     reason = ""
     if headline:
@@ -453,7 +459,7 @@ def append_history(version: str, assessment: dict, usage: dict):
 
     entry = {
         "version": version,
-        "assessed_at": datetime.now(timezone.utc).isoformat(),
+        "assessed_at": assessed_at or datetime.now(timezone.utc).isoformat(),
         "recommendation": assessment.get("recommendation", "?"),
         "confidence": assessment.get("confidence", "medium"),
         "headline": headline,
@@ -486,17 +492,18 @@ def append_history(version: str, assessment: dict, usage: dict):
     print(f"📜 History updated: {version} ({entry['recommendation']})")
 
 
-def append_timeline(version: str, assessment: dict, usage: dict):
+def append_timeline(version: str, assessment: dict, usage: dict, assessed_at: str | None = None):
     """Append a per-RUN metric snapshot to timeline.json (the Trends charts' time series).
 
     Unlike append_history (one row per version), this appends every run — so a version
     re-assessed each 6h cadence produces a curve, not a single point. Append-only, pruned
-    by count + 90 days."""
+    by count + 90 days. `assessed_at` shares the run's single timestamp (see append_history);
+    defaults to now() when called standalone."""
     ki = assessment.get("known_issues", []) or []
     def sev(name):
         return sum(1 for i in ki if str(i.get("severity", "")).lower() == name)
     entry = {
-        "t": datetime.now(timezone.utc).isoformat(),
+        "t": assessed_at or datetime.now(timezone.utc).isoformat(),
         "version": version,
         "recommendation": assessment.get("recommendation", "?"),
         "confidence": assessment.get("confidence", "medium"),
@@ -740,6 +747,46 @@ def _norm_rec(rec: str) -> str:
     version" (3-verdict rubric: ✅/⚠️/⏸️). All current verdicts pass through.
     Keeps old 🔄 history entries / any stray model output coherent."""
     return "⏸️" if rec == "🔄" else rec
+
+
+# Caution ordering of the 3 verdicts (higher = more cautious). Used ONLY by the soft
+# continuity check below — it is not a lock and never changes a verdict.
+_CAUTION_RANK = {"✅": 0, "⚠️": 1, "⏸️": 2}
+
+
+def _continuity_contradiction(prev_verdict: dict | None, assessment: dict) -> str | None:
+    """A SOFT, non-overriding signal: did the verdict get LESS cautious than the previous
+    assessment of this SAME (immutable, released) version without the evidence improving?
+
+    A released version is patched only by the next release, so its high/critical issue load
+    can only accumulate between runs (the ledger never drops issues). The continuity rules
+    therefore allow an UPGRADE (⏸️→⚠️/✅, ⚠️→✅) only on real improvement — a blocking issue
+    fixed in the SHIPPED release, or a severe issue debunked/downgraded (which LOWERS the
+    high-severity count). An upgrade whose high/critical count did NOT fall contradicts that.
+
+    We only OBSERVE it — log it, persist it on the record, and alert — and NEVER change the
+    verdict or block the deploy. It's a calibration heuristic, so it fails open: the model may
+    have legitimately corrected an over-cautious prior read, and a human can judge from the note.
+    Returns a short human-readable reason, or None when there's no contradiction to flag."""
+    if not prev_verdict:
+        return None
+    prev_rec = _norm_rec(str(prev_verdict.get("recommendation", "")))
+    new_rec = _norm_rec(str(assessment.get("recommendation", "")))
+    if prev_rec not in _CAUTION_RANK or new_rec not in _CAUTION_RANK:
+        return None
+    # Only an UPGRADE (verdict became strictly less cautious) can contradict continuity.
+    if _CAUTION_RANK[new_rec] >= _CAUTION_RANK[prev_rec]:
+        return None
+    prev_high = prev_verdict.get("high")
+    if not isinstance(prev_high, int):
+        return None   # no comparable prior count — nothing to contradict
+    ki = assessment.get("known_issues", []) or []
+    new_high = sum(1 for i in ki
+                   if str(i.get("severity", "")).lower() in ("high", "critical"))
+    if new_high < prev_high:
+        return None   # evidence genuinely improved — the upgrade is justified
+    return (f"verdict eased {prev_rec}→{new_rec} but high/critical issues did not fall "
+            f"({prev_high}→{new_high}) for immutable v{prev_verdict.get('version', '?')}")
 
 
 def _normalize_recommendation(assessment: dict) -> bool:
@@ -1014,6 +1061,13 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     if thin_reason:
         print(f"   ⚖️  Thin evidence ({thin_reason}) — capped confidence high→medium")
 
+    # ── Soft continuity check (non-overriding) ──
+    # OBSERVE (never block) a verdict that eased vs the prior read of this immutable version
+    # without the evidence improving. Surfaced on the record + alert; the verdict is untouched.
+    continuity_note = _continuity_contradiction(prev_verdict, final_assessment)
+    if continuity_note:
+        print(f"   🔎 Continuity note (non-overriding): {continuity_note}")
+
     # ── Final output ──
     rec = final_assessment.get("recommendation", "?")
     conf = final_assessment.get("confidence", "?")
@@ -1045,6 +1099,10 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         # Validator availability — surfaced so the page can show a "single-model" state
         # instead of a false "2nd model agreed" chip when the validator call failed.
         "validator_unreviewed": validator_unreviewed,
+        # Soft, non-overriding continuity signal (None unless the verdict eased without the
+        # evidence improving — see _continuity_contradiction). Persisted for the record/alert;
+        # deliberately NOT read by render (the public page never surfaces this internal note).
+        "continuity_note": continuity_note,
     }
 
     # ── Diff Notification ──
@@ -1066,8 +1124,8 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     from openclaw_status.render import _can_deploy
     deployable, block_reasons = _can_deploy(output)
     if deployable:
-        append_history(version, final_assessment, total_usage)
-        append_timeline(version, final_assessment, total_usage)
+        append_history(version, final_assessment, total_usage, assessed_at)
+        append_timeline(version, final_assessment, total_usage, assessed_at)
     else:
         print(f"   ⏭️  Not publishable ({'; '.join(block_reasons)}) — skipping history/"
               f"timeline so the shipped page and trend data stay consistent")
@@ -1083,6 +1141,11 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     # Track validator reliability (validator_unreviewed was computed at the validator step).
     if validator_unreviewed:
         print("   ⚠️ Assessment published WITHOUT validator review (validator was unavailable)")
+
+    # Soft continuity signal — a heads-up for review, not a failure (the verdict still ships).
+    if continuity_note:
+        notify(f"🔎 OpenClaw Status: continuity note — {continuity_note}. "
+               f"Verdict published unchanged; review if unexpected.")
 
     output["cost_alerts"] = alerts
 
