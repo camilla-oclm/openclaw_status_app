@@ -480,7 +480,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .prose + .quote{margin-top:1.2rem}
 
 /* ── your setup ────────────────────────────────────────────────────────── */
+.setup-intro{font-size:.82rem; color:var(--muted); margin:-.3rem 0 .85rem; max-width:72ch}
 .setup .chips{display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-bottom:.9rem}
+.pick-clear{border-style:dashed; color:var(--faint)}
+.pick-clear:hover{color:var(--bad); border-color:var(--bad)}
 .setup .chip-grp{flex-basis:100%; font-size:.64rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-top:.3rem}
 .setup .chip-grp:first-child{margin-top:0}
 .pick{font-size:.8rem; font-weight:600; padding:.36rem .82rem; border-radius:999px; cursor:pointer; background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s var(--ease); display:inline-flex; align-items:center; gap:.4rem}
@@ -586,6 +589,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 @media(max-width:760px){
   .hero{grid-template-columns:1fr; gap:1.1rem; padding:1.3rem 1.25rem}
   .signal{order:2}
+}
+@media(max-width:600px){
+  /* Tab strips + filter chip rows become one horizontally-scrollable row instead of
+     wrapping into ragged stacks (orphaned second-row tabs, 5-deep chip walls). */
+  .ltabs, .filters{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch}
+  .ltabs::-webkit-scrollbar, .filters::-webkit-scrollbar{display:none}
+  .ltabs .ltab, .filters .fbtn, .filters .fsep{flex:none}
 }
 @media(max-width:480px){
   .brand .dim{display:none}
@@ -1657,8 +1667,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var cats = {};
     ki.forEach(function(i){ if(i.category) cats[i.category]=(cats[i.category]||0)+1; });
     // Category filters render as a tab strip (styled like the long-tail tabs above);
-    // subsystem filters sit on a secondary row below. Both feed ONE mutually-exclusive
-    // selection (a subsystem tab and a category tab can't both be active).
+    // subsystem filters sit on a secondary row below. They are two INDEPENDENT
+    // dimensions that combine (category AND subsystem — e.g. "Regression × Gateway");
+    // re-clicking the active subsystem chip clears that dimension.
     var catStrip = el("div",{"class":"ltabs ki-cats", role:"group", "aria-label":"Filter known issues by category"});
     catStrip.appendChild(el("button",{"class":"ltab", type:"button", "aria-pressed":"true", "data-f":"all"}, "All ("+ki.length+")"));
     Object.keys(cats).forEach(function(c){
@@ -1693,20 +1704,22 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
     // Cap the rendered rows so the list stays short and scannable even as the ledger
     // grows; "Show all" lifts the cap. The cap applies to the CURRENTLY-FILTERED set.
-    var CAP = 15, showAll = false, activeFilter = "all";
+    var CAP = 15, showAll = false, catFilter = "all", compFilter = null;
     var moreBtn = el("button",{"class":"ki-more", type:"button"}, "");
     s.appendChild(moreBtn);
 
-    function matchRow(row, f){
-      if (f==="all") return true;
-      if (f==="mine") return row.getAttribute("data-mine")==="1";
-      if (f.indexOf("comp:")===0) return (row.getAttribute("data-comp")||"").split(" ").indexOf(f.slice(5)) >= 0;
-      return row.getAttribute("data-cat")===f;
+    function matchRow(row){
+      var catOk = catFilter === "all" ? true
+        : catFilter === "mine" ? row.getAttribute("data-mine") === "1"
+        : row.getAttribute("data-cat") === catFilter;
+      var compOk = !compFilter ||
+        (row.getAttribute("data-comp") || "").split(" ").indexOf(compFilter) >= 0;
+      return catOk && compOk;
     }
     function refresh(){
       var shown = 0, matched = 0;
       list.querySelectorAll(".issue").forEach(function(row){
-        if (!matchRow(row, activeFilter)){ row.style.display = "none"; return; }
+        if (!matchRow(row)){ row.style.display = "none"; return; }
         matched++;
         var vis = showAll || shown < CAP;
         row.style.display = vis ? "" : "none";
@@ -1722,10 +1735,16 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     s.addEventListener("click", function(ev){
       var f = ev.target.closest(".ki-cats .ltab, .ki-subs .fbtn");
       if (f){
-        activeFilter = f.getAttribute("data-f");
-        catStrip.querySelectorAll(".ltab").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===activeFilter?"true":"false"); });
-        if (compRow) compRow.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===activeFilter?"true":"false"); });
-        showAll = false;                 // re-cap when the filter changes
+        var val = f.getAttribute("data-f");
+        if (val.indexOf("comp:") === 0){
+          var k = val.slice(5);
+          compFilter = (compFilter === k) ? null : k;   // re-click clears the dimension
+        } else {
+          catFilter = val;
+        }
+        catStrip.querySelectorAll(".ltab").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===catFilter?"true":"false"); });
+        if (compRow) compRow.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===("comp:"+compFilter)?"true":"false"); });
+        showAll = false;                 // re-cap when a filter changes
         refresh();
       } else if (ev.target.closest(".ki-more")){
         showAll = !showAll;
@@ -2039,6 +2058,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function personalize(){
     var s = el("div",{"class":"section setup", id:"setup"});
     s.appendChild(sectionHead("Your setup", null, "tailor the verdict to what you run"));
+    // The how-to reads BEFORE the pickers — it used to sit in dim small text below
+    // 17 unexplained chips, so mobile users met the wall of chips with no context.
+    s.appendChild(el("div",{"class":"setup-intro"},
+      "Tap what you run — issues hitting your stack get highlighted and the verdict "+
+      "below is tuned to it (saved on this device)."));
     function pickBtn(k, label){
       return el("button",{"class":"pick", type:"button", "aria-pressed": STACK[k]?"true":"false", "data-k":k}, label);
     }
@@ -2047,9 +2071,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     PLAT.forEach(function(p){ chips.appendChild(pickBtn(p[0], p[1]+" "+p[2])); });
     chips.appendChild(el("span",{"class":"chip-grp"}, "Components"));
     COMP.forEach(function(c){ chips.appendChild(pickBtn(c[0], c[1]+" "+c[2])); });
+    var clearBtn = el("button",{"class":"pick pick-clear", type:"button", id:"stack-clear",
+                                title:"Clear every picked platform, channel and component"}, "✕ clear all");
+    if (!stackActive()) clearBtn.setAttribute("hidden","");
+    chips.appendChild(clearBtn);
     s.appendChild(chips);
     s.appendChild(personalRisk());
     chips.addEventListener("click", function(ev){
+      if (ev.target.closest(".pick-clear")){
+        for (var k0 in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k0)) delete STACK[k0]; }
+        saveStack(); applyStack();
+        return;
+      }
       var b = ev.target.closest(".pick"); if(!b) return;
       var k = b.getAttribute("data-k");
       if (STACK[k]) delete STACK[k]; else STACK[k]=true;
@@ -2067,19 +2100,29 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       setup.querySelectorAll(".pick").forEach(function(b){
         b.setAttribute("aria-pressed", STACK[b.getAttribute("data-k")] ? "true" : "false");
       });
+      var clr = document.getElementById("stack-clear");
+      if (clr){ if (stackActive()) clr.removeAttribute("hidden"); else clr.setAttribute("hidden",""); }
       var risk = setup.querySelector(".risk, .hint");
       if (risk) risk.parentNode.replaceChild(personalRisk(), risk);
     }
     var oldI = document.getElementById("issues");
     if (oldI){
-      var af = oldI.querySelector('.fbtn[aria-pressed="true"]');
-      af = af ? af.getAttribute("data-f") : "all";
+      // Preserve BOTH active filter dimensions across the rebuild (category tab +
+      // subsystem chip — they combine).
+      var ac = oldI.querySelector('.ki-cats .ltab[aria-pressed="true"]');
+      ac = ac ? ac.getAttribute("data-f") : "all";
+      var af = oldI.querySelector('.ki-subs .fbtn[aria-pressed="true"]');
+      af = af ? af.getAttribute("data-f") : null;
       var freshI = issues();
       if (freshI){
         oldI.parentNode.replaceChild(freshI, oldI);
-        if (af && af !== "all"){
-          var b = freshI.querySelector('.fbtn[data-f="'+af+'"]');
-          if (b) b.click();   // re-apply the previously active filter (else stays "all")
+        if (ac && ac !== "all"){
+          var bc = freshI.querySelector('.ki-cats .ltab[data-f="'+ac+'"]');
+          if (bc) bc.click();   // (a vanished "mine" tab after clear-all safely stays "all")
+        }
+        if (af){
+          var bf = freshI.querySelector('.ki-subs .fbtn[data-f="'+af+'"]');
+          if (bf) bf.click();
         }
       }
     }
@@ -2099,7 +2142,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   }
   function personalRisk(){
     if (!stackActive()){
-      return el("div",{"class":"hint"}, "Pick the platforms, channels, and OpenClaw components you rely on — your stack's issues get highlighted and the read below is tuned to it (saved on this device).");
+      // The how-to lives in .setup-intro above the chips; this stays short.
+      return el("div",{"class":"hint"}, "No setup picked — you're reading the global verdict.");
     }
     var pi = DATA.platform_impact || {};
     var ki = DATA.known_issues || [];

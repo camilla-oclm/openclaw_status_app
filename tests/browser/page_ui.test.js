@@ -34,7 +34,7 @@ const DATA = {
       affects_version: true, platforms: ["all"], components: ["memory"], reactions: 3 },
     { number: 2, title: "Second issue", severity: "high", category: "post_release",
       affects_version: false, platforms: ["linux"], components: ["gateway"] },
-    { number: 3, title: "Third issue", severity: "medium", category: "post_release",
+    { number: 3, title: "Third issue", severity: "medium", category: "regression",
       affects_version: false, platforms: ["linux"], components: ["gateway"] },
     { number: 4, title: "Fourth issue", severity: "low", category: "active",
       affects_version: false, platforms: ["discord"], components: ["gateway"] },
@@ -93,6 +93,40 @@ const DATA = {
   t("grid is sorted hot-first", meters.length > 0 && /gateway/i.test(meters[0].name));
   t("old segmented meters are gone", await page.evaluate(() =>
     document.querySelectorAll(".plat .seg").length) === 0);
+
+  // 5. Known-issues filters: category × subsystem are combinable dimensions.
+  const visible = () => page.evaluate(() =>
+    Array.from(document.querySelectorAll("#issues .issue"))
+      .filter((r) => r.style.display !== "none")
+      .map((r) => r.querySelector(".inum").textContent).join(","));
+  await page.evaluate(() => document.querySelector('.ki-cats .ltab[data-f="regression"]').click());
+  t("category filter alone", (await visible()) === "#90361,#3");
+  await page.evaluate(() => document.querySelector('.ki-subs .fbtn[data-f="comp:gateway"]').click());
+  t("category × subsystem combine", (await visible()) === "#3");
+  await page.evaluate(() => document.querySelector('.ki-subs .fbtn[data-f="comp:gateway"]').click());
+  t("re-clicking the subsystem chip clears that dimension", (await visible()) === "#90361,#3");
+
+  // 6. A stack toggle rebuilds the issues section — BOTH filter dimensions survive.
+  await page.evaluate(() => document.querySelector('.setup .pick[data-k="linux"]').click());
+  const catPressed = await page.evaluate(() =>
+    document.querySelector('.ki-cats .ltab[data-f="regression"]').getAttribute("aria-pressed"));
+  t("category filter survives a stack toggle", catPressed === "true" && (await visible()) === "#90361,#3");
+
+  // 7. "Clear all" wipes the stack and hides itself; the intro reads above the chips.
+  const clearShown = await page.evaluate(() => !document.getElementById("stack-clear").hidden);
+  await page.evaluate(() => document.getElementById("stack-clear").click());
+  const cleared = await page.evaluate(() => ({
+    pressed: document.querySelectorAll('.setup .pick[aria-pressed="true"]').length,
+    hidden: document.getElementById("stack-clear").hidden,
+  }));
+  t("clear-all appears once a stack is picked", clearShown);
+  t("clear-all wipes every pick and hides", cleared.pressed === 0 && cleared.hidden);
+  t("setup intro sits above the chips", await page.evaluate(() => {
+    const intro = document.querySelector(".setup .setup-intro");
+    const chips = document.querySelector(".setup .chips");
+    return !!intro && !!chips &&
+      (intro.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  }));
 
   t("no page errors", errs.length === 0);
 
