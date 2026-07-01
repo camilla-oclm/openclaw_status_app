@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from openclaw_status import config
-from openclaw_status.lib import load_json
+from openclaw_status.lib import load_json, strip_md_links
 
 
 def _make_world_readable(path) -> None:
@@ -275,7 +275,9 @@ def _extract_highlights(body: str, limit: int = 6) -> list:
     section = m.group(1) if m else body
     out = []
     for b in _BULLET_RE.findall(section):
-        b = re.sub(r"\s+", " ", b).strip()
+        # Unwrap "[#N](url)" markdown links — the page renders these bullets as plain
+        # text, so wrapped links would show literally (and bloat the 240-char cut).
+        b = re.sub(r"\s+", " ", strip_md_links(b)).strip()
         if b:
             if len(b) > 240:
                 # Cut on a word boundary (not mid-word) and signal there's more.

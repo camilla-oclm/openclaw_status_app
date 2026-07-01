@@ -2306,7 +2306,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     // filters drop approx points with no issue counts), which read as placeholder noise.
     if (real.length < 3) return null;
     var s=el("div",{"class":"section", id:"trends"});
-    s.appendChild(sectionHead("Trends", null, "tracked every run · about every 6 hours"));
+    s.appendChild(sectionHead("Trends", null, "tracked per assessment · adaptive cadence (8–24h)"));
     var grid=el("div",{"class":"trends-grid"});
     grid.appendChild(tCard("Issue pressure","open issues & regressions per run", issuePressureChart(tl)));
     grid.appendChild(tCard("Severity mix","make-up of known issues", severityChart(tl)));

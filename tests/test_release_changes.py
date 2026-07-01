@@ -140,6 +140,39 @@ def test_heading_variants_map_to_buckets():
     assert [f["title"] for f in ch["features"]] == ["shiny thing"]
 
 
+def test_md_links_unwrapped_in_parsed_items():
+    """A bullet carrying raw markdown links must parse to clean text — the page renders
+    plain text, so "[#82909](url)" would show literally (the live What's-new leak)."""
+    body = (
+        "### Fixes\n\n"
+        "- Telegram reply chains keep cached replies attached."
+        " [#82909](https://github.com/openclaw/openclaw/pull/82909) Thanks @lidge-jun.\n"
+        "- Slack SecretRef reads use resolved credentials."
+        " [7da955f](https://github.com/openclaw/openclaw/commit/7da955fae4ca2083599aa33a1f93dbfff53cb187)\n"
+    )
+    ch = rc.parse_changelog(body)
+    assert len(ch["fixes"]) == 2                    # unwrapping never changes the count
+    joined = " | ".join(f["title"] for f in ch["fixes"])
+    assert "](http" not in joined and "[" not in joined
+    assert "#82909" in joined                       # the ref text survives (page linkifies it)
+    assert "7da955f" in joined
+
+
+def test_md_link_unwrapped_before_title_split():
+    """The URL's '://' colon must not trip the 'Category: description' title heuristic —
+    links unwrap BEFORE the split."""
+    body = "### Fixes\n\n- [Session guide](https://docs.example.com/how): updated for v2.\n"
+    fix = rc.parse_changelog(body)["fixes"][0]
+    assert fix["title"] == "Session guide"
+
+
+def test_bold_md_link_lead_still_splits_title():
+    body = "### Highlights\n\n- **[Turbo mode](https://ex.com/x):** twice the speed.\n"
+    feat = rc.parse_changelog(body)["features"][0]
+    assert feat["title"] == "Turbo mode"
+    assert feat["value"].startswith("twice the speed")
+
+
 def test_full_changelog_tail_is_not_curated():
     """The bulky '### Full Changelog' PR-log tail must stay OUT of the curated changelog even
     though its name contains 'change'."""
