@@ -34,7 +34,8 @@
   --bg:#16181d; --bg-elev:#1a1d23;
   --card:#1e222a; --card2:#232831; --card3:#2a303b;
   --border:#30353f; --border2:#3d434f;
-  --text:#d3d6dc; --muted:#969ca8; --faint:#686e79;
+  --text:#d3d6dc; --muted:#969ca8; --faint:#808795;  /* faint ≥4.5:1 on bg+card (AA small text) */
+  --on-accent:#04121a;                               /* text on accent-filled chips/buttons */
   --accent:#45c4cc; --accent2:#8294cf;        /* muted teal → periwinkle */
   --good:#57c285; --warn:#d6ab57; --orange:#e8945e; --bad:#e67483; --info:#7e9fd6; --gray:#8b919d;
   --good-bg:rgba(87,194,133,.12); --warn-bg:rgba(214,171,87,.13);
@@ -60,7 +61,7 @@ html[data-theme="light"]{
   --bg:#f4f2ed; --bg-elev:#ece9e2;
   --card:#fbfaf7; --card2:#f3f1ea; --card3:#ece8e0;
   --border:#e2ddd3; --border2:#d0ccc0;
-  --text:#2f3238; --muted:#5e616a; --faint:#8c8f97;
+  --text:#2f3238; --muted:#5e616a; --faint:#696c74;  /* ≥4.5:1 on paper bg+card */
   --accent:#18929b; --accent2:#5566b8;
   --good:#1f8f57; --warn:#8a6a1f; --orange:#b9591f; --bad:#c5414f; --info:#3a63c4; --gray:#6b6f78;
   --good-bg:rgba(31,143,87,.10); --warn-bg:rgba(138,106,31,.12);
@@ -309,7 +310,7 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
   background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s var(--ease);
 }
 .fbtn:hover{color:var(--text); border-color:var(--accent)}
-.fbtn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#04121a; font-weight:700}
+.fbtn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:700}
 .fcomp[aria-pressed="true"]{background:var(--accent2); border-color:var(--accent2)}
 .fsep{display:inline-flex; align-items:center; margin-left:.35rem; padding-left:.5rem; border-left:1px solid var(--border2);
   font-size:.64rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint)}
@@ -488,7 +489,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .setup .chip-grp:first-child{margin-top:0}
 .pick{font-size:.8rem; font-weight:600; padding:.36rem .82rem; border-radius:999px; cursor:pointer; background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s var(--ease); display:inline-flex; align-items:center; gap:.4rem}
 .pick:hover{color:var(--text); border-color:var(--accent)}
-.pick[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#04121a; font-weight:700}
+.pick[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:700}
 .setup .risk{padding:.9rem 1.1rem; border-radius:var(--r-md); font-size:.9rem; color:var(--text); background:var(--tone-bg); border:1px solid var(--tone-bd)}
 .setup .risk .rh{font-weight:700; margin-bottom:.2rem}
 .setup .hint{color:var(--faint); font-size:.84rem}
@@ -566,6 +567,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .foot .disclaimer{margin-top:1rem; font-size:.75rem; color:var(--faint); line-height:1.5}
 
 .errbox{max-width:600px; margin:4rem auto; text-align:center; color:var(--muted)}
+
+/* ── a11y helpers ──────────────────────────────────────────────────────── */
+.skip-link{position:absolute; left:-9999px; top:0; z-index:99; background:var(--accent); color:var(--on-accent); padding:.6rem 1.1rem; border-radius:0 0 var(--r-sm) 0; font-weight:700; text-decoration:none}
+.skip-link:focus{left:0}
+.vh{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0}
 .errbox h2{color:var(--text); margin-bottom:.5rem}
 
 /* server-rendered answer: crawlable / no-JS fallback inside #app (JS replaces it on load) */
@@ -612,6 +618,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 </head>
 <body>
 
+<a class="skip-link" href="#app">Skip to content</a>
+<div id="live" class="vh" aria-live="polite"></div>
+
 <header class="topbar tone-muted">
   <div class="brand"><span class="logo"><svg viewBox="0 0 100 100" width="20" height="20" fill="none" aria-hidden="true"><path d="M73 30.7 A30 30 0 1 0 73 69.3" stroke="currentColor" stroke-width="13" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="currentColor"/></svg></span> <span class="wm">ClawStat<span class="dot">.</span>us</span> <span class="dim">release health</span></div>
   <div class="bar-right">
@@ -620,7 +629,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   </div>
 </header>
 
-<main class="wrap"><div id="app"><!--SSR--></div></main>
+<main class="wrap"><div id="app" tabindex="-1"><!--SSR--></div></main>
 
 <script id="assessment-data" type="application/json">
 {
@@ -1156,6 +1165,16 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   }
   function issueWord(n){ return n + (n === 1 ? " issue" : " issues"); }
 
+  // Announce a state change to assistive tech via the body-level polite live region
+  // (filter results, per-setup verdict updates — changes that are otherwise silent).
+  // Clear-then-set (with a beat in between) so repeating the same text re-announces.
+  function announce(msg){
+    var r = document.getElementById("live");
+    if (!r) return;
+    r.textContent = "";
+    setTimeout(function(){ r.textContent = msg; }, 30);
+  }
+
   // ── personalization: the user's platform/channel "stack" (localStorage) ──
   // A plain { key:true } set; render() reads it so a re-render re-applies the
   // highlights consistently. Toggling a chip just saves + re-renders.
@@ -1348,7 +1367,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     svg.appendChild(svgEl("polygon",{points: xs(0)+","+(HT-pad)+" "+pts.join(" ")+" "+xs(n-1)+","+(HT-pad), fill:"var(--tone-bg)"}));
     svg.appendChild(svgEl("polyline",{points: pts.join(" "), fill:"none", stroke:"var(--tone)", "stroke-width":"2", "stroke-linejoin":"round", "stroke-linecap":"round"}));
     svg.appendChild(svgEl("circle",{cx:xs(n-1), cy:ys(vals[n-1]), r:"3", fill:"var(--tone)"}));
-    var wrap = el("div",{"class":"sigtrend"});
+    var wrap = el("div",{"class":"sigtrend", role:"img", "aria-label": head + " across recent assessments"});
+    svg.setAttribute("aria-hidden","true");
     wrap.appendChild(svg);
     wrap.appendChild(el("div",{"class":"cap"},[ el("span",null,firstLabel), el("span",null,"now") ]));
     return {head:head, node:wrap};
@@ -1731,6 +1751,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       } else {
         moreBtn.style.display = "none";
       }
+      return matched;
     }
     s.addEventListener("click", function(ev){
       var f = ev.target.closest(".ki-cats .ltab, .ki-subs .fbtn");
@@ -1745,10 +1766,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         catStrip.querySelectorAll(".ltab").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===catFilter?"true":"false"); });
         if (compRow) compRow.querySelectorAll(".fbtn").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-f")===("comp:"+compFilter)?"true":"false"); });
         showAll = false;                 // re-cap when a filter changes
-        refresh();
+        var m = refresh();
+        // Real user clicks only — the synthetic re-apply clicks in applyStack() would
+        // otherwise talk over the setup announcement.
+        if (ev.isTrusted) announce(m + " of " + ki.length + " issues shown");
       } else if (ev.target.closest(".ki-more")){
         showAll = !showAll;
-        refresh();
+        var m2 = refresh();
+        if (ev.isTrusted) announce(showAll ? ("Showing all " + m2 + " issues") : "List collapsed");
       }
     });
     refresh();
@@ -1769,7 +1794,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var s = el("div",{"class":"section"});
     s.appendChild(sectionHead("What's new in this release", total, "from the release notes"));
 
-    var tabs = el("div",{"class":"tabs", role:"tablist"});
+    var tabs = el("div",{"class":"tabs", role:"tablist", "aria-label":"Release changes"});
     var panel = el("div",{"class":"panel"});
     groups.forEach(function(g, idx){
       tabs.appendChild(el("button",{"class":"tab", type:"button", role:"tab", "data-k":g.key, "aria-selected": idx===0?"true":"false"},
@@ -1777,6 +1802,23 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     });
     s.appendChild(tabs);
     s.appendChild(panel);
+    // Keyboard parity with the long-tail tabs: roving tabindex + Arrow/Home/End.
+    var tabsArr = Array.prototype.slice.call(tabs.querySelectorAll(".tab"));
+    function syncTabIndex(){
+      tabsArr.forEach(function(t){ t.tabIndex = t.getAttribute("aria-selected")==="true" ? 0 : -1; });
+    }
+    syncTabIndex();
+    tabs.addEventListener("keydown", function(ev){
+      var i = tabsArr.indexOf(document.activeElement);
+      if (i < 0) return;
+      var j = -1;
+      if (ev.key === "ArrowRight" || ev.key === "ArrowDown") j = (i+1) % tabsArr.length;
+      else if (ev.key === "ArrowLeft" || ev.key === "ArrowUp") j = (i-1+tabsArr.length) % tabsArr.length;
+      else if (ev.key === "Home") j = 0;
+      else if (ev.key === "End") j = tabsArr.length-1;
+      if (j < 0) return;
+      ev.preventDefault(); tabsArr[j].click(); tabsArr[j].focus();
+    });
 
     function paint(key){
       panel.textContent = "";
@@ -1792,6 +1834,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     tabs.addEventListener("click", function(ev){
       var tab = ev.target.closest(".tab"); if(!tab) return;
       tabs.querySelectorAll(".tab").forEach(function(t){ t.setAttribute("aria-selected", t===tab?"true":"false"); });
+      syncTabIndex();
       paint(tab.getAttribute("data-k"));
     });
     paint(groups[0].key);
@@ -2138,6 +2181,12 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         cta.appendChild(typeof n === "object" ? n : document.createTextNode(String(n)));
       });
     }
+    if (stackActive()){
+      var svd = setupVerdict();
+      announce("For your setup: " + ((VERDICTS[svd.rec]||{}).label || String(svd.rec)));
+    } else {
+      announce("Setup cleared — showing the global verdict.");
+    }
     addAnchors();   // rebuilt sections lost their permalink "#" — re-add (idempotent)
   }
   function personalRisk(){
@@ -2293,6 +2342,17 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return lg;
   }
   function tCard(title,sub,body){
+    // Charts are unlabeled vector soup to assistive tech — expose the card's
+    // title/subtitle as the chart's accessible name and hide the raw SVG geometry.
+    if (body && body.querySelector){
+      var cw = body.querySelector(".chartwrap");
+      if (cw){
+        cw.setAttribute("role","img");
+        cw.setAttribute("aria-label", title + " chart — " + sub);
+        var sv = cw.querySelector("svg");
+        if (sv) sv.setAttribute("aria-hidden","true");
+      }
+    }
     return el("div",{"class":"tcard"},[ el("div",{"class":"tc-h"},[ el("span",{"class":"tc-t"},title), el("span",{"class":"tc-s"},sub) ]), body ]);
   }
   function tEmpty(){ return el("div",{"class":"tc-empty"}, "Collecting — fills in as runs accumulate"); }

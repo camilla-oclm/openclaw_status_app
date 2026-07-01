@@ -39,7 +39,9 @@ const DATA = {
     { number: 4, title: "Fourth issue", severity: "low", category: "active",
       affects_version: false, platforms: ["discord"], components: ["gateway"] },
   ],
-  evidence: {}, changes: {},
+  evidence: {},
+  changes: { features: [{ title: "New turbo mode", value: "twice the speed" }],
+             fixes: [{ title: "Fixed the flux capacitor", verified: true }], breaking: [] },
 };
 
 (async () => {
@@ -127,6 +129,28 @@ const DATA = {
     return !!intro && !!chips &&
       (intro.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
   }));
+
+  // 8. A11y: skip-link + live region present; changelog tabs carry a roving tabindex.
+  t("skip-link targets #app", await page.evaluate(() => {
+    const a = document.querySelector("a.skip-link");
+    return !!a && a.getAttribute("href") === "#app" && !!document.getElementById("app");
+  }));
+  t("polite live region exists", await page.evaluate(() => {
+    const r = document.getElementById("live");
+    return !!r && r.getAttribute("aria-live") === "polite";
+  }));
+  t("changelog tabs have a roving tabindex", await page.evaluate(() => {
+    const ts = Array.from(document.querySelectorAll('.tabs[role="tablist"] .tab'));
+    return ts.length >= 2 &&
+      ts.filter((x) => x.tabIndex === 0).length === 1 &&
+      ts.filter((x) => x.tabIndex === -1).length === ts.length - 1;
+  }));
+
+  // 9. A real (trusted) filter click announces the result count to the live region.
+  await page.click('.ki-cats .ltab[data-f="all"]');
+  await new Promise((r) => setTimeout(r, 250));
+  const liveMsg = await page.evaluate(() => document.getElementById("live").textContent);
+  t("filter click announces to the live region", /4 of 4 issues shown/.test(liveMsg));
 
   t("no page errors", errs.length === 0);
 
