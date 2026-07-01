@@ -478,6 +478,85 @@ def test_append_timeline_prunes_to_keep(tmp_path, monkeypatch):
     assert len(json.loads(tl.read_text())) == 5
 
 
+# ── shared assessed_at (one run stamp across output / history / timeline) ──────
+
+def test_append_history_uses_passed_assessed_at(tmp_path, monkeypatch):
+    # The pipeline threads its single assessed_at so the history entry, the timeline
+    # point, and assessment.json all carry the SAME instant (no 3-way now() drift).
+    hist = tmp_path / "history.json"
+    monkeypatch.setattr(config, "HISTORY_FILE", hist)
+    stamp = "2026-06-30T12:00:00+00:00"
+    agent.append_history("1.0", _valid_assessment(), {"cost_usd": 0.0}, assessed_at=stamp)
+    assert json.loads(hist.read_text())[0]["assessed_at"] == stamp
+
+
+def test_append_timeline_uses_passed_assessed_at(tmp_path, monkeypatch):
+    tl = tmp_path / "timeline.json"
+    monkeypatch.setattr(config, "TIMELINE_FILE", tl)
+    stamp = "2026-06-30T12:00:00+00:00"
+    agent.append_timeline("1.0", _valid_assessment(), {"cost_usd": 0.0, "latency_ms": 0},
+                          assessed_at=stamp)
+    assert json.loads(tl.read_text())[0]["t"] == stamp
+
+
+# ── soft continuity/count contradiction (non-overriding) ──────────────────────
+
+def _prev(rec, high, version="1.0"):
+    return {"version": version, "recommendation": rec, "high": high}
+
+
+def _ki(n_high):
+    return [{"severity": "high", "category": "active"} for _ in range(n_high)]
+
+
+def test_continuity_flags_upgrade_without_evidence_improving():
+    # Verdict eased ⏸️ → ✅ but the high/critical count did NOT fall → soft flag.
+    prev = _prev("⏸️", high=3)
+    a = _valid_assessment(recommendation="✅", known_issues=_ki(3))
+    note = agent._continuity_contradiction(prev, a)
+    assert note and "⏸️→✅" in note and "3→3" in note
+
+
+def test_continuity_silent_when_high_count_falls():
+    # An upgrade justified by fewer high issues (debunked/downgraded) is NOT flagged.
+    prev = _prev("⏸️", high=3)
+    a = _valid_assessment(recommendation="⚠️", known_issues=_ki(1))
+    assert agent._continuity_contradiction(prev, a) is None
+
+
+def test_continuity_silent_on_downgrade():
+    # Getting MORE cautious can never contradict continuity.
+    prev = _prev("⚠️", high=1)
+    a = _valid_assessment(recommendation="⏸️", known_issues=_ki(5))
+    assert agent._continuity_contradiction(prev, a) is None
+
+
+def test_continuity_silent_when_verdict_unchanged():
+    prev = _prev("⚠️", high=2)
+    a = _valid_assessment(recommendation="⚠️", known_issues=_ki(2))
+    assert agent._continuity_contradiction(prev, a) is None
+
+
+def test_continuity_silent_without_prev():
+    a = _valid_assessment(recommendation="✅", known_issues=_ki(3))
+    assert agent._continuity_contradiction(None, a) is None
+
+
+def test_continuity_normalizes_retired_verdict():
+    # A prior 🔄 (retired) reads as ⏸️, so ⏸️→⚠️ with a flat high count still flags.
+    prev = _prev("🔄", high=2)
+    a = _valid_assessment(recommendation="⚠️", known_issues=_ki(2))
+    note = agent._continuity_contradiction(prev, a)
+    assert note and "⏸️→⚠️" in note
+
+
+def test_continuity_silent_when_prev_count_missing():
+    # No comparable prior count → nothing to contradict (fail open).
+    prev = {"version": "1.0", "recommendation": "⏸️"}   # no "high"
+    a = _valid_assessment(recommendation="✅", known_issues=_ki(3))
+    assert agent._continuity_contradiction(prev, a) is None
+
+
 # ── budget gate ─────────────────────────────────────────────────────────────
 
 def test_budget_gate_aborts_without_spending(tmp_path, monkeypatch):
