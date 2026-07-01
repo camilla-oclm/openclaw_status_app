@@ -94,7 +94,10 @@ OUTPUT FORMAT: Return ONLY valid JSON. No markdown code fences, no commentary ou
 
 """ + _OUTPUT_SCHEMA % (
     "one line summary of the assessment",
-    "2-4 paragraph argument with evidence. Cite specific issue numbers, PRs, and sources. Explain the risk/reward tradeoff.",
+    "2-4 paragraph argument with evidence. Cite specific issue numbers, PRs, and sources. "
+    "Explain the risk/reward tradeoff. Write for a user deciding whether to update — describe "
+    "the release and its issues; never mention this analysis process, the validator, or prior "
+    "assessment passes.",
 )
 
 VALIDATOR_PROMPT = """You are a release assessment VALIDATOR. Your job is to independently scrutinize another analyst's assessment of an OpenClaw release and catch errors, missed issues, and mis-categorizations.
@@ -150,12 +153,17 @@ RULES:
   data and fix its severity / category / platform if the validator is right
 - The recommendation MUST be one of exactly 3 values: ✅ | ⚠️ | ⏸️
 - All other rules from the original prompt still apply
+- Address the critique in the assessment's CONTENT (verdict, issues, evidence) — but `thesis`
+  and `headline` are user-facing copy about the RELEASE: never mention the validator, the
+  original analysis, or this review process in them
 
 OUTPUT FORMAT: Return ONLY valid JSON. Same schema as before.
 
 """ + _OUTPUT_SCHEMA % (
-    "one line summary of the REFINED assessment",
-    "2-4 paragraph argument with evidence. Address the validator's critique.",
+    "one line summary of the assessment",
+    "2-4 paragraph argument with evidence. Incorporate what the critique changed, but write "
+    "for the end user deciding whether to update — describe the release itself; never mention "
+    "the validator, the original analysis, or the review process.",
 )
 
 
@@ -686,8 +694,9 @@ def _step_refinement(context: str, primary_assessment: dict, validator_review: d
         f"## Your Previous Assessment\n\n{json.dumps(clean_a, indent=2)}\n\n"
         f"## Validator's Review\n\n{json.dumps(validator_review, indent=2)}\n\n"
         f"Review the validator's critique and produce a refined assessment. "
-        f"If the critique doesn't hold up, keep your position but explain why. "
-        f"If the validator found real problems, correct your analysis."
+        f"Correct anything the validator got right; keep your position where the critique "
+        f"doesn't hold up. Either way, the output is a fresh assessment of the RELEASE for "
+        f"end users — do not reference the validator or this review in any output field."
     )
 
     result = openrouter_call(

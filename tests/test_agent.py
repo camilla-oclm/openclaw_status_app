@@ -20,6 +20,25 @@ def _valid_assessment(**overrides):
     return base
 
 
+# ── prompt pins: thesis voice/audience ───────────────────────────────────────
+# The thesis reaches the public page + llms-full.txt verbatim. Both thesis slots must
+# carry the audience constraint so the copy describes the RELEASE, never the internal
+# analyst/validator exchange (a live page once opened "The validator correctly
+# identifies that the original analysis omitted…").
+
+def test_analyst_thesis_slot_has_audience_constraint():
+    assert "never mention this analysis process, the validator" in agent.SYSTEM_PROMPT
+
+
+def test_refine_prompt_is_user_facing():
+    assert "never mention the validator, the original analysis" in agent.REFINEMENT_PROMPT
+    # The refine HEADLINE SLOT must not be primed to say "REFINED" to end users
+    # (the prompt's own job description may still say "produce a REFINED assessment").
+    assert "summary of the REFINED" not in agent.REFINEMENT_PROMPT
+    # And the refine pass keeps the rule that critique goes into content, not copy.
+    assert "user-facing copy about the RELEASE" in agent.REFINEMENT_PROMPT
+
+
 # ── validate_assessment ─────────────────────────────────────────────────────
 
 def test_validate_clean_assessment():
