@@ -42,11 +42,7 @@ _OUTPUT_SCHEMA = """{
     "clawsweeper_decision": "keep_open | close | unknown",
     "fixed_in": "version or null if not fixed"
   }],
-  "changes": {
-    "breaking": [{"title": "...", "impact": "..."}],
-    "fixes": [{"title": "...", "verified": true}],
-    "features": [{"title": "...", "value": "..."}]
-  },
+  "changes": {"breaking": [{"title": "...", "impact": "..."}], "fixes": [{"title": "...", "verified": true}], "features": [{"title": "...", "value": "..."}]},
   "sentiment_summary": "community sentiment in 1-2 sentences, cite sources",
   "platform_impact": {
     "windows": "none | low | medium | high",
@@ -77,11 +73,7 @@ RULES:
    - `post_release`: filed after the release and affects this version, but NOT a confirmed regression.
    - `diamond_lobster`: a top-rated tracked issue (the 🦞 quality rating).
    - `active`: any other ongoing open issue.
-11. **Extract changes from the changelog** into the `changes` field. The release body has "### Highlights", "### Changes", and "### Fixes" sections of bullet points:
-   - `changes.features`: items from "### Highlights" (new capabilities).
-   - `changes.fixes`: items from "### Fixes", set `verified: true`.
-   - `changes.breaking`: ONLY genuine breaking changes — an explicit "### Breaking Changes" section or items clearly marked breaking. The general "### Changes" section is NOT breaking; leave those out of `breaking`.
-   - Each item has a concise `title` (1 line). (This field is also computed deterministically from the changelog, so a faithful extraction just needs to match the sections.)
+11. **`changes`** is recomputed deterministically from the changelog's ### sections after your pass — your extraction is only the fallback for an unstructured body, so keep it cheap: features ← "### Highlights", fixes ← "### Fixes" (set `verified: true`), breaking ← ONLY an explicit Breaking section (the general "### Changes" section is NOT breaking); one-line titles.
 12. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
 13. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
 

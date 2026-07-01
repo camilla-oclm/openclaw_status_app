@@ -30,6 +30,14 @@ def test_analyst_thesis_slot_has_audience_constraint():
     assert "never mention this analysis process, the validator" in agent.SYSTEM_PROMPT
 
 
+def test_changes_rule_keeps_fallback_guidance():
+    # `changes` is overwritten by the deterministic changelog parser, but the analyst's
+    # extraction stays the fallback for an unstructured body — the (slimmed) rule must
+    # keep saying so, and the schema must keep the field.
+    assert "recomputed deterministically" in agent.SYSTEM_PROMPT
+    assert '"changes"' in agent._OUTPUT_SCHEMA
+
+
 def test_refine_prompt_is_user_facing():
     assert "never mention the validator, the original analysis" in agent.REFINEMENT_PROMPT
     # The refine HEADLINE SLOT must not be primed to say "REFINED" to end users
