@@ -648,6 +648,14 @@ def test_extract_highlights_pulls_bullets():
     assert all("not this" not in h for h in hl)
 
 
+def test_extract_highlights_unwraps_md_links():
+    # Highlights feed the "Catching up?" bullets, rendered as plain text — raw
+    # "[#N](url)" markdown must not reach the page (the live leak this pins).
+    body = ("### Highlights\n"
+            "- Reply chains fixed. [#82909](https://github.com/openclaw/openclaw/pull/82909)\n")
+    assert render._extract_highlights(body) == ["Reply chains fixed. #82909"]
+
+
 def test_extract_highlights_truncates_on_word_boundary():
     # A long bullet must not be sliced mid-word; it gets an ellipsis instead.
     long = "word " * 80  # ~400 chars, well over the 240 cap

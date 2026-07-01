@@ -18,6 +18,8 @@ no recognizable sections (`changes_for_release`).
 
 import re
 
+from openclaw_status.lib import strip_md_links
+
 _KEYS = ("breaking", "fixes", "features")
 
 # Section headers (## … ####) and top-level bullets within a section.
@@ -88,6 +90,10 @@ def _bullets(text: str, extra_key: str | None, extra_val=None) -> list[dict]:
     """
     items = []
     for raw in _BULLET_RE.findall(text or ""):
+        # Unwrap "[#N](url)" links BEFORE the title split — the URL's "://" colon would
+        # otherwise trip the "Category: description" heuristic, and downstream the page
+        # renders plain text, so a wrapped link would show its raw markdown literally.
+        raw = strip_md_links(raw)
         title, rest = _split_title(raw)
         title = _clean(title)
         if not title:

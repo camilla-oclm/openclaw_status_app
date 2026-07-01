@@ -106,6 +106,21 @@ def test_sanitize_for_html_escapes_amp_and_lt():
     assert lib.sanitize_for_html("a < b & c") == "a &lt; b &amp; c"
 
 
+# ── strip_md_links ──────────────────────────────────────────────────────────
+
+def test_strip_md_links_unwraps_links_and_images():
+    assert lib.strip_md_links("see [#82909](https://github.com/x/pull/82909) now") == "see #82909 now"
+    assert lib.strip_md_links("shot: ![the alt](https://x.y/i.png)") == "shot: the alt"
+
+
+def test_strip_md_links_leaves_non_links_alone():
+    # Bare brackets, parens, and non-http targets are not markdown links — untouched.
+    assert lib.strip_md_links("[Bug]: crash (#123) [tag]") == "[Bug]: crash (#123) [tag]"
+    assert lib.strip_md_links("[rel](not-a-url)") == "[rel](not-a-url)"
+    assert lib.strip_md_links("") == ""
+    assert lib.strip_md_links(None) == ""
+
+
 # ── version_from_release ────────────────────────────────────────────────────
 
 def test_version_from_release_none():

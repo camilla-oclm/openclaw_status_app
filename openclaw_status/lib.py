@@ -348,6 +348,20 @@ def sanitize_for_html(text: str) -> str:
     return text
 
 
+_MD_LINK_RE = re.compile(r"!?\[([^\]]+)\]\((?:https?://[^)\s]+)\)")
+
+
+def strip_md_links(text: str) -> str:
+    """Unwrap markdown links (and images) to their text: "[#82909](https://…)" → "#82909".
+
+    Changelog bullets arrive with raw markdown link syntax, but the frontend builds its DOM
+    from plain text (no markdown pipeline), so a wrapped link would render literally as
+    "[x](url)". Unwrapping keeps the text clean while the page's linkify() still turns bare
+    #N refs into real links.
+    """
+    return _MD_LINK_RE.sub(r"\1", text or "")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Usage logging
 # ═══════════════════════════════════════════════════════════════════════════
