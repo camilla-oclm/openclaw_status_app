@@ -325,6 +325,23 @@ button.chip:hover{border-color:var(--accent); color:var(--text)}
 .flip-card li::before{content:"⚡"; position:absolute; left:0; top:0; font-size:.85rem; color:var(--accent)}
 .flip-note{font-size:.76rem; color:var(--faint); margin-top:.8rem}
 
+/* ── verdict track record ───────────────────────────────────────────────── */
+.tr-sum{font-size:.86rem; color:var(--muted); margin-bottom:.9rem}
+.tr-list{display:flex; flex-direction:column; gap:.45rem}
+.tr-row{display:flex; align-items:center; gap:.4rem .9rem; flex-wrap:wrap; background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:.6rem .9rem; font-size:.85rem}
+.tr-row.cur{border-color:var(--accent)}
+.tr-ver{font-family:var(--mono); font-weight:700; min-width:8ch}
+.tr-ver .cur-dot{color:var(--accent); font-size:.6rem; vertical-align:middle; margin-left:.25rem}
+.tr-path{letter-spacing:.04em}
+.tr-runs{color:var(--muted); font-size:.78rem}
+.tr-badge{font-size:.72rem; font-weight:700; padding:.12rem .55rem; border-radius:999px; border:1px solid var(--border2); color:var(--muted)}
+.tr-held{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
+.tr-hard{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
+.tr-soft{color:var(--bad); border-color:var(--bad-bd); background:var(--bad-bg)}
+.tr-dates{color:var(--faint); font-size:.75rem; margin-left:auto}
+.tr-note{font-size:.76rem; color:var(--faint); margin-top:.8rem}
+@media(max-width:680px){ .tr-dates{margin-left:0; width:100%} }
+
 /* ── filters / issues ──────────────────────────────────────────────────── */
 .filters{display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:1rem}
 .fbtn{
@@ -2064,6 +2081,52 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return s;
   }
 
+  // ── verdict track record (accountability: did the first read hold?) ────────
+  // Built (render-side) from the same per-run series as Trends. A released version is
+  // immutable — its issue list only accrues — so an honest verdict should hold or
+  // harden between runs; softening is rare and gets the loud badge.
+  var TR_BADGE = {
+    held:     {txt:"✓ held",     cls:" tr-held", tip:"Every assessment of this version reached the same verdict."},
+    hardened: {txt:"↓ hardened", cls:" tr-hard", tip:"The verdict got more cautious as post-release reports accrued — the expected direction for an immutable release that turns out worse than its first read."},
+    softened: {txt:"↑ softened", cls:" tr-soft", tip:"The verdict got LESS cautious over time — rare, and it needs a real cause (a severe report debunked, or the early read was over-cautious). Check the runs' evidence before trusting it."},
+    mixed:    {txt:"~ moved",    cls:"",         tip:"The verdict moved during the window but ended where it started."},
+    single:   {txt:"1 read",     cls:"",         tip:"Assessed once so far — no evolution to compare yet."}
+  };
+  function trackRecord(){
+    var tr = DATA.track_record || {}, vs = tr.versions || [];
+    if (!vs.length) return null;
+    var s = el("div",{"class":"section", id:"track-record"});
+    s.appendChild(sectionHead("Verdict track record", null, "did the first read hold?"));
+    var sm = tr.summary || {};
+    var multi = (sm.held||0)+(sm.hardened||0)+(sm.softened||0)+(sm.mixed||0);
+    if (multi >= 1){
+      var bits = [];
+      if (sm.held) bits.push(sm.held+" held from the first read");
+      if (sm.hardened) bits.push(sm.hardened+" hardened as reports accrued");
+      if (sm.softened) bits.push(sm.softened+" softened");
+      if (sm.mixed) bits.push(sm.mixed+" moved and returned");
+      s.appendChild(el("div",{"class":"tr-sum"},
+        "Across "+multi+" version"+(multi===1?"":"s")+" with repeat assessments: "+bits.join(" · ")+"."));
+    }
+    var list = el("div",{"class":"tr-list"});
+    vs.forEach(function(e){
+      var b = TR_BADGE[e.direction] || TR_BADGE.single;
+      var dates = (e.first&&e.first.t ? fmtDate(e.first.t) : "");
+      if (e.runs > 1 && e.last && e.last.t) dates += " → "+fmtDate(e.last.t);
+      list.appendChild(el("div",{"class":"tr-row"+(e.current?" cur":"")},[
+        el("span",{"class":"tr-ver"},["v"+e.version, e.current?el("span",{"class":"cur-dot", title:"the current release"},"●"):null]),
+        el("span",{"class":"tr-path", title:"Verdict sequence across this version's assessments"}, (e.path||[]).join(" → ")),
+        el("span",{"class":"tr-runs"}, e.runs+(e.runs===1?" run":" runs")),
+        el("span",{"class":"tr-badge"+b.cls, title:b.tip}, b.txt),
+        el("span",{"class":"tr-dates"}, dates)
+      ]));
+    });
+    s.appendChild(list);
+    s.appendChild(el("div",{"class":"tr-note"},
+      "Why this matters: a released version is immutable, so its issue list only accrues — an honest verdict should hold or harden between runs. This table is the receipts for the flip-conditions above: when one fires, the move shows up here."));
+    return s;
+  }
+
   function history(){
     var h = (DATA.version_history||[]).slice();
     if (!h.length) return null;
@@ -2606,7 +2669,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       {key:"impact",  label:"Impact",     build:[impact, triage]},
       {key:"new",     label:"What's new", build:[changes, catchingUp]},
       {key:"trends",  label:"Trends",     build:[trends]},
-      {key:"history", label:"History",    build:[history]}
+      {key:"history", label:"History",    build:[trackRecord, history]}
     ];
     var tablist = el("div",{"class":"ltabs", role:"tablist", "aria-label":"More detail"});
     var panelsWrap = el("div",{"class":"ltab-panels"});

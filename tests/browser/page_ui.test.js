@@ -43,6 +43,15 @@ const DATA = {
   changes: { features: [{ title: "New turbo mode", value: "twice the speed" }],
              fixes: [{ title: "Fixed the flux capacitor", verified: true }], breaking: [] },
   flip_conditions: ["⚠️ hardens to ⏸️ if #90361 is confirmed on stable"],
+  track_record: {
+    versions: [
+      { version: "2026.6.1", runs: 3, first: { t: "2026-06-05", rec: "⚠️" },
+        last: { t: "2026-06-07", rec: "⚠️" }, path: ["⚠️"], direction: "held", current: true },
+      { version: "2026.5.9", runs: 4, first: { t: "2026-06-01", rec: "⚠️" },
+        last: { t: "2026-06-04", rec: "⏸️" }, path: ["⚠️", "⏸️"], direction: "hardened", current: false },
+    ],
+    summary: { tracked: 2, held: 1, hardened: 1, softened: 0, mixed: 0, single: 0 },
+  },
   review: { validated: true, unreviewed: false, agreed: true, refined: false,
             primary_recommendation: "⚠️", critique: "checked the labels, sound",
             detail: { critique: "checked the labels, sound", suggested_recommendation: "",
@@ -174,6 +183,18 @@ const DATA = {
     !!revState && revState.hiddenAfter === false &&
     revState.text.indexOf("checked the labels, sound") >= 0 &&
     revState.text.indexOf("#777") >= 0);
+
+  // 11a. Verdict track record lives in the History tab: per-version rows with
+  //      path + direction badges, and the summary counts repeat-assessed versions.
+  t("track record renders rows with direction badges", await page.evaluate(() => {
+    const sec = document.getElementById("track-record");
+    if (!sec || !sec.closest("#ltp-history")) return false;   // must sit in the History panel
+    const rows = sec.querySelectorAll(".tr-row");
+    const badges = Array.from(sec.querySelectorAll(".tr-badge")).map((b) => b.textContent);
+    return rows.length === 2 && badges.includes("✓ held") && badges.includes("↓ hardened") &&
+      sec.querySelector(".tr-sum").textContent.indexOf("2 versions") >= 0 &&
+      sec.querySelector(".tr-row.cur .tr-ver").textContent.indexOf("2026.6.1") >= 0;
+  }));
 
   // 11. Flip-conditions section renders with the issue reference linkified.
   t("flip-conditions section renders and links the cited issue", await page.evaluate(() => {
