@@ -260,7 +260,9 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 /* signal: platform sparkbars */
 .sigplat{display:grid; grid-template-columns:1fr 1fr; gap:.55rem .9rem}
 .sigplat .sp{display:flex; align-items:center; gap:.5rem; min-width:0}
-.sigplat .sp .ico{font-size:var(--fs-sm); width:1.1rem; text-align:center}
+.sigplat .sp .ico{width:1.1rem; display:inline-flex; justify-content:center; color:var(--muted)}
+/* inline icon svg — aligns in both flex pills (gap does spacing) and text flow */
+.ic-svg{flex:none; vertical-align:-.12em}
 .sigplat .sp .nm{font-size:var(--fs-xs); color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .sparkbar{display:flex; gap:2px; align-items:flex-end; height:14px}
 .sparkbar i{width:4px; border-radius:1px; background:var(--ic,var(--gray)); opacity:.3}
@@ -558,7 +560,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .sv .sv-note{font-size:var(--fs-xs); color:var(--muted); font-weight:600}
 .risk .prow-list{margin-top:.85rem; display:flex; flex-direction:column; gap:.45rem}
 .risk .prow{display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; font-size:var(--fs-sm)}
-.risk .ppn{font-weight:700; min-width:7rem}
+.risk .ppn{font-weight:700; min-width:7rem; display:inline-flex; align-items:center; gap:.4rem}
 .pbadge{flex:none; text-transform:uppercase; letter-spacing:.04em; --p-fs:var(--fs-2xs); --p-fw:800; --p-pad:.12rem .5rem; --p-bg:transparent; --p-bd:var(--ic); --p-fg:var(--ic)}
 .risk .pdetail{color:var(--muted); font-size:var(--fs-sm)}
 .risk .pdetail.muted2{color:var(--faint); font-style:italic}
@@ -1192,23 +1194,25 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     "⚠️": {label:"Update with precautions", tone:"tone-warn", blurb:"Worthwhile, but back up first — some real risk remains."},
     "⏸️": {label:"Skip this version",       tone:"tone-bad",  blurb:"Hold off — the open issues outweigh the benefits right now."}
   };
+  // Tables carry [key, iconKey, label] — iconKey resolves via ICONS/icon() (inline
+  // stroke SVGs), no longer an emoji glyph. Keys/labels are unchanged.
   var CAT = {
-    regression:    {icon:"📉", label:"Regression",      cls:"t-bad",  desc:"Confirmed regression — worked before, broken by a recent release."},
-    post_release:  {icon:"🔶", label:"Post-release",     cls:"t-warn", desc:"Filed after this release and affects it, but not confirmed as a regression."},
-    diamond_lobster:{icon:"💎", label:"Diamond Lobster", cls:"t-info", desc:"Maintainers' '🦞 diamond lobster' quality rating — a notable issue (not a severity)."},
-    active:        {icon:"🟠", label:"Ongoing",          cls:"t-warn", desc:"Open and ongoing — a long-standing issue not specific to this release."}
+    regression:    {icon:"regression", label:"Regression",      cls:"t-bad",  desc:"Confirmed regression — worked before, broken by a recent release."},
+    post_release:  {icon:"post", label:"Post-release",     cls:"t-warn", desc:"Filed after this release and affects it, but not confirmed as a regression."},
+    diamond_lobster:{icon:"gem", label:"Diamond Lobster", cls:"t-info", desc:"Maintainers' '🦞 diamond lobster' quality rating — a notable issue (not a severity)."},
+    active:        {icon:"active", label:"Ongoing",          cls:"t-warn", desc:"Open and ongoing — a long-standing issue not specific to this release."}
   };
   var PLAT = [
-    ["windows","🪟","Windows"],["macos","🍎","macOS"],["linux","🐧","Linux"],
-    ["discord","💬","Discord"],["slack","💼","Slack"],["telegram","✈️","Telegram"]
+    ["windows","windows","Windows"],["macos","macos","macOS"],["linux","linux","Linux"],
+    ["discord","discord","Discord"],["slack","slack","Slack"],["telegram","telegram","Telegram"]
   ];
   var PLAT_LABEL = {}; PLAT.forEach(function(p){ PLAT_LABEL[p[0]] = [p[1], p[2]]; });
   // Components = which subsystem of OpenClaw an issue touches (orthogonal to platforms).
   var COMP = [
-    ["gateway","🛰️","Gateway"],["models","🧠","Models"],["memory","🗂️","Memory"],
-    ["sessions","🧵","Sessions"],["auth","🔐","Auth"],["channels","📡","Channels"],
-    ["plugins","🧩","Plugins"],["agents","🤖","Agents"],["tasks","⏱️","Tasks"],
-    ["tools","🔧","Tools"],["build","📦","Build"]
+    ["gateway","gateway","Gateway"],["models","models","Models"],["memory","memory","Memory"],
+    ["sessions","sessions","Sessions"],["auth","auth","Auth"],["channels","channels","Channels"],
+    ["plugins","plugins","Plugins"],["agents","agents","Agents"],["tasks","tasks","Tasks"],
+    ["tools","tools","Tools"],["build","build","Build"]
   ];
   var COMP_LABEL = {}; COMP.forEach(function(c){ COMP_LABEL[c[0]] = [c[1], c[2]]; });
   // Components come pre-derived in DATA (render side); just normalize to known keys.
@@ -1424,7 +1428,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     rows.slice(0,6).forEach(function(p){
       var a = stat[p[0]];
       grid.appendChild(el("div",{"class":"sp sv-"+a.worst},[
-        el("span",{"class":"ico"}, p[1]),
+        el("span",{"class":"ico"}, [icon(p[1], 13)]),
         el("span",{"class":"nm"}, p[2]),
         sparkbar(volFill(a.count, maxCount, 5))
       ]));
@@ -1445,6 +1449,45 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var n = document.createElementNS(SVGNS, name);
     if (attrs) for (var k in attrs){ if (Object.prototype.hasOwnProperty.call(attrs,k) && attrs[k]!=null) n.setAttribute(k, attrs[k]); }
     return n;
+  }
+
+  // ── inline icon set — monochrome stroke SVGs (currentColor) replacing the
+  //    platform/component/category emoji, which rendered differently on every OS.
+  //    Verdict emoji (the ✅/⚠️/⏸️ data keys) stay text everywhere — they are the
+  //    cross-surface identity shared with SSR / llms.txt / badge / RSS.
+  var ICONS = {
+    windows:"M4 4h16v16H4z M12 4v16 M4 12h16",
+    macos:"M9 9V5.5A2.5 2.5 0 1 0 6.5 9H9zm0 0v6m0-6h6m-6 6H6.5A2.5 2.5 0 1 0 9 17.5V15zm6-6V5.5A2.5 2.5 0 1 1 17.5 9H15zm0 0v6m0 0v2.5a2.5 2.5 0 1 0 2.5-2.5H15z",
+    linux:"M4 5h16v14H4z M7.5 9.5l3 2.5-3 2.5 M12.5 14.5H17",
+    discord:"M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.6 0-3.1-.4-4.4-1.2L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z",
+    slack:"M10 3L8 21 M16 3l-2 18 M3.5 9H21 M3 15h17.5",
+    telegram:"M22 2L11 13 M22 2L15 22l-4-9-9-4 20-7z",
+    gateway:"M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 3v6 M12 15v6 M3 12h6 M15 12h6",
+    models:"M9 9h6v6H9z M5 5h14v14H5z M9 2v3 M15 2v3 M9 19v3 M15 19v3 M2 9h3 M2 15h3 M19 9h3 M19 15h3",
+    memory:"M12 8c4.4 0 8-1.1 8-2.5S16.4 3 12 3 4 4.1 4 5.5 7.6 8 12 8z M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13 M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5",
+    sessions:"M12 3l9 5-9 5-9-5 9-5z M3 13.5l9 5 9-5",
+    auth:"M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z M9 11V7a3 3 0 0 1 6 0v4",
+    channels:"M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M16.2 7.8a6 6 0 0 1 0 8.4 M7.8 16.2a6 6 0 0 1 0-8.4 M19.1 4.9a10 10 0 0 1 0 14.2 M4.9 19.1a10 10 0 0 1 0-14.2",
+    plugins:"M9 7V2.5 M15 7V2.5 M7 7h10v4a5 5 0 0 1-10 0V7z M12 16v5.5",
+    agents:"M6 8h12a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 8V4 M9.5 13.5h.01 M14.5 13.5h.01",
+    tasks:"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3.5 2",
+    tools:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z",
+    build:"M21 8l-9-5-9 5v8l9 5 9-5V8z M3 8l9 5 9-5 M12 13v8",
+    globe:"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M3 12h18 M12 3a13.9 13.9 0 0 1 0 18 M12 3a13.9 13.9 0 0 0 0 18",
+    regression:"M2 7l7.5 7.5 5-5L22 17 M16 17h6v-6",
+    post:"M4 21V4c3.5-2 7 2 12 0v9c-5 2-8.5-2-12 0",
+    gem:"M6 3h12l4 6-10 12L2 9l4-6z M2 9h20 M9.5 3L8 9l4 12 M14.5 3L16 9l-4 12",
+    active:"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z",
+    doc:"M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M14 2v6h6",
+    sun:"M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4",
+    moon:"M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
+  };
+  function icon(key, size){
+    var s = svgEl("svg", {viewBox:"0 0 24 24", width:size||14, height:size||14, fill:"none",
+      stroke:"currentColor", "stroke-width":"1.8", "stroke-linecap":"round", "stroke-linejoin":"round",
+      "class":"ic-svg", "aria-hidden":"true", focusable:"false"});
+    s.appendChild(svgEl("path", {d: ICONS[key] || ICONS.doc}));
+    return s;
   }
   function riskSparkline(){
     var H = (DATA.version_history||[]).slice(), vals, firstLabel, head;
@@ -1756,22 +1799,22 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function issueCard(i){
     var sev = String(i.severity||"medium");
     var mine = issueHitsStack(i);
-    var cat = CAT[i.category] || {icon:"📋",label:cap(i.category||"issue"),cls:""};
-    var tags = [ el("span",{"class":"tag "+cat.cls, title:cat.desc||""},[cat.icon+" "+cat.label]) ];
+    var cat = CAT[i.category] || {icon:"doc",label:cap(i.category||"issue"),cls:""};
+    var tags = [ el("span",{"class":"tag "+cat.cls, title:cat.desc||""},[icon(cat.icon,12), cat.label]) ];
     // System(s) this issue hits — analyst-tagged, heuristic fallback (see issuePlatforms).
     var ips = issuePlatforms(i);
     if (ips.indexOf("all") >= 0){
-      tags.push(el("span",{"class":"tag t-plat"}, "🌐 All platforms"));
+      tags.push(el("span",{"class":"tag t-plat"}, [icon("globe",12), "All platforms"]));
     } else {
       ips.slice(0,4).forEach(function(pk){
         var meta = PLAT_LABEL[pk];
-        if (meta) tags.push(el("span",{"class":"tag t-plat"}, meta[0]+" "+meta[1]));
+        if (meta) tags.push(el("span",{"class":"tag t-plat"}, [icon(meta[0],12), meta[1]]));
       });
     }
     // Component pills — which subsystem of OpenClaw this issue touches.
     issueComponents(i).forEach(function(ck){
       var cm = COMP_LABEL[ck];
-      if (cm) tags.push(el("span",{"class":"tag t-comp"}, cm[0]+" "+cm[1]));
+      if (cm) tags.push(el("span",{"class":"tag t-comp"}, [icon(cm[0],12), cm[1]]));
     });
     if (i.affects_version){
       tags.push(el("span",{"class":"tag t-bad"}, "⊘ affects this version"));
@@ -1813,7 +1856,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var badges = [];
     if (i.is_new) badges.push(el("span",{"class":"ib t-good", title:"New since last run"}, "🆕"));
     if (mine) badges.push(el("span",{"class":"ib t-me", title:"Affects your stack"}, "★"));
-    badges.push(el("span",{"class":"ib", title:cat.label}, cat.icon));
+    badges.push(el("span",{"class":"ib", title:cat.label}, [icon(cat.icon,13)]));
     if (i.reactions) badges.push(el("span",{"class":"ib"}, "👍 "+i.reactions));
     var detId = "idet-"+i.number;
     var btn = el("button",{"class":"irow", type:"button", "aria-expanded":"false",
@@ -1864,8 +1907,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var catStrip = el("div",{"class":"ltabs ki-cats", role:"group", "aria-label":"Filter known issues by category"});
     catStrip.appendChild(el("button",{"class":"ltab", type:"button", "aria-pressed":"true", "data-f":"all"}, "All ("+ki.length+")"));
     Object.keys(cats).forEach(function(c){
-      var meta = CAT[c]||{icon:"📋",label:cap(c)};
-      catStrip.appendChild(el("button",{"class":"ltab", type:"button", "aria-pressed":"false", "data-f":c}, meta.icon+" "+meta.label+" ("+cats[c]+")"));
+      var meta = CAT[c]||{icon:"doc",label:cap(c)};
+      catStrip.appendChild(el("button",{"class":"ltab", type:"button", "aria-pressed":"false", "data-f":c}, [icon(meta.icon,13), " "+meta.label+" ("+cats[c]+")"]));
     });
     if (stackActive()){
       var mineN = ki.filter(function(i){ return issueHitsStack(i); }).length;
@@ -1884,7 +1927,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       compKeys.forEach(function(k){
         var m = COMP_LABEL[k];
         compRow.appendChild(el("button",{"class":"fbtn fcomp", type:"button", "aria-pressed":"false", "data-f":"comp:"+k},
-          m[0]+" "+m[1]+" ("+compCounts[k]+")"));
+          [icon(m[0],12), m[1]+" ("+compCounts[k]+")"]));
       });
       s.appendChild(compRow);
     }
@@ -2017,14 +2060,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // CONTINUOUS, so 1 vs 7 vs 13 issues read as different bars (the old 5 coarse
   // segments saturated: round(12/13*5) == round(13/13*5)). Colour = worst severity
   // via the sv-* class → --ic, exactly as before.
-  function meterCard(icon, name, a, maxCount, mine, label){
+  function meterCard(ic, name, a, maxCount, mine, label){
     var fill = el("i",{"class":"vfill"});
     // Width via CSSOM (not a style attribute) so a strict CSP can't zero the bars;
     // floor at 6% so a 1-issue row shows a visible nub rather than an empty track.
     fill.style.width = (a.count ? Math.max(6, Math.round(a.count / (maxCount || 1) * 100)) : 0) + "%";
     return el("div",{"class":"plat sv-"+(a.count?a.worst:"none")+(mine?" you":"")},[
       el("div",{"class":"ph"},[
-        el("span",{"class":"pn"}, [document.createTextNode(icon+" "), el("span",{"class":"pname"}, name), mine?el("span",{"class":"me"}," ★you"):null])
+        el("span",{"class":"pn"}, [icon(ic,13), el("span",{"class":"pname"}, name), mine?el("span",{"class":"me"}," ★you"):null])
       ]),
       el("div",{"class":"pmeter"},[ el("span",{"class":"vbar"},[fill]), el("span",{"class":"pl"}, label) ])
     ]);
@@ -2084,7 +2127,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     COMP.forEach(function(c){
       var n = componentIssues(c[0], ki).length;
       if (!n) return;
-      entries.push({emoji:c[1], name:c[2], n:n, kv:keyVerdict([], [c[0]])});
+      entries.push({ic:c[1], name:c[2], n:n, kv:keyVerdict([], [c[0]])});
     });
     if (!entries.length) return null;
     entries.sort(function(a,b){ return (b.kv.blockers.length?1:0)-(a.kv.blockers.length?1:0) || b.n-a.n; });
@@ -2101,7 +2144,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       line.appendChild(el("span",{"class":"vchip"+(e.kv.blockers.length?" hot":""), role:"listitem",
                                   title:e.name+": "+v.label+" — "+why+" Derived on this page from the issue tags; the official verdict stays global."},[
         el("span",{"class":"vc-em","aria-hidden":"true"}, e.kv.rec),
-        document.createTextNode(" "+e.emoji+" "+e.name),
+        icon(e.ic,12),
+        document.createTextNode(e.name),
         el("span",{"class":"vc-n"}, String(e.n))
       ]));
     });
@@ -2151,7 +2195,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     s.appendChild(el("div",{"class":"impact-sublabel"}, "By component"));
     var g = el("div",{"class":"plat-grid"});
     keys.forEach(function(k){
-      var a = agg[k], meta = COMP_LABEL[k] || ["📦", cap(k)];
+      var a = agg[k], meta = COMP_LABEL[k] || ["build", cap(k)];
       g.appendChild(meterCard(meta[0], meta[1], a, maxCount, !!STACK[k],
                               issueWord(a.count) + (a.regr? " · "+a.regr+" regr" : "")));
     });
@@ -2371,9 +2415,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var chips = el("div",{"class":"chips"});
     chips.appendChild(el("span",{"class":"chip-grp"}, "Platforms & channels"));
-    PLAT.forEach(function(p){ chips.appendChild(pickBtn(p[0], p[1]+" "+p[2])); });
+    PLAT.forEach(function(p){ chips.appendChild(pickBtn(p[0], [icon(p[1],13), p[2]])); });
     chips.appendChild(el("span",{"class":"chip-grp"}, "Components"));
-    COMP.forEach(function(c){ chips.appendChild(pickBtn(c[0], c[1]+" "+c[2])); });
+    COMP.forEach(function(c){ chips.appendChild(pickBtn(c[0], [icon(c[1],13), c[2]])); });
     var clearBtn = el("button",{"class":"pick pick-clear", type:"button", id:"stack-clear",
                                 title:"Clear every picked platform, channel and component"}, "✕ clear all");
     if (!stackActive()) clearBtn.setAttribute("hidden","");
@@ -2474,12 +2518,12 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
     var rows = [];
     pickedPlats.forEach(function(k){
-      var lv = String(pi[k]||"none").toLowerCase(), m = PLAT_LABEL[k]||["?",k];
-      rows.push({kind:"plat", emoji:m[0], label:m[1], w:(W[lv]||0),
+      var lv = String(pi[k]||"none").toLowerCase(), m = PLAT_LABEL[k]||["globe",k];
+      rows.push({kind:"plat", ic:m[0], label:m[1], w:(W[lv]||0),
                  badgeCls:"imp-"+lv, badgeTxt:(IMPACT[lv]||IMPACT.none).label, iss:specificForPlat(k)});
     });
     stackComponents().forEach(function(k){
-      var iss = issuesForComp(k), worst = 0, wn = null, m = COMP_LABEL[k]||["?",k];
+      var iss = issuesForComp(k), worst = 0, wn = null, m = COMP_LABEL[k]||["build",k];
       iss.forEach(function(it){ var s = String(it.severity||"low").toLowerCase(), w = SEVW[s]||0; if (w>worst){ worst=w; wn=s; } });
       rows.push({kind:"comp", emoji:m[0], label:m[1], w:worst,
                  badgeCls: wn?("imp-"+SEV_IMP[wn]):"imp-none", badgeTxt: wn?(cap(wn)+" sev"):"Clear", iss:iss});
@@ -2536,7 +2580,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         detail = el("span",{"class":"pdetail muted2"}, "clear this release");
       }
       list.appendChild(el("div",{"class":"prow"},[
-        el("span",{"class":"ppn"}, r.emoji+" "+r.label),
+        el("span",{"class":"ppn"}, [icon(r.ic,13), r.label]),
         badge, detail
       ]));
     });
@@ -2553,7 +2597,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       var ccLvl = ccN ? SEV_IMP[ccN] : "none";
       var ccAffV = crossCutting.filter(function(it){ return it.affects_version; }).length;
       list.appendChild(el("div",{"class":"prow prow-all"},[
-        el("span",{"class":"ppn"}, "🌐 All platforms & channels"),
+        el("span",{"class":"ppn"}, [icon("globe",13), "All platforms & channels"]),
         el("span",{"class":"pbadge imp-"+ccLvl}, (IMPACT[ccLvl]||IMPACT.none).label+" · "+crossCutting.length),
         el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "core issues that hit every OS and channel"+(ccAffV?(" ("+ccAffV+" affect v"+(DATA.version||"")+")"):"")+" — ")].concat(issueLinks(crossCutting, 5)))
       ]));
@@ -2748,7 +2792,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     });
     function apply(t){
       document.documentElement.setAttribute("data-theme", t);
-      btn.textContent = t==="light" ? "🌙" : "☀️";
+      btn.textContent = "";
+      btn.appendChild(icon(t==="light" ? "moon" : "sun", 16));
       // keep the browser-chrome color in step with the manual toggle
       var mc = document.querySelector('meta[name="theme-color"]');
       if (mc) mc.setAttribute("content", t==="light" ? "#f6f7f9" : "#0b0d11");
