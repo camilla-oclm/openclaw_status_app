@@ -593,6 +593,44 @@ def _validator_disagrees(review: dict) -> bool:
     return bool(review.get("miscategorized_issues"))
 
 
+def _compact_validator_review(review: dict) -> dict | None:
+    """A compact, publishable subset of the validator's raw review — powers the page's
+    "what the second model said" expander behind the ⚖︎ chip (the dual-model review is
+    the page's central trust claim, so it must be inspectable, not just asserted).
+
+    The review is untrusted LLM text bound for the public payload: every string is
+    whitespace-collapsed, truncated, capped in count, and screened with the XSS
+    patterns — an offending string is DROPPED, never allowed to block publishing a
+    good page. Returns None when there is nothing reviewable (validator failed/absent),
+    so old pages and single-model runs degrade to the short critique chip."""
+    if not isinstance(review, dict) or review.get("unreviewed"):
+        return None
+
+    def _clean(value, cap, max_len=240):
+        out = []
+        for item in (value if isinstance(value, list) else []):
+            s = " ".join(str(item).split()).strip()
+            if s and not _XSS_NESTED.search(s):
+                out.append(s[:max_len])
+            if len(out) >= cap:
+                break
+        return out
+
+    critique = " ".join(str(review.get("critique") or "").split())
+    if _XSS_PRIMARY.search(critique):
+        critique = ""
+    sugg = _norm_rec(str(review.get("suggested_recommendation") or "").strip())
+    return {
+        "critique": critique[:600],
+        "confidence": str(review.get("confidence_in_review") or "")[:16],
+        "suggested_recommendation": sugg if sugg in ("✅", "⚠️", "⏸️") else "",
+        "miscategorized_issues": _clean(review.get("miscategorized_issues"), 5),
+        "missed_issues": _clean(review.get("missed_issues"), 5),
+        "logical_errors": _clean(review.get("logical_errors"), 3),
+        "overruled_claims": _clean(review.get("overruled_claims"), 3),
+    }
+
+
 def _step_validator(context: str, primary_assessment: dict, deadline: float | None = None) -> dict:
     """Step 2: an independent validator (config.VALIDATOR_MODEL — a different
     provider from the analyst) reviews the primary's work.
@@ -947,6 +985,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         v_agrees = True
         validator_critique = ""
         validator_unreviewed = False
+        validator_detail = None
         print(f"\n{'─'*60}")
         print("Single-call mode — skipping validator")
         print(f"{'─'*60}")
@@ -968,6 +1007,8 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         # An unavailable validator (failed call) is recorded so the page can show a
         # "single-model" state and the thin-evidence floor can cap confidence.
         validator_unreviewed = bool(validator_review.get("unreviewed", False))
+        # Compact publishable subset of the review — the page's ⚖︎-chip expander.
+        validator_detail = _compact_validator_review(validator_review)
 
         # ── Step 3: Refinement (conditional) ──
         final_assessment = primary_assessment
@@ -1085,6 +1126,9 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         "context_chars": len(context),
         "validator_agrees": v_agrees,
         "validator_critique": validator_critique,
+        # Compact, XSS-screened subset of the validator's full review (None when no
+        # validator ran) — render ships it as review.detail for the on-page expander.
+        "validator_review": validator_detail,
         "refined": refined,
         "primary_recommendation": primary_assessment.get("recommendation"),
         # Validator availability — surfaced so the page can show a "single-model" state

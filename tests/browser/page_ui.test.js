@@ -42,6 +42,12 @@ const DATA = {
   evidence: {},
   changes: { features: [{ title: "New turbo mode", value: "twice the speed" }],
              fixes: [{ title: "Fixed the flux capacitor", verified: true }], breaking: [] },
+  flip_conditions: ["⚠️ hardens to ⏸️ if #90361 is confirmed on stable"],
+  review: { validated: true, unreviewed: false, agreed: true, refined: false,
+            primary_recommendation: "⚠️", critique: "checked the labels, sound",
+            detail: { critique: "checked the labels, sound", suggested_recommendation: "",
+                      miscategorized_issues: [], missed_issues: ["#777 memory race"],
+                      logical_errors: [], overruled_claims: [] } },
 };
 
 (async () => {
@@ -151,6 +157,31 @@ const DATA = {
   await new Promise((r) => setTimeout(r, 250));
   const liveMsg = await page.evaluate(() => document.getElementById("live").textContent);
   t("filter click announces to the live region", /4 of 4 issues shown/.test(liveMsg));
+
+  // 10. The ⚖︎ review chip expands into the validator's actual findings.
+  const revState = await page.evaluate(() => {
+    const btn = document.querySelector('.conf-row .chip[aria-controls="rev-detail"]');
+    const panel = document.getElementById("rev-detail");
+    if (!btn || !panel) return null;
+    const hiddenBefore = panel.hidden;
+    btn.click();
+    return { isButton: btn.tagName === "BUTTON", hiddenBefore, hiddenAfter: panel.hidden,
+             text: panel.textContent };
+  });
+  t("review chip is an expander button, panel hidden by default",
+    !!revState && revState.isButton && revState.hiddenBefore === true);
+  t("expanding reveals the validator's words",
+    !!revState && revState.hiddenAfter === false &&
+    revState.text.indexOf("checked the labels, sound") >= 0 &&
+    revState.text.indexOf("#777") >= 0);
+
+  // 11. Flip-conditions section renders with the issue reference linkified.
+  t("flip-conditions section renders and links the cited issue", await page.evaluate(() => {
+    const sec = document.getElementById("flip");
+    if (!sec) return false;
+    const link = sec.querySelector('a[href*="issues/90361"]');
+    return sec.textContent.indexOf("hardens to ⏸️") >= 0 && !!link;
+  }));
 
   t("no page errors", errs.length === 0);
 
