@@ -516,6 +516,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .impact-sub{margin-top:1.3rem}
 .impact-sub:first-of-type{margin-top:.2rem}
 .impact-sublabel{font-family:var(--mono); font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-weight:600; margin-bottom:.55rem}
+
+/* ── per-component verdict line ─────────────────────────────────────────── */
+.vline{display:flex; flex-wrap:wrap; gap:.45rem}
+.vchip{display:inline-flex; align-items:center; gap:.35rem; font-size:.78rem; font-weight:600; padding:.3rem .7rem; border-radius:999px; border:1px solid var(--border2); background:var(--card); color:var(--muted); cursor:help}
+.vchip.hot{border-color:var(--bad-bd); background:var(--bad-bg); color:var(--text)}
+.vchip .vc-em{font-size:.85rem; line-height:1}
+.vchip .vc-n{font-family:var(--mono); font-size:.68rem; background:var(--bg-elev); border-radius:6px; padding:.05rem .35rem; color:var(--muted)}
+.vline-note{font-size:.74rem; color:var(--faint); margin-top:.5rem}
 .impact-note{font-size:.79rem; color:var(--muted); margin-bottom:.6rem}
 .prose + .quote{margin-top:1.2rem}
 
@@ -1252,18 +1260,23 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     for (var k in STACK_MATCH){ if (STACK_MATCH[k].test(title)) out.push(k); }
     return out;
   }
-  // Does this issue touch the user's stack? Matches any selected platform (or a
-  // cross-cutting "all" issue when platforms are picked) OR any selected component.
+  // Does this issue touch the given platform/component key sets? The shared core of
+  // the per-setup verdict AND the per-component line. Matches any listed platform (or
+  // a cross-cutting "all" issue when platforms are given) OR any listed component.
+  function hitsKeys(i, plats, comps){
+    var ps = issuePlatforms(i);
+    if (plats.length){
+      if (ps.indexOf("all") >= 0) return true;
+      for (var j=0;j<plats.length;j++){ if (ps.indexOf(plats[j]) >= 0) return true; }
+    }
+    var cs = issueComponents(i);
+    for (var m=0;m<comps.length;m++){ if (cs.indexOf(comps[m]) >= 0) return true; }
+    return false;
+  }
+  // Does this issue touch the user's stack?
   function issueHitsStack(i){
     if (!stackActive()) return false;
-    var ps = issuePlatforms(i), selP = stackPlatforms();
-    if (selP.length){
-      if (ps.indexOf("all") >= 0) return true;
-      for (var j=0;j<selP.length;j++){ if (ps.indexOf(selP[j]) >= 0) return true; }
-    }
-    var cs = issueComponents(i), selC = stackComponents();
-    for (var m=0;m<selC.length;m++){ if (cs.indexOf(selC[m]) >= 0) return true; }
-    return false;
+    return hitsKeys(i, stackPlatforms(), stackComponents());
   }
   // ── per-setup verdict ───────────────────────────────────────────────────────
   // A CONSERVATIVE, fail-closed refinement of the global verdict for the user's stack:
@@ -1275,15 +1288,33 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // by the panel + the hero CTA so they can't disagree. latest.json/badge/RSS/SSR keep
   // the canonical GLOBAL verdict — this refinement is page-only and device-local.
   var VERDICT_ORDER = ["✅","⚠️","⏸️"];   // increasing caution
-  function setupBlockers(){
+  // Blocking issues for an arbitrary platform/component key set: high/critical AND
+  // version-confirmed (or fresh) AND landing on the keys or cross-cutting ("all").
+  function blockersFor(plats, comps){
     var fresh = !!(DATA.freshness && DATA.freshness.fresh);
     return (DATA.known_issues || []).filter(function(i){
       var s = String(i.severity||"low").toLowerCase();
       if (s !== "high" && s !== "critical") return false;
       if (!i.affects_version && !fresh) return false;        // only version-confirmed counts
       if (issuePlatforms(i).indexOf("all") >= 0) return true; // cross-cutting → hits everyone
-      return issueHitsStack(i);
+      return hitsKeys(i, plats, comps);
     });
+  }
+  function setupBlockers(){ return blockersFor(stackPlatforms(), stackComponents()); }
+  // The per-setup machinery evaluated for an arbitrary key set (no picked stack
+  // needed) — powers the per-component verdict line. Same conservative rules as
+  // setupVerdict: softens AT MOST one notch, never harsher than the global verdict,
+  // never ⏸️→✅ (one notch can't cross two steps), fresh releases never soften.
+  function keyVerdict(plats, comps){
+    var fresh = !!(DATA.freshness && DATA.freshness.fresh);
+    var gRec = DATA.recommendation, gIdx = VERDICT_ORDER.indexOf(gRec);
+    var blockers = blockersFor(plats, comps);
+    var rec = gRec, softened = false;
+    if (!fresh && !blockers.length && gIdx > 0){
+      rec = VERDICT_ORDER[gIdx - 1];   // soften exactly one notch
+      softened = true;
+    }
+    return {rec:rec, global:gRec, softened:softened, fresh:fresh, blockers:blockers};
   }
   function setupVerdict(){
     var fresh = !!(DATA.freshness && DATA.freshness.fresh);
@@ -2006,8 +2037,48 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return s;
   }
 
-  // Impact — one section that merges the two volume×severity meter views. Component
-  // first (it differentiates — gateway/plugins hot spots), then platform/channel
+  // Per-component verdict line — the conservative per-setup machinery (keyVerdict)
+  // run for each subsystem alone, so WHERE the risk lives is readable at a glance:
+  // a component carrying a blocker keeps the global verdict, the others ease one
+  // notch. CLIENT-ONLY like the per-setup verdict — never in SSR / latest.json /
+  // llms / badge; never harsher than global; never ⏸️→✅; fresh never softens.
+  function verdictLine(){
+    var ki = DATA.known_issues || [];
+    var entries = [];
+    COMP.forEach(function(c){
+      var n = componentIssues(c[0], ki).length;
+      if (!n) return;
+      entries.push({emoji:c[1], name:c[2], n:n, kv:keyVerdict([], [c[0]])});
+    });
+    if (!entries.length) return null;
+    entries.sort(function(a,b){ return (b.kv.blockers.length?1:0)-(a.kv.blockers.length?1:0) || b.n-a.n; });
+    var wrap = el("div",{"class":"impact-sub", id:"verdict-line"});
+    wrap.appendChild(el("div",{"class":"impact-sublabel"}, "Verdict by component"));
+    var line = el("div",{"class":"vline", role:"list", "aria-label":"Per-component verdict"});
+    entries.forEach(function(e){
+      var v = VERDICTS[e.kv.rec] || {label:String(e.kv.rec||"")};
+      var why = e.kv.blockers.length
+        ? e.kv.blockers.length+" blocking issue"+(e.kv.blockers.length===1?"":"s")+" (version-confirmed high/critical, or cross-cutting) land"+(e.kv.blockers.length===1?"s":"")+" here — the global verdict applies squarely."
+        : (e.kv.softened
+           ? "No blocking issue is confirmed to land here, so the global verdict eases one notch for this subsystem."
+           : "Matches the global verdict.");
+      line.appendChild(el("span",{"class":"vchip"+(e.kv.blockers.length?" hot":""), role:"listitem",
+                                  title:e.name+": "+v.label+" — "+why+" Derived on this page from the issue tags; the official verdict stays global."},[
+        el("span",{"class":"vc-em","aria-hidden":"true"}, e.kv.rec),
+        document.createTextNode(" "+e.emoji+" "+e.name),
+        el("span",{"class":"vc-n"}, String(e.n))
+      ]));
+    });
+    wrap.appendChild(line);
+    var clear = COMP.length - entries.length;
+    if (clear > 0) wrap.appendChild(el("div",{"class":"vline-note"},
+      clear+" other component"+(clear===1?" has":"s have")+" no tracked issues this release."));
+    return wrap;
+  }
+
+  // Impact — one section that merges the two volume×severity meter views. The
+  // per-component verdict line leads (the decision-shaped view), then component
+  // meters (they differentiate — gateway/plugins hot spots), then platform/channel
   // (which often reads all-high; the sub-builder flags that case).
   function impact(){
     var comp = componentHealth();
@@ -2015,6 +2086,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (!comp && !plat) return null;
     var s = el("div",{"class":"section", id:"impact"});
     s.appendChild(sectionHead("Impact", null, "bar = issue volume · colour = worst severity"));
+    var vl = verdictLine();
+    if (vl) s.appendChild(vl);
     if (comp) s.appendChild(comp);
     if (plat) s.appendChild(plat);
     return s;
@@ -2837,6 +2910,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     window.__perSetupTest = {
       setupVerdict: setupVerdict,
       setupBlockers: setupBlockers,
+      keyVerdict: keyVerdict,
       setStack: function(keys){
         for (var k in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k)) delete STACK[k]; }
         (keys || []).forEach(function(k){ STACK[k] = true; });

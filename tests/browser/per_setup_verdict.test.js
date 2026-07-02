@@ -98,8 +98,46 @@ const CASES = [
       console.log(`✓ ${name}  → ${svd.rec}`);
     }
   }
+  // ── keyVerdict (the per-component verdict line's core) — same conservative rules,
+  //    evaluated per key set without a picked stack ─────────────────────────────────
+  // [name, DATA, plats, comps, expectedRec]
+  const KV_CASES = [
+    ["component clear of blockers softens one notch",
+     D("⏸️", false, [issue({ severity: "high", affects_version: true, components: ["memory"] })]),
+     [], ["gateway"], "⚠️"],
+    ["component carrying the blocker keeps the global verdict",
+     D("⏸️", false, [issue({ severity: "high", affects_version: true, components: ["memory"] })]),
+     [], ["memory"], "⏸️"],
+    ["cross-cutting 'all' blocker pins EVERY component to global",
+     D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"], components: ["build"] })]),
+     [], ["gateway"], "⏸️"],
+    ["fresh release never softens a component",
+     D("⏸️", true, []), [], ["gateway"], "⏸️"],
+    ["global ✅ can't soften below ✅",
+     D("✅", false, []), [], ["gateway"], "✅"],
+  ];
+  let kvTotal = 0;
+  for (const [name, data, plats, comps, expected] of KV_CASES) {
+    kvTotal++;
+    const page = await browser.newPage();
+    const errs = [];
+    page.on("pageerror", (e) => errs.push(String(e)));
+    const tmp = path.join(require("os").tmpdir(), "psv_kv_" + Math.abs(hash(name)) + ".html");
+    fs.writeFileSync(tmp, pageFor(data));
+    await page.goto("file://" + tmp, { waitUntil: "networkidle0" });
+    const kv = await page.evaluate(
+      (p, c) => window.__perSetupTest.keyVerdict(p, c), plats, comps);
+    fs.unlinkSync(tmp);
+    await page.close();
+    const ok = kv.rec === expected && ci(kv.rec) <= ci(kv.global) &&
+      (ci(kv.global) - ci(kv.rec) <= 1) && errs.length === 0;
+    if (!ok) { failures++; console.log(`✗ ${name}  (got ${kv.rec}, global ${kv.global})`); }
+    else console.log(`✓ ${name}  → ${kv.rec}`);
+  }
+
   await browser.close();
-  console.log(failures ? `\n${failures} FAILED` : `\nAll ${CASES.length} per-setup cases passed`);
+  console.log(failures ? `\n${failures} FAILED`
+    : `\nAll ${CASES.length + kvTotal} per-setup cases passed`);
   process.exit(failures ? 1 : 0);
 })();
 
