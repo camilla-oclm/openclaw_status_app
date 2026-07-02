@@ -464,6 +464,69 @@ def _timeline_from_history(h: dict) -> dict:
     }
 
 
+# Caution rank for the track-record direction (higher = more cautious). Display-side
+# twin of agent._CAUTION_RANK — deliberately separate, like the two norm_rec call sites.
+_TR_RANK = {"✅": 0, "⚠️": 1, "⏸️": 2}
+
+
+def _track_record(timeline_rows: list, current_version: str) -> dict:
+    """Per-version verdict evolution — the accountability view ("did the first read hold?").
+
+    Built from the per-run timeline: for each version, the first and latest verdict with
+    dates, the run count, the consecutive-deduped verdict path, and the direction of
+    travel — held / hardened (ended more cautious) / softened (ended less cautious) /
+    mixed (moved but ended where it started) / single (one read, nothing to compare).
+    Newest version first, capped at 10. Only versions with real per-run rows appear —
+    a track record is a claim about OBSERVED evolution, so versions predating the
+    per-run series (or approx fallback rows) are omitted rather than guessed."""
+    by_ver: dict = {}
+    order: list = []
+    rows = sorted((r for r in timeline_rows if isinstance(r, dict) and not r.get("approx")),
+                  key=lambda r: str(r.get("t", "")))
+    for r in rows:
+        v = r.get("version")
+        rec = norm_rec(str(r.get("recommendation", "")))
+        if not v or rec not in _TR_RANK:
+            continue
+        if v not in by_ver:
+            by_ver[v] = []
+            order.append(v)
+        by_ver[v].append({"t": str(r.get("t", ""))[:10], "rec": rec})
+    versions = []
+    for v in order:
+        runs = by_ver[v]
+        path = [runs[0]["rec"]]
+        for r in runs[1:]:
+            if r["rec"] != path[-1]:
+                path.append(r["rec"])
+        first, last = runs[0], runs[-1]
+        if len(runs) == 1:
+            direction = "single"
+        elif len(path) == 1:
+            direction = "held"
+        elif _TR_RANK[last["rec"]] > _TR_RANK[first["rec"]]:
+            direction = "hardened"
+        elif _TR_RANK[last["rec"]] < _TR_RANK[first["rec"]]:
+            direction = "softened"
+        else:
+            direction = "mixed"
+        versions.append({
+            "version": v,
+            "runs": len(runs),
+            "first": first,
+            "last": last,
+            "path": path[-6:],   # glyph sequence, capped for display
+            "direction": direction,
+            "current": v == current_version,
+        })
+    versions.reverse()           # newest (most recently first-seen) version first
+    versions = versions[:10]
+    counts = {"held": 0, "hardened": 0, "softened": 0, "mixed": 0, "single": 0}
+    for e in versions:
+        counts[e["direction"]] += 1
+    return {"versions": versions, "summary": {"tracked": len(versions), **counts}}
+
+
 _WORKAROUND_RE = re.compile(
     r"\b(work[\s-]?around|mitigat(?:e|ed|ion)|temporary fix|temp fix|stopgap)\b", re.I)
 
@@ -565,12 +628,13 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     # assess step already appended to timeline.json before render). Gates the
     # fresh-release banner — see _release_freshness / config.FRESH_RELEASE_MAX_RUNS.
     version_run_count = 0
+    tl_rows = []
     raw_tl = load_json_or(config.TIMELINE_FILE, None)
     if isinstance(raw_tl, list):
-        rows = [r for r in raw_tl if isinstance(r, dict)]
-        timeline = rows[-config.TIMELINE_KEEP:]
+        tl_rows = [r for r in raw_tl if isinstance(r, dict)]
+        timeline = tl_rows[-config.TIMELINE_KEEP:]
         version_run_count = sum(
-            1 for r in rows if r.get("version") == assessment_raw.get("version", ""))
+            1 for r in tl_rows if r.get("version") == assessment_raw.get("version", ""))
     # Until the real per-run series has ≥2 points, synthesize a coarse per-version
     # fallback from history so the charts aren't empty (one point per release).
     if len(timeline) < 2 and raw_history:
@@ -702,6 +766,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
                   if k not in ("cost_usd", "latency_ms")},
         "version_history": version_history,
         "timeline": timeline,
+        # Per-version verdict evolution from the same per-run series — the History tab's
+        # accountability table ("did the first read hold?"). See _track_record.
+        "track_record": _track_record(tl_rows, assessment_raw.get("version", "")),
         # Stable-release changelog (newest first) with extracted Highlights — the
         # "catching up from an older version" section aggregates these client-side.
         "release_history": [

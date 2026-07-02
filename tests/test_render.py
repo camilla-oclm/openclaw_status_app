@@ -927,3 +927,89 @@ def test_build_review_detail_none_on_old_or_junk_records():
             {"assessment": {}, "version": "1.0", "validator_model": "qwen/x", **extra},
             {"sources": {}})["review"]
         assert rv["detail"] is None
+
+
+# ── verdict track record (accountability view) ───────────────────────────────
+
+def _tl(t, ver, rec, **kw):
+    return {"t": t, "version": ver, "recommendation": rec, "issues": 5, **kw}
+
+
+def test_track_record_directions_and_paths():
+    rows = [
+        _tl("2026-06-01T00:00:00Z", "1.0", "⚠️"),
+        _tl("2026-06-02T00:00:00Z", "1.0", "⚠️"),      # held
+        _tl("2026-06-03T00:00:00Z", "1.1", "⚠️"),
+        _tl("2026-06-04T00:00:00Z", "1.1", "⏸️"),      # hardened
+        _tl("2026-06-05T00:00:00Z", "1.2", "⏸️"),
+        _tl("2026-06-06T00:00:00Z", "1.2", "⚠️"),      # softened
+        _tl("2026-06-07T00:00:00Z", "1.3", "⚠️"),
+        _tl("2026-06-08T00:00:00Z", "1.3", "⏸️"),
+        _tl("2026-06-09T00:00:00Z", "1.3", "⚠️"),      # mixed (moved, returned)
+        _tl("2026-06-10T00:00:00Z", "1.4", "✅"),      # single read
+    ]
+    tr = render._track_record(rows, "1.4")
+    by = {e["version"]: e for e in tr["versions"]}
+    assert by["1.0"]["direction"] == "held" and by["1.0"]["path"] == ["⚠️"]
+    assert by["1.1"]["direction"] == "hardened" and by["1.1"]["path"] == ["⚠️", "⏸️"]
+    assert by["1.2"]["direction"] == "softened"
+    assert by["1.3"]["direction"] == "mixed" and by["1.3"]["path"] == ["⚠️", "⏸️", "⚠️"]
+    assert by["1.4"]["direction"] == "single" and by["1.4"]["current"] is True
+    assert by["1.0"]["current"] is False
+    # newest version first
+    assert tr["versions"][0]["version"] == "1.4"
+    assert tr["summary"] == {"tracked": 5, "held": 1, "hardened": 1,
+                             "softened": 1, "mixed": 1, "single": 1}
+    # first/last carry date-only stamps for display
+    assert by["1.1"]["first"] == {"t": "2026-06-03", "rec": "⚠️"}
+    assert by["1.1"]["last"] == {"t": "2026-06-04", "rec": "⏸️"}
+
+
+def test_track_record_skips_approx_junk_and_normalizes():
+    rows = [
+        {"t": "2026-06-01T00:00:00Z", "version": "1.0", "recommendation": "🔄"},  # retired → ⏸️
+        {"t": "2026-06-02T00:00:00Z", "version": "1.0", "recommendation": "⏸️"},
+        {"t": "2026-06-03T00:00:00Z", "version": "9.9", "recommendation": "⚠️", "approx": True},
+        {"t": "2026-06-04T00:00:00Z", "version": "", "recommendation": "⚠️"},     # no version
+        {"t": "2026-06-05T00:00:00Z", "version": "2.0", "recommendation": "??"},  # junk verdict
+        "not-a-dict",
+    ]
+    tr = render._track_record(rows, "1.0")
+    assert [e["version"] for e in tr["versions"]] == ["1.0"]
+    assert tr["versions"][0]["direction"] == "held"          # 🔄 normalized to ⏸️ → same verdict
+    assert tr["versions"][0]["runs"] == 2
+
+
+def test_track_record_caps_versions_and_sorts_unordered_rows():
+    rows = []
+    for i in range(12):
+        rows.append(_tl(f"2026-06-{i+1:02d}T00:00:00Z", f"1.{i}", "⚠️"))
+    # a later row for 1.11 arriving out of order must still sort by t
+    rows.insert(0, _tl("2026-06-30T00:00:00Z", "1.11", "⏸️"))
+    tr = render._track_record(rows, "1.11")
+    assert len(tr["versions"]) == 10                          # capped
+    assert tr["versions"][0]["version"] == "1.11"             # newest first
+    assert tr["versions"][0]["direction"] == "hardened"       # ⚠️ (Jun 12) → ⏸️ (Jun 30)
+
+
+def test_build_data_ships_track_record(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    monkeypatch.setattr(config, "TIMELINE_FILE", tmp_path / "timeline.json")
+    (tmp_path / "timeline.json").write_text(json.dumps([
+        {"t": "2026-06-16T00:00:00+00:00", "version": "2026.6.6", "recommendation": "⚠️", "issues": 5},
+        {"t": "2026-06-18T00:00:00+00:00", "version": "2026.6.6", "recommendation": "⏸️", "issues": 7},
+    ]))
+    data = render._build_assessment_data({"assessment": {}, "version": "2026.6.6"}, {"sources": {}})
+    assert data["track_record"]["versions"][0]["direction"] == "hardened"
+    assert data["track_record"]["versions"][0]["current"] is True
+
+
+def test_build_data_track_record_empty_without_timeline(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    monkeypatch.setattr(config, "TIMELINE_FILE", tmp_path / "timeline.json")
+    data = render._build_assessment_data({"assessment": {}, "version": "1.0"}, {"sources": {}})
+    assert data["track_record"] == {"versions": [], "summary": {
+        "tracked": 0, "held": 0, "hardened": 0, "softened": 0, "mixed": 0, "single": 0}}
