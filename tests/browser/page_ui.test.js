@@ -228,6 +228,22 @@ const DATA = {
       href.indexOf("What looks wrong?") >= 0;
   }));
 
+  // 13. UI-revamp guards: the long-tail tab strip is a real tablist with a roving
+  //     tabindex + exactly one selected tab, and the meter cards carry the inline
+  //     SVG icons (the emoji glyphs were replaced by icon()) with labels intact.
+  t("long-tail tablist has roving tabindex and one selected tab", await page.evaluate(() => {
+    const ts = Array.from(document.querySelectorAll('.ltabs[role="tablist"] .ltab'));
+    return ts.length >= 2 &&
+      ts.filter((x) => x.tabIndex === 0).length === 1 &&
+      ts.filter((x) => x.tabIndex === -1).length === ts.length - 1 &&
+      ts.filter((x) => x.getAttribute("aria-selected") === "true").length === 1;
+  }));
+  t("meter cards carry inline svg icons with names intact", await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll("#components .plat"));
+    return cards.length > 0 &&
+      cards.every((c) => !!c.querySelector("svg.ic-svg") && !!c.querySelector(".pname").textContent.trim());
+  }));
+
   t("no page errors", errs.length === 0);
 
   fs.unlinkSync(tmp);
