@@ -288,11 +288,33 @@ def _extract_highlights(body: str, limit: int = 6) -> list:
     return out
 
 
-_PLATFORM_KEYS = {"windows", "macos", "linux", "ios", "android",
-                  "discord", "slack", "telegram", "all"}
+_PLATFORM_KEYS = {"windows", "macos", "linux", "ios", "android", "web",
+                  "discord", "slack", "telegram", "whatsapp", "other-channel",
+                  "all"}
+# First-class channel surfaces — these keep their own token; every other
+# `channel: *` maps to the generic "other-channel" bucket. WhatsApp earned
+# promotion on real volume (68 open titled issues at ground-truth time, incl.
+# P1 data-loss #78404 — 4-7x any other long-tail channel).
+_FIRST_CLASS_CHANNELS = ("discord", "slack", "telegram", "whatsapp")
+# The repo's channel taxonomy beyond the first-class ones (real `channel: *`
+# labels). Any of these — as an analyst-emitted token (alias) or a `channel: X`
+# label (derivation) — maps to the generic "other-channel" surface. Free-TEXT
+# detection uses only the distinctive names (_PLATFORM_SIGNALS below): the
+# common-word channels (signal, matrix, line, raft, teams) are label/alias-only,
+# they'd false-fire on prose ("signal handler", "permission matrix").
+_OTHER_CHANNEL_NAMES = (
+    "signal", "matrix", "msteams", "teams", "microsoft teams", "imessage",
+    "bluebubbles", "wechat", "feishu", "googlechat", "google chat", "irc",
+    "line", "mattermost", "nextcloud-talk", "nostr", "qqbot", "sms",
+    "synology-chat", "tlon", "twitch", "voice-call", "zalo", "zaloclawbot",
+    "zalouser", "raft",
+)
 _PLATFORM_ALIASES = {"win": "windows", "win32": "windows", "mac": "macos",
                      "osx": "macos", "mac os": "macos", "darwin": "macos",
-                     "iphone": "ios", "ipad": "ios", "ipados": "ios"}
+                     "iphone": "ios", "ipad": "ios", "ipados": "ios",
+                     "webui": "web", "web-ui": "web", "web ui": "web",
+                     "whatsapp-web": "whatsapp",
+                     **{n: "other-channel" for n in _OTHER_CHANNEL_NAMES}}
 
 
 def _norm_platforms(value) -> list:
@@ -323,9 +345,18 @@ _PLATFORM_SIGNALS = {
     # caught through the label-text scan; termux is the common Android node host.
     "ios": r"\bios\b|\biphone\b|\bipad\b|\bipados\b",
     "android": r"\bandroid\b|\btermux\b",
+    "web": r"\bweb[ -]?ui\b",
     "discord": r"\bdiscord\b",
     "slack": r"\bslack\b",
     "telegram": r"\btelegram\b",
+    "whatsapp": r"\bwhatsapp\b|\bbaileys\b",
+    # Long-tail channels: distinctive names ONLY — signal/matrix/line/raft/teams
+    # are common prose words and must come in via `channel: *` labels instead
+    # (the dedicated label step in _derive_platforms).
+    "other-channel": r"\bmsteams\b|\bmicrosoft teams\b|\bwechat\b|\bbluebubbles\b"
+                     r"|\bmattermost\b|\bnostr\b|\bfeishu\b|\bzalo\b|\btwitch\b"
+                     r"|\bgoogle ?chat\b|\bnextcloud\b|\birc\b|\bsynology\b"
+                     r"|\bqqbot\b|\bsms\b|\bvoice[ -]?call\b|\btlon\b",
 }
 _CORE_SIGNAL = re.compile(
     r"\b(build|compile|memory|index|reindex|engine|session|auth|gateway|database|migration|startup|worker|core)\b",
@@ -348,6 +379,17 @@ def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
         label_text,
     ]).lower()
     found = [k for k, pat in _PLATFORM_SIGNALS.items() if re.search(pat, text)]
+    # Authoritative label mapping for the channel long tail: a `channel: X` label
+    # whose name is unsafe as a free-text keyword (signal, matrix, line, …) still
+    # deserves a surface. First-class channel labels are already caught by the
+    # text scan above (the label text contains the channel name).
+    for l in labels:
+        name = (l.get("name", "") if isinstance(l, dict) else str(l)).strip().lower()
+        if name.startswith("channel:"):
+            chan = name.split(":", 1)[1].strip()
+            if chan and not any(fc in chan for fc in _FIRST_CLASS_CHANNELS) \
+                    and "other-channel" not in found:
+                found.append("other-channel")
     if found:
         return found
     sev = str(severity or raw_issue.get("severity", "")).lower()
@@ -358,8 +400,9 @@ def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
     return []
 
 
-_PLATFORM_IMPACT_KEYS = ("windows", "macos", "linux", "ios", "android",
-                         "discord", "slack", "telegram")
+_PLATFORM_IMPACT_KEYS = ("windows", "macos", "linux", "ios", "android", "web",
+                         "discord", "slack", "telegram", "whatsapp",
+                         "other-channel")
 _SEVERITY_WEIGHT = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
 

@@ -312,6 +312,10 @@ def test_norm_platforms_keeps_known_tokens_and_drops_junk():
     assert render._norm_platforms(None) == []
     # mobile tokens + device-name aliases
     assert render._norm_platforms(["iOS", "iPhone", "Android"]) == ["ios", "android"]
+    # web + channel surfaces: first-class whatsapp; long-tail names alias to the bucket
+    assert render._norm_platforms(["Web-UI", "WhatsApp", "Matrix", "MSTeams"]) == \
+        ["web", "whatsapp", "other-channel"]
+    assert render._norm_platforms(["whatsapp-web", "other-channel"]) == ["whatsapp", "other-channel"]
 
 
 def test_derive_platforms_from_text():
@@ -327,11 +331,32 @@ def test_derive_platforms_from_text():
     # serious core regression naming no surface -> "all"
     assert render._derive_platforms({"title": "memory index reindex race"},
                                     severity="critical", category="regression") == ["all"]
-    # a channel-specific crash is NOT "all"
+    # a channel-specific crash is NOT "all" — it now lands in the long-tail bucket
     assert render._derive_platforms({"title": "msteams channel crash-loop"},
-                                    severity="critical", category="regression") == []
+                                    severity="critical", category="regression") == ["other-channel"]
     # benign, unattributed -> nothing
     assert render._derive_platforms({"title": "typo in docs"}, severity="low") == []
+
+
+def test_derive_platforms_channel_long_tail():
+    # distinctive channel keywords in free text land in the generic bucket;
+    # WhatsApp is first-class (68 open titled issues at ground-truth time)
+    assert render._derive_platforms({"title": "MSTeams adapter drops attachments"}) == ["other-channel"]
+    assert render._derive_platforms({"title": "WhatsApp (Baileys) session logout loop"}) == ["whatsapp"]
+    assert render._derive_platforms({"title": "Web UI settings pane renders blank"}) == ["web"]
+    # common-word channel names are LABEL-only — prose never fires them...
+    assert render._derive_platforms({"title": "SIGTERM signal handler race"}) == []
+    assert render._derive_platforms({"title": "permission matrix rework"}) == []
+    # ...but the authoritative `channel: X` label does
+    assert render._derive_platforms(
+        {"title": "messages stuck", "labels": [{"name": "channel: matrix"}]}) == ["other-channel"]
+    assert render._derive_platforms(
+        {"title": "x", "labels": [{"name": "channel: signal"}]}) == ["other-channel"]
+    # first-class channel labels keep their own token (never bucketed)
+    assert render._derive_platforms(
+        {"title": "x", "labels": [{"name": "channel: telegram"}]}) == ["telegram"]
+    assert render._derive_platforms(
+        {"title": "x", "labels": [{"name": "channel: whatsapp-web"}]}) == ["whatsapp"]
 
 
 def test_derive_platforms_no_substring_false_positives():
@@ -367,6 +392,11 @@ def test_derive_platform_impact_from_tags():
     # a mobile-only tag surfaces on its own row
     assert render._derive_platform_impact(
         [{"platforms": ["android"], "severity": "medium"}]) == {"android": "medium"}
+    # web / whatsapp / the long-tail bucket each get their own row
+    assert render._derive_platform_impact(
+        [{"platforms": ["other-channel"], "severity": "high"},
+         {"platforms": ["whatsapp"], "severity": "medium"}]) == \
+        {"whatsapp": "medium", "other-channel": "high"}
     # worst-severity bucketing without an "all" floor
     pi2 = render._derive_platform_impact([{"platforms": ["slack"], "severity": "low"}])
     assert pi2 == {"slack": "low"}        # only slack hit, low; others absent
