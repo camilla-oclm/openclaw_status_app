@@ -1091,6 +1091,8 @@ def _llms_txt(data: dict) -> str:
         f"- [RSS feed of verdicts]({site}/feed.xml): one item per assessed version.",
         f"- [Status badge (SVG)]({site}/badge.svg)",
         f"- [Human page]({site}/)",
+        f"- [Report a problem]({config.APP_REPO_URL}/issues/new): file an issue if a verdict, "
+        "tag, or severity looks wrong — every report is checked against the evidence.",
         "",
     ]
     return "\n".join(L)

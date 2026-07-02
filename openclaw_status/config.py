@@ -138,6 +138,9 @@ OUTPUT_HTML = WEB_DIR / "index.html"
 
 # Public base URL of the deployed site — used in the RSS feed item links.
 SITE_URL = "https://clawstat.us"
+# This app's own public repo — the "report a problem" path (issues) + source link.
+# The template carries its own copy (it's a static artifact); keep the two in sync.
+APP_REPO_URL = "https://github.com/camilla-oclm/openclaw_status_app"
 # Each render also writes sibling artifacts next to OUTPUT_HTML (paths derived via
 # Path.with_name in render.py, so they stay together even for a custom output dir;
 # Caddy serves web/, so all are reachable):
