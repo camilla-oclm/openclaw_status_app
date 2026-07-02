@@ -547,6 +547,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .setup .chips{display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-bottom:.9rem}
 .pick-clear{border-style:dashed; --p-fg:var(--faint)}
 .pick-clear:hover{--p-fg:var(--bad); --p-bd:var(--bad-bd)}
+.pick-share{border-style:dashed; --p-fg:var(--faint)}
+.pick-share:hover{--p-fg:var(--accent); --p-bd:color-mix(in srgb,var(--accent) 40%,transparent)}
 .setup .chip-grp{flex-basis:100%; font-size:var(--fs-2xs); font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-top:.3rem}
 .setup .chip-grp:first-child{margin-top:0}
 .pick{--p-bg:var(--card)}
@@ -1268,10 +1270,19 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // ── personalization: the user's platform/channel "stack" (localStorage) ──
   // A plain { key:true } set; render() reads it so a re-render re-applies the
   // highlights consistently. Toggling a chip just saves + re-renders.
+  // A `?stack=linux,gateway` URL param wins over localStorage at boot (shared /
+  // bookmarked links open pre-picked; unknown keys are dropped) but is NOT saved
+  // until the visitor's first own toggle — opening someone's link doesn't
+  // overwrite this device's remembered stack. The param is a QUERY param, not
+  // the hash: in-page anchors (skip-link, permalinks) keep working untouched.
   var STACK = {};
   (function(){
     try {
-      var saved = JSON.parse(localStorage.getItem("oc-stack")) || [];
+      var fromUrl = (new URLSearchParams(location.search).get("stack") || "")
+        .split(",").map(function(s){ return s.trim().toLowerCase(); })
+        .filter(function(k){ return PLAT_LABEL[k] || COMP_LABEL[k]; });
+      var saved = fromUrl.length ? fromUrl
+        : (JSON.parse(localStorage.getItem("oc-stack")) || []);
       for (var i=0;i<saved.length;i++) STACK[saved[i]] = true;
     } catch(e){}
   })();
@@ -1280,7 +1291,19 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // The stack mixes platform keys and component keys (disjoint sets); split by membership.
   function stackPlatforms(){ return stackKeys().filter(function(k){ return PLAT_LABEL[k]; }); }
   function stackComponents(){ return stackKeys().filter(function(k){ return COMP_LABEL[k]; }); }
-  function saveStack(){ try { localStorage.setItem("oc-stack", JSON.stringify(stackKeys())); } catch(e){} }
+  function saveStack(){
+    try { localStorage.setItem("oc-stack", JSON.stringify(stackKeys())); } catch(e){}
+    // Mirror the stack into the URL so the address bar is always a shareable
+    // deep link (replaceState: no history spam, hash/anchors preserved).
+    // NB: window.history explicitly — the bare name is shadowed in this closure
+    // by the history() section builder.
+    try {
+      var qs = new URLSearchParams(location.search), ks = stackKeys();
+      if (ks.length) qs.set("stack", ks.join(",")); else qs.delete("stack");
+      var q = qs.toString().replace(/%2C/gi, ",");   // commas are query-legal; keep the link readable
+      window.history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash);
+    } catch(e){}
+  }
   // Title keyword match — the FALLBACK for issues with no analyst `platforms` tag.
   var STACK_MATCH = {
     windows:/windows|win32|\.exe|powershell/i,
@@ -2438,12 +2461,29 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
                                 title:"Clear every picked platform, channel and component"}, "✕ clear all");
     if (!stackActive()) clearBtn.setAttribute("hidden","");
     chips.appendChild(clearBtn);
+    // The URL always mirrors the stack (saveStack), so sharing = copying the address.
+    // This chip just makes that discoverable; clipboard failure degrades to a hint.
+    var shareBtn = el("button",{"class":"pick pick-share", type:"button", id:"stack-share",
+                                title:"Copy a link that opens this page with your setup pre-picked"}, "⧉ copy link");
+    if (!stackActive()) shareBtn.setAttribute("hidden","");
+    chips.appendChild(shareBtn);
     s.appendChild(chips);
     s.appendChild(personalRisk());
     chips.addEventListener("click", function(ev){
       if (ev.target.closest(".pick-clear")){
         for (var k0 in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k0)) delete STACK[k0]; }
         saveStack(); applyStack();
+        return;
+      }
+      if (ev.target.closest(".pick-share")){
+        var link = location.href;
+        var done = function(){ announce("Link copied — it opens with this setup pre-picked."); };
+        var fail = function(){ announce("Couldn't copy automatically — copy the address bar; it carries your setup."); };
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(link).then(done, fail);
+          } else { fail(); }
+        } catch(e){ fail(); }
         return;
       }
       var b = ev.target.closest(".pick"); if(!b) return;
@@ -2465,6 +2505,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       });
       var clr = document.getElementById("stack-clear");
       if (clr){ if (stackActive()) clr.removeAttribute("hidden"); else clr.setAttribute("hidden",""); }
+      var shr = document.getElementById("stack-share");
+      if (shr){ if (stackActive()) shr.removeAttribute("hidden"); else shr.setAttribute("hidden",""); }
       var risk = setup.querySelector(".risk, .hint");
       if (risk) risk.parentNode.replaceChild(personalRisk(), risk);
     }

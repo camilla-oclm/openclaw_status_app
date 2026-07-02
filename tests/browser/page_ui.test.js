@@ -254,6 +254,40 @@ const DATA = {
       cards.every((c) => !!c.querySelector("svg.ic-svg") && !!c.querySelector(".pname").textContent.trim());
   }));
 
+  // 14. Stack-in-URL: a ?stack= link boots pre-picked (unknown keys dropped, the
+  //     device's saved stack untouched), toggles keep the address shareable, and
+  //     the copy-link chip announces either way (clipboard success or fallback).
+  //     Served over loopback HTTP — file:// documents have origin "null", where
+  //     Chrome rejects history.replaceState with a URL (production is HTTPS).
+  const http = require("http");
+  const server = http.createServer((req, res) => {
+    if ((req.url || "").split("?")[0] !== "/") { res.statusCode = 404; return res.end(); }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(pageFor(DATA));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = "http://127.0.0.1:" + server.address().port;
+  await page.goto(base + "/?stack=linux,gateway,bogus", { waitUntil: "networkidle0" });
+  const urlBoot = await page.evaluate(() => ({
+    pressed: Array.from(document.querySelectorAll('.setup .pick[aria-pressed="true"]'))
+      .map((b) => b.getAttribute("data-k")).sort().join(","),
+    stored: localStorage.getItem("oc-stack"),
+    shareShown: !document.getElementById("stack-share").hidden,
+  }));
+  t("?stack= URL boots pre-picked, unknown keys dropped", urlBoot.pressed === "gateway,linux");
+  t("a shared link never overwrites the device's saved stack", urlBoot.stored === null);
+  t("share chip shows for a URL-booted stack", urlBoot.shareShown);
+  await page.evaluate(() => document.querySelector('.setup .pick[data-k="windows"]').click());
+  const search = await page.evaluate(() => location.search);
+  t("toggling rewrites the shareable URL (readable commas)",
+    /^\?stack=/.test(search) && search.includes("windows") &&
+    search.includes("linux") && !search.includes("%2C"));
+  await page.click("#stack-share");
+  await new Promise((r) => setTimeout(r, 300));
+  t("copy-link chip announces", /cop(y|ied)/i.test(
+    await page.evaluate(() => document.getElementById("live").textContent)));
+  server.close();
+
   t("no page errors", errs.length === 0);
 
   fs.unlinkSync(tmp);
