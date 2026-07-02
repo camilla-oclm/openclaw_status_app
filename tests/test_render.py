@@ -310,6 +310,8 @@ def test_norm_platforms_keeps_known_tokens_and_drops_junk():
     assert render._norm_platforms(["all", "all"]) == ["all"]       # dedup
     assert render._norm_platforms("linux") == []                   # not a list
     assert render._norm_platforms(None) == []
+    # mobile tokens + device-name aliases
+    assert render._norm_platforms(["iOS", "iPhone", "Android"]) == ["ios", "android"]
 
 
 def test_derive_platforms_from_text():
@@ -318,6 +320,10 @@ def test_derive_platforms_from_text():
     assert render._derive_platforms({"title": "x", "body": "crashes on Windows only"}) == ["windows"]
     assert render._derive_platforms({"title": "Discord bot offline"}) == ["discord"]
     assert render._derive_platforms({"title": "x", "labels": [{"name": "platform:macos"}]}) == ["macos"]
+    # mobile app surfaces (real repo shapes: title keyword or `app: ios` label)
+    assert render._derive_platforms({"title": "contacts.add crashes the iOS app"}) == ["ios"]
+    assert render._derive_platforms({"title": "x", "labels": [{"name": "app: android"}]}) == ["android"]
+    assert render._derive_platforms({"title": "node offline when run under Termux"}) == ["android"]
     # serious core regression naming no surface -> "all"
     assert render._derive_platforms({"title": "memory index reindex race"},
                                     severity="critical", category="regression") == ["all"]
@@ -342,6 +348,9 @@ def test_derive_platforms_no_substring_false_positives():
     # tokens only fire as whole words, never as substrings of a larger one
     assert render._derive_platforms({"title": "x", "body": "the winner takes the macports route"}) == []
     assert render._derive_platforms({"title": "grapple with the syntax"}) == []
+    # `ios`/`android` never fire buried inside a longer word (bios, NixOS, androidx)
+    assert render._derive_platforms({"title": "x", "body": "check the BIOS settings on NixOS"}) == []
+    assert render._derive_platforms({"title": "x", "body": "migrate off the androidx shim"}) == []
 
 
 def test_derive_platform_impact_from_tags():
@@ -354,6 +363,10 @@ def test_derive_platform_impact_from_tags():
     assert pi["linux"] == "high"          # critical → "high" bucket
     assert pi["discord"] == "high"        # max(medium-specific, high-from-all) → high
     assert pi["windows"] == "high"        # inherits the cross-cutting "all" high
+    assert pi["ios"] == "high"            # mobile surfaces inherit "all" too
+    # a mobile-only tag surfaces on its own row
+    assert render._derive_platform_impact(
+        [{"platforms": ["android"], "severity": "medium"}]) == {"android": "medium"}
     # worst-severity bucketing without an "all" floor
     pi2 = render._derive_platform_impact([{"platforms": ["slack"], "severity": "low"}])
     assert pi2 == {"slack": "low"}        # only slack hit, low; others absent

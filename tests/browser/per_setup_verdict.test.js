@@ -62,6 +62,12 @@ const CASES = [
   ["component-only stack hit blocks softening",
    D("⏸️", false, [issue({ severity: "high", affects_version: true, components: ["auth"] })]),
    ["auth"], "⏸️"],
+  ["⏸️ blocked by a version-confirmed iOS critical ON an iOS stack",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["ios"] })]),
+   ["ios"], "⏸️"],
+  ["a mobile-only blocker spares a desktop stack",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["ios"] })]),
+   ["linux"], "⚠️"],
 ];
 
 (async () => {

@@ -288,9 +288,11 @@ def _extract_highlights(body: str, limit: int = 6) -> list:
     return out
 
 
-_PLATFORM_KEYS = {"windows", "macos", "linux", "discord", "slack", "telegram", "all"}
+_PLATFORM_KEYS = {"windows", "macos", "linux", "ios", "android",
+                  "discord", "slack", "telegram", "all"}
 _PLATFORM_ALIASES = {"win": "windows", "win32": "windows", "mac": "macos",
-                     "osx": "macos", "mac os": "macos", "darwin": "macos"}
+                     "osx": "macos", "mac os": "macos", "darwin": "macos",
+                     "iphone": "ios", "ipad": "ios", "ipados": "ios"}
 
 
 def _norm_platforms(value) -> list:
@@ -316,6 +318,11 @@ _PLATFORM_SIGNALS = {
     "windows": r"\bwindows\b|\bwin32\b|\.exe\b|\bpowershell\b|\bwsl\b",
     "macos": r"\bmacos\b|\bmac os\b|\bosx\b|\bdarwin\b|\bimessage\b|\bapple\b",
     "linux": r"\blinux\b|\bdocker\b|\bcontainer\b|\bsystemd\b|\bubuntu\b|\bdebian\b|\bcgroup\b|\bself-hosted\b|\bkubernetes\b|\bk8s\b",
+    # \bios\b only fires on the standalone word ("bios"/"nixos" don't match — no
+    # boundary before the `i`). The repo's `app: ios`/`app: android` labels are
+    # caught through the label-text scan; termux is the common Android node host.
+    "ios": r"\bios\b|\biphone\b|\bipad\b|\bipados\b",
+    "android": r"\bandroid\b|\btermux\b",
     "discord": r"\bdiscord\b",
     "slack": r"\bslack\b",
     "telegram": r"\btelegram\b",
@@ -351,7 +358,8 @@ def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
     return []
 
 
-_PLATFORM_IMPACT_KEYS = ("windows", "macos", "linux", "discord", "slack", "telegram")
+_PLATFORM_IMPACT_KEYS = ("windows", "macos", "linux", "ios", "android",
+                         "discord", "slack", "telegram")
 _SEVERITY_WEIGHT = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
 
