@@ -759,6 +759,26 @@ def _run_summary_message(version, recommendation, run_cost, daily_total, monthly
     )
 
 
+def _latency_watch(pipeline_steps: list) -> str | None:
+    """A slow-model heads-up: which pipeline steps ran at/over config.SLOW_CALL_WARN_S
+    (None when every call was under it).
+
+    Latency creep is the pipeline's quiet failure mode: the shared wall-clock budget
+    starts degrading runs (validator skipped → single-model "unreviewed" pages) long
+    before anything errors, so the watch pings while the runs still look successful.
+    Observability only — never changes the verdict or blocks the run."""
+    slow = []
+    for step in pipeline_steps or []:
+        ms = (step.get("usage") or {}).get("latency_ms", 0) or 0
+        if ms >= config.SLOW_CALL_WARN_S * 1000:
+            slow.append(f"{step.get('step', '?')} ({step.get('model', '?')}) took {ms / 1000:.0f}s")
+    if not slow:
+        return None
+    return (f"🐢 slow model call{'s' if len(slow) > 1 else ''}: " + "; ".join(slow)
+            + f" (warn ≥{config.SLOW_CALL_WARN_S}s; pipeline budget {config.PIPELINE_BUDGET_S}s"
+            f" — repeated slow calls end in degraded single-model runs)")
+
+
 def _previous_verdict(version: str) -> dict | None:
     """The most recent history entry for this version (anchors the sticky verdict)."""
     if not version:
@@ -1172,6 +1192,12 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     for alert in alerts:
         print(f"   🚨 COST ALERT: {alert}")
         notify(f"🚨 OpenClaw Status cost alert: {alert}")
+
+    # Latency watch — flag calls drifting toward the pipeline budget (heads-up only).
+    slow_note = _latency_watch(pipeline_steps)
+    if slow_note:
+        print(f"   {slow_note}")
+        notify(f"OpenClaw Status: {slow_note}")
 
     # Track validator reliability (validator_unreviewed was computed at the validator step).
     if validator_unreviewed:
