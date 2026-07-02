@@ -44,6 +44,7 @@ _OUTPUT_SCHEMA = """{
     "fixed_in": "version or null if not fixed"
   }],
   "changes": {"breaking": [{"title": "...", "impact": "..."}], "fixes": [{"title": "...", "verified": true}], "features": [{"title": "...", "value": "..."}]},
+  "flip_conditions": ["2-3 concrete, checkable events that would CHANGE this verdict, each naming the direction"],
   "sentiment_summary": "community sentiment in 1-2 sentences, cite sources",
   "platform_impact": {
     "windows": "none | low | medium | high",
@@ -77,6 +78,7 @@ RULES:
 11. **`changes`** is recomputed deterministically from the changelog's ### sections after your pass — your extraction is only the fallback for an unstructured body, so keep it cheap: features ← "### Highlights", fixes ← "### Fixes" (set `verified: true`), breaking ← ONLY an explicit Breaking section (the general "### Changes" section is NOT breaking); one-line titles.
 12. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, discord, slack, telegram — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; a Discord delivery bug → ["discord"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
 13. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
+14. **`flip_conditions`** — 2-3 short, CONCRETE, checkable events that would change this verdict, each naming the direction it moves (e.g. "⏸️ eases to ⚠️ once a stable release ships the #12345 fix", "⚠️ hardens to ⏸️ if the #67890 data-loss report is confirmed on stable"). Ground each in cited evidence (issue numbers, the staged pre-release); cover both directions when the evidence allows. These are user-facing tripwires to watch between runs — no vague filler like "if more bugs appear".
 
 RECOMMENDATION GUIDELINES:
 - ✅ Update now: critical fix or high-value feature, no risky bugs, no open regressions
@@ -426,7 +428,7 @@ def validate_assessment(assessment: dict) -> list[str]:
         if _XSS_PRIMARY.search(assessment.get(field, "") or ""):
             errors.append(f"XSS pattern detected in {field}")
 
-    for field in ("evidence", "known_issues", "changes"):
+    for field in ("evidence", "known_issues", "changes", "flip_conditions"):
         if any(_XSS_NESTED.search(s) for s in _iter_strings(assessment.get(field))):
             errors.append(f"XSS pattern detected in {field}")
 
