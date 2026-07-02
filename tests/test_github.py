@@ -168,6 +168,9 @@ def test_derive_severity_from_priority():
 def test_derive_severity_breakage_label_bumps_to_critical():
     assert github.derive_severity(["P1", "regression"], 0, 0) == "critical"
     assert github.derive_severity(["P2", "crash"], 0, 0) == "high"
+    # the repo's real harm labels ride the same keyword bumps ("crash", "data-loss")
+    assert github.derive_severity(["P2", "impact:crash-loop"], 0, 0) == "high"
+    assert github.derive_severity(["P1", "impact:data-loss"], 0, 0) == "critical"
 
 
 def test_derive_severity_serious_impact_floors_at_high_not_critical():
@@ -481,8 +484,11 @@ def test_scout_guarantees_p0_and_impact_searches(monkeypatch):
     github.scout_issues("2026-06-24", "2026.6.10")
     fresh = [q for q in seen if "created:>=2026-06-24" in q]
     assert any("label:P0" in q and "sort:created-desc" in q for q in fresh)
-    for lbl in ("impact:security", "impact:data", "impact:message-loss",
-                "impact:session-state", "impact:auth-provider"):
+    # The exact names matter: GitHub label search is exact-match, so these must be
+    # the repo's REAL labels (impact:data-loss, not a bare impact:data; crash-loop
+    # exists and marks the boot-brick class of harm).
+    for lbl in ("impact:security", "impact:data-loss", "impact:crash-loop",
+                "impact:message-loss", "impact:session-state", "impact:auth-provider"):
         assert any(f'label:"{lbl}"' in q for q in fresh), f"no guaranteed search for {lbl}"
 
 
@@ -506,7 +512,7 @@ def test_scout_surfaces_unpopular_p0_outside_broad_cut(monkeypatch):
 
     def fake_search(q, limit, timeout=30):
         if "label:P0" in q:                         # the only search that returns the critical
-            return [_scout_node(555, "Data loss on sync", ["P0", "impact:data"], thumbs=0)]
+            return [_scout_node(555, "Data loss on sync", ["P0", "impact:data-loss"], thumbs=0)]
         if is_unlabeled(q):                         # broad/all-open: 25 newer, noisier issues
             return [_scout_node(n, f"noise {n}", ["bug"], thumbs=0) for n in range(600, 625)]
         return []

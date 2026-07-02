@@ -120,7 +120,8 @@ Each issue is then scored from the repo's real labels:
 
 - **Severity** comes from the maintainer **priority labels** `P0…P4`, bumped one level for
   a breakage label (`regression`/`crash`/`data-loss`) and floored at *high* for a serious
-  harm area (`impact:security` / `data` / `message-loss` / `session-state` / `auth-provider`).
+  harm area (`impact:security` / `data-loss` / `crash-loop` / `message-loss` /
+  `session-state` / `auth-provider`).
   *(The `issue-rating: 🦞 diamond lobster` label is a quality rating — it appears on feature
   requests too — so it is **not** treated as a severity.)*
 - **Impact** = a bucket from 👍 reactions + comment volume.

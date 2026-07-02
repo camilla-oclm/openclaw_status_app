@@ -264,9 +264,14 @@ _CLOSING_RE = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)"
 #     feature requests) — it is NOT a severity, so it no longer forces "critical".
 _SEV = ["low", "medium", "high", "critical"]
 _PRIORITY = {"p0": 3, "p1": 2, "p2": 1, "p3": 0, "p4": 0}
+# The repo's REAL serious-harm labels (verified against the live label list —
+# there is no bare "impact:data"; the actual label is "impact:data-loss", and
+# "impact:crash-loop" exists too). These names feed BOTH the severity floor
+# (substring match, tolerant) and the guaranteed scout searches (GitHub label
+# search is EXACT — a wrong name there is a dead search that returns nothing).
 _SERIOUS_IMPACT = (
-    "impact:security", "impact:data", "impact:message-loss",
-    "impact:session-state", "impact:auth-provider",
+    "impact:security", "impact:data-loss", "impact:crash-loop",
+    "impact:message-loss", "impact:session-state", "impact:auth-provider",
 )
 _BUG_KEYWORDS = ("regression", "crash", "data-loss", "data loss", "dataloss")
 
@@ -359,8 +364,8 @@ def impact_level(thumbs_up: int, comments: int) -> str:
 
 def derive_severity(labels, thumbs_up: int = 0, comments: int = 0) -> str:
     """Severity from the maintainer priority label (P0..P4) when present, else
-    community impact, bumped one level for serious harm (security / data /
-    message-loss / session-state) or a regression/crash label."""
+    community impact, bumped one level for serious harm (security / data-loss /
+    crash-loop / message-loss / session-state) or a regression/crash label."""
     low = [str(l).lower() for l in (labels or [])]
     thumbs_up, comments = int(thumbs_up or 0), int(comments or 0)
 
