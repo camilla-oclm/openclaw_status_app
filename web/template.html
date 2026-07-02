@@ -323,7 +323,7 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 
 .prose{
   background:var(--card); border:1px solid var(--border); border-radius:var(--r-md);
-  padding:1.2rem 1.3rem; font-size:var(--fs-md); color:var(--text); box-shadow:var(--shadow-1);
+  padding:1.2rem 1.3rem; font-size:var(--fs-md); line-height:1.7; color:var(--text); box-shadow:var(--shadow-1);
 }
 .prose p{margin-bottom:.8rem} .prose p:last-child{margin-bottom:0}
 .ilink{color:var(--accent); text-decoration:none; font-family:var(--mono); font-size:.92em; font-weight:600}
@@ -333,7 +333,7 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .ev-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem}
 @media(max-width:680px){.ev-grid{grid-template-columns:1fr}}
 .ev-card{background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:1.1rem 1.2rem; box-shadow:var(--shadow-1)}
-.ev-card h3{font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:.45rem; margin-bottom:.75rem; font-weight:800}
+.ev-card h3{font-family:var(--mono); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; display:flex; align-items:center; gap:.45rem; margin-bottom:.75rem; font-weight:700}
 .ev-for h3{color:var(--good)} .ev-against h3{color:var(--bad)} .ev-neutral h3{color:var(--muted)}
 .ev-card ul{list-style:none; display:flex; flex-direction:column; gap:.6rem; max-height:17rem; overflow-y:auto; padding-right:.4rem}
 .ev-card li{position:relative; padding-left:1.15rem; font-size:var(--fs-base); color:var(--text)}
@@ -344,15 +344,15 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 /* ── flip conditions (what would change this verdict) ──────────────────── */
 .flip-card{background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:1.1rem 1.2rem; box-shadow:var(--shadow-1)}
 .flip-card ul{list-style:none; display:flex; flex-direction:column; gap:.65rem}
-.flip-card li{position:relative; padding-left:1.5rem; font-size:var(--fs-base); color:var(--text)}
-.flip-card li::before{content:"⚡"; position:absolute; left:0; top:0; font-size:var(--fs-sm); color:var(--accent)}
+.flip-card li{position:relative; padding-left:1.2rem; font-size:var(--fs-base); color:var(--text)}
+.flip-card li::before{content:"›"; position:absolute; left:0; top:-.05em; font-family:var(--mono); font-weight:700; font-size:var(--fs-md); color:var(--accent)}
 .flip-note{font-size:var(--fs-xs); color:var(--faint); margin-top:.8rem}
 
 /* ── verdict track record ───────────────────────────────────────────────── */
 .tr-sum{font-size:var(--fs-sm); color:var(--muted); margin-bottom:.9rem}
 .tr-list{display:flex; flex-direction:column; gap:.45rem}
-.tr-row{display:flex; align-items:center; gap:.4rem .9rem; flex-wrap:wrap; background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:.6rem .9rem; font-size:var(--fs-sm)}
-.tr-row.cur{border-color:var(--accent)}
+.tr-row{display:flex; align-items:center; gap:.4rem .9rem; flex-wrap:wrap; background:var(--card); border:1px solid var(--border); border-radius:var(--r-sm); padding:.6rem .9rem; font-size:var(--fs-sm)}
+.tr-row.cur{border-color:color-mix(in srgb,var(--accent) 45%,transparent); background:color-mix(in srgb,var(--accent) 5%,var(--card))}
 .tr-ver{font-family:var(--mono); font-weight:700; min-width:8ch}
 .tr-ver .cur-dot{color:var(--accent); font-size:.6rem; vertical-align:middle; margin-left:.25rem}
 .tr-path{letter-spacing:.04em}
@@ -371,8 +371,8 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .fsep{display:inline-flex; align-items:center; margin-left:.35rem; padding-left:.5rem; border-left:1px solid var(--border2);
   font-size:var(--fs-2xs); font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint)}
 .issue{
-  background:var(--card); border:1px solid var(--border); border-left-width:3px; border-radius:var(--r-md);
-  margin-bottom:.4rem; box-shadow:var(--shadow-1); overflow:hidden; transition:border-color .15s var(--ease)}
+  background:var(--card); border:1px solid var(--border); border-left-width:3px; border-radius:var(--r-sm);
+  margin-bottom:.4rem; overflow:hidden; transition:border-color .15s var(--ease)}
 .issue:hover{border-color:var(--border2)}
 .issue.sev-critical{border-left-color:var(--bad); border-left-width:4px}
 .issue.sev-high{border-left-color:var(--orange,#e08a3c)}
@@ -380,7 +380,7 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .issue.sev-low{border-left-color:var(--gray)}
 /* compact summary row (click to expand) */
 .irow{display:flex; align-items:center; gap:.55rem; width:100%; text-align:left; cursor:pointer;
-  background:none; border:0; color:inherit; font:inherit; padding:.5rem .85rem}
+  background:none; border:0; color:inherit; font:inherit; padding:.55rem .9rem}
 .irow:hover{background:var(--card2)}
 .irow:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
 .sevdot{flex:none; width:9px; height:9px; border-radius:50%; background:var(--gray)}
@@ -398,9 +398,9 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .idetail[hidden]{display:none}
 .idet-link{display:inline-block; margin-top:.55rem; font-size:var(--fs-xs); font-weight:700; color:var(--accent); text-decoration:none}
 .idet-link:hover{text-decoration:underline}
-.ki-more{display:block; margin:.5rem auto 0; font-size:var(--fs-sm); font-weight:700; color:var(--accent);
-  background:var(--card); border:1px solid var(--border2); border-radius:var(--r-pill); padding:.4rem 1.15rem; cursor:pointer; transition:.15s var(--ease)}
-.ki-more:hover{border-color:var(--accent); color:var(--text)}
+.ki-more{display:block; width:100%; margin:.5rem 0 0; font:inherit; font-size:var(--fs-sm); font-weight:600; color:var(--accent);
+  background:transparent; border:1px solid var(--border); border-radius:var(--r-sm); padding:.55rem 1.15rem; cursor:pointer; transition:.15s var(--ease)}
+.ki-more:hover{background:var(--card); border-color:var(--border2)}
 .issue .tags{display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.5rem}
 .tag{gap:.3rem; --p-pad:.16rem .55rem}
 .tag.t-bad{--p-fg:var(--bad); --p-bd:var(--bad-bd); --p-bg:var(--bad-bg)}
@@ -409,7 +409,7 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .tag.t-info{--p-fg:var(--accent); --p-bd:var(--info-bd); --p-bg:var(--info-bg)}
 .tag.t-plat{--p-fg:var(--text); --p-bd:var(--border2); --p-bg:var(--card2); --p-fw:700}
 .tag.t-comp{--p-fg:var(--accent2); --p-fw:700; --p-bd:color-mix(in srgb,var(--accent2) 38%,transparent); --p-bg:color-mix(in srgb,var(--accent2) 13%,transparent)}
-.issue.mine{border-color:var(--info-bd); box-shadow:0 0 0 1px var(--info-bd), var(--shadow-1)}
+.issue.mine{border-color:var(--info-bd); background:color-mix(in srgb,var(--info) 4%,var(--card))}
 .tag.t-me{--p-fg:var(--accent); --p-bd:var(--info-bd); --p-bg:var(--info-bg)}
 /* heuristic (auto-detected) platform/subsystem tags read quieter than asserted ones */
 .tag.t-auto{--p-fg:var(--faint); border-style:dashed}
@@ -447,7 +447,8 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .ltab:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 .ltab-panel:focus{outline:none}
 .ltab-panel .section:first-child{margin-top:1.4rem}
-.change{background:var(--card); border:1px solid var(--border); border-radius:var(--r-sm); padding:.6rem .85rem; margin-bottom:.45rem; box-shadow:var(--shadow-1)}
+.change{background:transparent; border-bottom:1px solid var(--border); padding:.65rem .15rem}
+.change:last-child{border-bottom:0}
 .change .ct{font-weight:600; font-size:var(--fs-base)}
 .change .cm{font-size:var(--fs-sm); color:var(--muted); margin-top:.25rem}
 .panel{max-height:21rem; overflow-y:auto; padding-right:.3rem}
@@ -459,25 +460,25 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
    width (an inline count label used to squeeze the segments into thin slivers). */
 .plat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:.8rem}
 .plat{
-  background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--border);
-  border-radius:var(--r-md); padding:.9rem 1rem; box-shadow:var(--shadow-1);
+  background:var(--card); border:1px solid var(--border);
+  border-radius:var(--r-md); padding:.9rem 1rem;
 }
 .plat .ph{display:flex; align-items:center; gap:.4rem; min-width:0}
 .plat .pn{font-weight:700; font-size:var(--fs-base); display:flex; align-items:center; gap:.4rem; min-width:0; flex:1}
 .plat .pname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .plat .pmeter{display:flex; flex-direction:column; align-items:flex-start; gap:.5rem; margin-top:.8rem}
-.plat .vbar{display:block; width:100%; height:9px; border-radius:var(--r-pill); background:var(--card3); border:1px solid var(--border); overflow:hidden}
+.plat .vbar{display:block; width:100%; height:6px; border-radius:var(--r-pill); background:var(--card3); overflow:hidden}
 .plat .vbar .vfill{display:block; height:100%; border-radius:var(--r-pill); background:var(--ic)}
-.plat .pl{font-size:var(--fs-2xs); font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--ic)}
-.plat.you{outline:2px solid var(--accent); outline-offset:2px}
+.plat .pl{font-family:var(--mono); font-size:var(--fs-2xs); font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ic)}
+.plat.you{border-color:color-mix(in srgb,var(--accent) 45%,transparent); background:color-mix(in srgb,var(--accent) 5%,var(--card))}
 .plat .me{flex:none; white-space:nowrap; font-size:.6rem; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:.04em}
 
 /* ── sentiment ─────────────────────────────────────────────────────────── */
 .quote{
   background:var(--card); border:1px solid var(--border); border-radius:var(--r-md);
-  border-left:3px solid var(--accent); padding:1.15rem 1.3rem; font-size:var(--fs-md); box-shadow:var(--shadow-1);
+  border-left:2px solid var(--accent); padding:1.15rem 1.3rem; font-size:var(--fs-md); box-shadow:var(--shadow-1);
 }
-.quote .qh{font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:800; margin-bottom:.5rem}
+.quote .qh{font-family:var(--mono); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; margin-bottom:.5rem}
 .quote .qsrc{margin-top:.75rem; padding-top:.6rem; border-top:1px solid var(--border); font-size:var(--fs-xs); color:var(--faint)}
 
 /* ── triage ────────────────────────────────────────────────────────────── */
@@ -489,7 +490,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .triage-body{padding:0 1.2rem 1.15rem; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1.2rem}
 @media(max-width:680px){.triage-body{grid-template-columns:1fr}}
 .triage-col{min-width:0}
-.triage-col h4{font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:.4rem 0 .6rem; font-weight:800}
+.triage-col h4{font-family:var(--mono); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:.4rem 0 .6rem; font-weight:700}
 .trow{font-size:var(--fs-sm); padding:.42rem 0; border-bottom:1px solid var(--border); display:flex; gap:.5rem; align-items:baseline}
 .trow:last-child{border-bottom:none}
 .trow .tn{font-family:var(--mono); color:var(--accent); text-decoration:none; font-weight:600; white-space:nowrap}
@@ -499,7 +500,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 /* ── history timeline ──────────────────────────────────────────────────── */
 .timeline{display:flex; flex-direction:column; gap:0}
 .tl{display:flex; gap:.95rem; padding-bottom:1.05rem; position:relative}
-.tl:not(:last-child)::before{content:""; position:absolute; left:12px; top:26px; bottom:0; width:2px; background:var(--border)}
+.tl:not(:last-child)::before{content:""; position:absolute; left:11px; top:24px; bottom:0; width:1px; background:var(--border)}
 .tl .marker{width:22px; height:22px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-size:var(--fs-xs); border:1.5px solid var(--tone); background:var(--tone-bg)}
 .tl .tlb{flex:1}
 .tl .tlv{font-weight:700; font-family:var(--mono); font-size:var(--fs-base)}
@@ -565,10 +566,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .risk .ccnote{color:var(--faint); font-style:italic}
 
 /* ── release-health trend: SVG area chart ──────────────────────────────── */
-.trend{background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--border); border-radius:var(--r-md); padding:1.2rem 1.3rem 1rem; box-shadow:var(--shadow-1)}
+.trend{background:var(--sheen); border:1px solid var(--border); border-radius:var(--r-md); padding:1.2rem 1.3rem 1rem; box-shadow:var(--shadow-1)}
 .trend .chartwrap{position:relative}
 .trend svg.tchart{width:100%; height:170px; display:block; overflow:visible}
-.trend .tgrid line{stroke:var(--border); stroke-width:1; stroke-dasharray:3 4; opacity:.6}
+.trend .tgrid line{stroke:var(--border); stroke-width:1; stroke-dasharray:2 4; opacity:.4}
 .trend .taxis{font-family:var(--mono); font-size:9px; fill:var(--faint)}
 .trend .tdot{stroke:var(--bg); stroke-width:2.5; transition:r .15s var(--ease)}
 .trend .tdot:hover{r:7}
@@ -581,13 +582,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 /* ── Trends: 2×2 time-series charts ──────────────────────────────────────── */
 .trends-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem}
 @media(max-width:680px){.trends-grid{grid-template-columns:1fr}}
-.tcard{background:linear-gradient(180deg,var(--card2),var(--card)); border:1px solid var(--border); border-radius:var(--r-md); padding:.95rem 1.05rem; box-shadow:var(--shadow-1)}
+.tcard{background:var(--sheen); border:1px solid var(--border); border-radius:var(--r-md); padding:.95rem 1.05rem; box-shadow:var(--shadow-1)}
 .tc-h{display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem}
 .tc-t{font-weight:700; font-size:var(--fs-base)}
 .tc-s{font-size:var(--fs-xs); color:var(--muted)}
 .tcard .chartwrap{position:relative}
 .tcard svg.tchart2{width:100%; height:auto; display:block; overflow:visible}
-.tcard .tgrid line{stroke:var(--border); stroke-width:1; stroke-dasharray:3 4; opacity:.55}
+.tcard .tgrid line{stroke:var(--border); stroke-width:1; stroke-dasharray:2 4; opacity:.4}
 .tcard .taxis2{font-family:var(--mono); font-size:8px; fill:var(--faint)}
 .tc-legend{display:flex; flex-wrap:wrap; gap:.35rem .8rem; margin-top:.6rem; font-size:var(--fs-xs); color:var(--muted)}
 .tc-k{display:inline-flex; align-items:center; gap:.3rem}
