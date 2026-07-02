@@ -100,6 +100,13 @@ PIPELINE_BUDGET_S = 900
 # bounds both the input context (~1k chars/issue) and the known_issues output.
 MAX_ISSUES_IN_CONTEXT = 30
 
+# Latency watch: a single LLM call at/over this many seconds gets flagged (log +
+# webhook ping). High-reasoning analyst/validator calls normally run ~2–3 min;
+# a call pushing past 5 min is drifting toward the PIPELINE_BUDGET_S wall, where
+# runs start silently degrading (validator skipped → "unreviewed" single-model
+# pages) long before anything errors. A heads-up only — never blocks the run.
+SLOW_CALL_WARN_S = 300
+
 # ── Data files ──────────────────────────────────────────────────────────────
 RAW_DATA_FILE = DATA_DIR / "raw-data.json"
 ASSESSMENT_FILE = DATA_DIR / "assessment.json"
