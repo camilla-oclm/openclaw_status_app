@@ -51,6 +51,10 @@ providers** argue it out before anything ships.
   server-rendered HTML + JSON-LD so search engines and agents read the answer without running JS.
 - **Honest about fresh releases** — a just-dropped version is flagged as an *early read* (back up;
   the verdict firms up over the next few runs) until version-specific reports accrue.
+- **Falsifiable & accountable** — every verdict states the concrete *flip conditions* that would
+  change it, a track-record table shows whether past first reads held up run over run, the second
+  model's review is inspectable on-page (not just claimed), and a one-click *report a problem*
+  link files a prefilled issue when something looks wrong.
 
 **Live demo: <https://clawstat.us>** — running on an AWS Lightsail box: a systemd timer pulls
 the latest code and runs the full collect → assess → render pipeline on an adaptive cadence
@@ -155,9 +159,13 @@ so a single-vendor outage doesn't sink the run (and the analyst and validator st
 different models). All models are served via OpenRouter.
 
 The output is schema- and XSS-validated, appended to `data/history.json`, and cost/latency
-is logged to `data/usage.json` (with daily/monthly budget alerts). Result shape:
+is logged to `data/usage.json` (with daily/monthly budget alerts, plus a latency watch that
+pings when a model call drifts toward the pipeline's wall-clock budget — the quiet failure
+mode where runs degrade to single-model long before anything errors). Result shape:
 `recommendation`, `confidence`, `thesis`, `evidence` (for/against/neutral), `known_issues`,
-`changes` (fixes/features/breaking), `sentiment_summary`, `platform_impact`.
+`changes` (fixes/features/breaking), `flip_conditions` (what would change this verdict),
+`sentiment_summary`, `platform_impact` — plus a compact, screened copy of the validator's
+review so the page can show what the second model actually said.
 
 ### 4. Render — `openclaw_status/render.py`
 
@@ -166,10 +174,12 @@ block) and writes **`web/index.html`** — a zero-dependency, dark/light, mobile
 that builds its DOM with `textContent` (XSS-safe) and no inline handlers (CSP-clean). A **deploy
 guard** refuses to publish a low-confidence or invalid assessment, and an **HTML smoke test**
 validates the page before it overwrites the previous one. The page leads with the decision
-(verdict, key-metric tiles, **Your setup** — a conservative *per-setup verdict* that softens the
-global one by at most one step when no version-confirmed blocking issue hits your stack — reasoning) and groups the
-supporting detail — Impact meters, changelog, Trends charts, past verdicts — behind tabs, with
-the filterable Known-issues list below. A just-dropped release (published within
+(verdict — with the second model's review expandable right under it, key-metric tiles,
+**Your setup** — a conservative *per-setup verdict* that softens the global one by at most one
+step when no version-confirmed blocking issue hits your stack — reasoning, and the verdict's
+*flip conditions*) and groups the supporting detail — a per-component verdict line + Impact
+meters, changelog, Trends charts, the verdict *track record* and past verdicts — behind tabs,
+with the filterable Known-issues list below. A just-dropped release (published within
 `config.FRESH_RELEASE_DAYS` of the run) leads with a **fresh-release notice** and tempers the
 "cleared / complete" copy until version-specific reports accrue.
 
@@ -240,7 +250,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 297 tests, hermetic (no network)
+python3 -m pytest        # 320 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
