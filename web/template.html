@@ -187,7 +187,7 @@ a.verdict{text-decoration:none; cursor:pointer; transition:background .15s var(-
 a.verdict:hover{background:color-mix(in srgb,var(--tone) 16%,transparent); box-shadow:0 0 0 1px var(--tone-bd)}
 .verdict .v-ext{font-size:var(--fs-base); opacity:.65; margin-left:.15rem; align-self:flex-start}
 a.chip{text-decoration:none; cursor:pointer; transition:border-color .15s var(--ease), color .15s var(--ease)}
-a.chip:hover{border-color:var(--accent); color:var(--text)}
+a.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .chip .v-ext{font-size:var(--fs-xs); opacity:.7; margin-left:.1rem}
 .verdict-blurb{margin-top:.85rem; color:var(--text); font-weight:600; font-size:var(--fs-md)}
 .hero-headline{margin-top:.5rem; color:var(--muted); font-size:var(--fs-sm); max-width:62ch}
@@ -197,19 +197,37 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .setup-cta:hover{color:var(--text); border-color:var(--tone); background:var(--tone-bg)}
 .setup-cta .sv-em{font-size:1rem; line-height:1}
 .setup-cta b{color:var(--tone); white-space:nowrap}
-.chip{
-  display:inline-flex; align-items:center; gap:.4rem; font-size:var(--fs-xs); font-weight:600;
-  padding:.34rem .72rem; border-radius:var(--r-pill); border:1px solid var(--border2);
-  background:var(--card3); color:var(--muted);
+/* ── unified pill recipe ────────────────────────────────────────────────
+   Every chip/tag/badge species shares one base and tunes it via --p-*
+   custom properties; selected state is ONE convention (accent tint on
+   aria-pressed/aria-selected) instead of per-species solid fills. */
+.chip,.fbtn,.pick,.vchip,.tag,.pbadge,.tr-badge,.sec-count{
+  display:inline-flex; align-items:center; gap:.4rem;
+  font-family:inherit; font-size:var(--p-fs,var(--fs-xs)); font-weight:var(--p-fw,600); line-height:1.4;
+  padding:var(--p-pad,.32rem .75rem); border-radius:var(--r-pill);
+  background:var(--p-bg,var(--card3)); color:var(--p-fg,var(--muted));
+  border:1px solid var(--p-bd,var(--border));
+}
+.fbtn,.pick,button.chip{cursor:pointer; transition:color .15s var(--ease), background-color .15s var(--ease), border-color .15s var(--ease)}
+.fbtn:hover,.pick:hover{--p-fg:var(--text); --p-bd:var(--border2)}
+.fbtn[aria-pressed="true"],.pick[aria-pressed="true"]{
+  --p-bg:color-mix(in srgb,var(--accent) 15%,transparent);
+  --p-fg:var(--accent);
+  --p-bd:color-mix(in srgb,var(--accent) 40%,transparent);
+  --p-fw:700;
+}
+.fcomp[aria-pressed="true"]{
+  --p-bg:color-mix(in srgb,var(--accent2) 15%,transparent);
+  --p-fg:var(--accent2);
+  --p-bd:color-mix(in srgb,var(--accent2) 40%,transparent);
 }
 .chip b{color:var(--text); font-weight:700}
-.chip.lvl-high{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
-.chip.lvl-medium{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
-.chip.lvl-low{color:var(--bad); border-color:var(--bad-bd); background:var(--bad-bg)}
+.chip.lvl-high{--p-fg:var(--good); --p-bd:var(--good-bd); --p-bg:var(--good-bg)}
+.chip.lvl-medium{--p-fg:var(--warn); --p-bd:var(--warn-bd); --p-bg:var(--warn-bg)}
+.chip.lvl-low{--p-fg:var(--bad); --p-bd:var(--bad-bd); --p-bg:var(--bad-bg)}
 
 /* ── ⚖︎ chip → second-model review expander ─────────────────────────────── */
-button.chip{font:inherit; font-size:var(--fs-xs); cursor:pointer; transition:border-color .15s var(--ease), color .15s var(--ease)}
-button.chip:hover{border-color:var(--accent); color:var(--text)}
+button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .chip .cx{font-size:.58rem; color:var(--muted); transition:transform .15s var(--ease); display:inline-block}
 .chip[aria-expanded="true"] .cx{transform:rotate(180deg)}
 .rev-detail{margin-top:.85rem; max-width:62ch; background:var(--card); border:1px solid var(--border); border-left:2px solid var(--accent); border-radius:var(--r-md); padding:.95rem 1.1rem; font-size:var(--fs-sm); text-align:left}
@@ -286,11 +304,11 @@ button.chip:hover{border-color:var(--accent); color:var(--text)}
 
 /* ── sections ──────────────────────────────────────────────────────────── */
 .section{margin-top:var(--sp-6)}
-.reveal{opacity:0; transform:translateY(14px); transition:opacity .55s var(--ease), transform .55s var(--ease)}
+.reveal{opacity:0; transform:translateY(10px); transition:opacity .45s var(--ease), transform .45s var(--ease)}
 .reveal.in{opacity:1; transform:none}
 .sec-head{display:flex; align-items:baseline; gap:.6rem; margin-bottom:var(--sp-4); padding-bottom:.55rem; border-bottom:1px solid var(--border)}
 .sec-title{font-family:var(--display); font-size:var(--fs-lg); font-weight:700; letter-spacing:-.02em; text-wrap:balance}
-.sec-count{font-family:var(--mono); font-size:var(--fs-xs); color:var(--accent); font-weight:700; padding:.1rem .5rem; border:1px solid var(--border2); border-radius:var(--r-pill); background:var(--card)}
+.sec-count{font-family:var(--mono); --p-fg:var(--accent); --p-fw:700; --p-pad:.1rem .5rem; --p-bg:var(--card); --p-bd:var(--border2)}
 .sec-note{font-size:var(--fs-xs); color:var(--muted); margin-left:auto; font-weight:500}
 
 /* permalinks: anchorable section headers + deep-link target highlight */
@@ -339,23 +357,17 @@ button.chip:hover{border-color:var(--accent); color:var(--text)}
 .tr-ver .cur-dot{color:var(--accent); font-size:.6rem; vertical-align:middle; margin-left:.25rem}
 .tr-path{letter-spacing:.04em}
 .tr-runs{color:var(--muted); font-size:var(--fs-xs)}
-.tr-badge{font-size:var(--fs-xs); font-weight:700; padding:.12rem .55rem; border-radius:var(--r-pill); border:1px solid var(--border2); color:var(--muted)}
-.tr-held{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
-.tr-hard{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
-.tr-soft{color:var(--bad); border-color:var(--bad-bd); background:var(--bad-bg)}
+.tr-badge{--p-fs:var(--fs-2xs); --p-fw:700; --p-pad:.12rem .55rem; --p-bg:transparent; --p-bd:var(--border2); letter-spacing:.03em}
+.tr-held{--p-fg:var(--good); --p-bd:var(--good-bd); --p-bg:var(--good-bg)}
+.tr-hard{--p-fg:var(--warn); --p-bd:var(--warn-bd); --p-bg:var(--warn-bg)}
+.tr-soft{--p-fg:var(--bad); --p-bd:var(--bad-bd); --p-bg:var(--bad-bg)}
 .tr-dates{color:var(--faint); font-size:var(--fs-xs); margin-left:auto}
 .tr-note{font-size:var(--fs-xs); color:var(--faint); margin-top:.8rem}
 @media(max-width:680px){ .tr-dates{margin-left:0; width:100%} }
 
 /* ── filters / issues ──────────────────────────────────────────────────── */
 .filters{display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:1rem}
-.fbtn{
-  font-size:var(--fs-xs); font-weight:600; padding:.34rem .82rem; border-radius:var(--r-pill); cursor:pointer;
-  background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s var(--ease);
-}
-.fbtn:hover{color:var(--text); border-color:var(--accent)}
-.fbtn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:700}
-.fcomp[aria-pressed="true"]{background:var(--accent2); border-color:var(--accent2)}
+.fbtn{--p-bg:var(--card)}
 .fsep{display:inline-flex; align-items:center; margin-left:.35rem; padding-left:.5rem; border-left:1px solid var(--border2);
   font-size:var(--fs-2xs); font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint)}
 .issue{
@@ -390,51 +402,45 @@ button.chip:hover{border-color:var(--accent); color:var(--text)}
   background:var(--card); border:1px solid var(--border2); border-radius:var(--r-pill); padding:.4rem 1.15rem; cursor:pointer; transition:.15s var(--ease)}
 .ki-more:hover{border-color:var(--accent); color:var(--text)}
 .issue .tags{display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.5rem}
-.tag{
-  display:inline-flex; align-items:center; gap:.3rem; font-size:var(--fs-xs); font-weight:600;
-  padding:.2rem .55rem; border-radius:var(--r-pill); border:1px solid var(--border2);
-  background:var(--card3); color:var(--muted);
-}
-.tag.t-bad{color:var(--bad); border-color:var(--bad-bd); background:var(--bad-bg)}
-.tag.t-warn{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
-.tag.t-good{color:var(--good); border-color:var(--good-bd); background:var(--good-bg)}
-.tag.t-info{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
-.tag.t-plat{color:var(--text); border-color:var(--border2); background:var(--card2); font-weight:700}
-.tag.t-comp{color:var(--accent2); font-weight:700; border-color:color-mix(in srgb,var(--accent2) 38%,transparent); background:color-mix(in srgb,var(--accent2) 13%,transparent)}
+.tag{gap:.3rem; --p-pad:.16rem .55rem}
+.tag.t-bad{--p-fg:var(--bad); --p-bd:var(--bad-bd); --p-bg:var(--bad-bg)}
+.tag.t-warn{--p-fg:var(--warn); --p-bd:var(--warn-bd); --p-bg:var(--warn-bg)}
+.tag.t-good{--p-fg:var(--good); --p-bd:var(--good-bd); --p-bg:var(--good-bg)}
+.tag.t-info{--p-fg:var(--accent); --p-bd:var(--info-bd); --p-bg:var(--info-bg)}
+.tag.t-plat{--p-fg:var(--text); --p-bd:var(--border2); --p-bg:var(--card2); --p-fw:700}
+.tag.t-comp{--p-fg:var(--accent2); --p-fw:700; --p-bd:color-mix(in srgb,var(--accent2) 38%,transparent); --p-bg:color-mix(in srgb,var(--accent2) 13%,transparent)}
 .issue.mine{border-color:var(--info-bd); box-shadow:0 0 0 1px var(--info-bd), var(--shadow-1)}
-.tag.t-me{color:var(--accent); border-color:var(--info-bd); background:var(--info-bg)}
+.tag.t-me{--p-fg:var(--accent); --p-bd:var(--info-bd); --p-bg:var(--info-bg)}
 /* heuristic (auto-detected) platform/subsystem tags read quieter than asserted ones */
-.tag.t-auto{color:var(--faint); border-style:dashed}
+.tag.t-auto{--p-fg:var(--faint); border-style:dashed}
 /* raw maintainer-assigned GitHub labels — a verifiable FACT, shown mono + muted */
-.tag.tag-raw{color:var(--muted); background:var(--card); border-color:var(--border); font-family:var(--mono); font-weight:500; font-size:var(--fs-2xs)}
+.tag.tag-raw{--p-fg:var(--muted); --p-bg:var(--card); --p-bd:var(--border); font-family:var(--mono); --p-fw:500; --p-fs:var(--fs-2xs)}
 
 /* ── tabs (changes) ────────────────────────────────────────────────────── */
-.tabs{display:flex; gap:.4rem; margin-bottom:1rem; flex-wrap:wrap}
+.tabs{display:inline-flex; gap:3px; margin-bottom:1rem; flex-wrap:wrap; background:var(--card3); border:1px solid var(--border); border-radius:calc(var(--r-sm) + 3px); padding:3px}
 .tab{
-  font-size:var(--fs-sm); font-weight:600; padding:.42rem .95rem; border-radius:var(--r-sm); cursor:pointer;
-  background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s var(--ease);
+  font-size:var(--fs-sm); font-weight:600; padding:.38rem .9rem; border-radius:var(--r-sm); cursor:pointer;
+  background:transparent; border:0; color:var(--muted); transition:.15s var(--ease);
   display:inline-flex; align-items:center; gap:.45rem;
 }
 .tab:hover{color:var(--text)}
-.tab[aria-selected="true"]{background:var(--card3); color:var(--text); border-color:var(--accent)}
+.tab[aria-selected="true"]{background:var(--card); color:var(--text); box-shadow:var(--shadow-1)}
 .tab .cnt{font-family:var(--mono); font-size:var(--fs-xs); background:var(--bg-elev); padding:.05rem .42rem; border-radius:var(--r-xs); color:var(--muted)}
 /* ── top-level long-tail tabs (Impact / History / Trends / What's new) ─────────
    Group the secondary detail below the always-visible decision. Namespaced .ltab*
    so they never collide with the inner .tab pills used inside the changelog. */
 .ltab-wrap{margin-top:var(--sp-6)}
-.ltabs{display:flex; gap:.4rem; flex-wrap:wrap; border-bottom:1px solid var(--border)}
+.ltabs{display:flex; gap:.25rem; flex-wrap:wrap; border-bottom:1px solid var(--border)}
 .ltab{
-  font-family:var(--display); font-size:var(--fs-md); font-weight:700; letter-spacing:-.01em;
-  color:var(--muted); background:var(--card2); border:1px solid var(--border); border-bottom:none;
-  border-radius:10px 10px 0 0; padding:.58rem 1.15rem; cursor:pointer; position:relative; top:1px;
-  transition:color .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease);
+  font-family:var(--display); font-size:var(--fs-base); font-weight:650; letter-spacing:-.01em;
+  color:var(--muted); background:transparent; border:0;
+  padding:.6rem .9rem; cursor:pointer; position:relative;
+  transition:color .15s var(--ease);
 }
-.ltab:hover{color:var(--text); background:var(--card3); border-color:var(--border2)}
-.ltab[aria-selected="true"], .ltab[aria-pressed="true"]{
-  color:var(--accent); background:color-mix(in srgb,var(--accent) 13%,var(--card));
-  border-color:color-mix(in srgb,var(--accent) 45%,var(--border)); border-bottom-color:transparent;
-}
-.ltab[aria-selected="true"]::after, .ltab[aria-pressed="true"]::after{content:""; position:absolute; left:.6rem; right:.6rem; bottom:-1px; height:3px; background:var(--accent); border-radius:3px}
+.ltab::after{content:""; position:absolute; left:.35rem; right:.35rem; bottom:-1px; height:2px; background:var(--accent); border-radius:2px; transform:scaleX(0); transition:transform .2s var(--ease)}
+.ltab:hover{color:var(--text)}
+.ltab[aria-selected="true"], .ltab[aria-pressed="true"]{color:var(--text)}
+.ltab[aria-selected="true"]::after, .ltab[aria-pressed="true"]::after{transform:scaleX(1)}
 /* Known-issues category tabs reuse .ltabs/.ltab; subsystem chips sit on a row below. */
 .ki-cats{margin-bottom:1rem}
 .ki-subs{margin-top:0}
@@ -524,8 +530,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
 /* ── per-component verdict line ─────────────────────────────────────────── */
 .vline{display:flex; flex-wrap:wrap; gap:.45rem}
-.vchip{display:inline-flex; align-items:center; gap:.35rem; font-size:var(--fs-xs); font-weight:600; padding:.3rem .7rem; border-radius:var(--r-pill); border:1px solid var(--border2); background:var(--card); color:var(--muted); cursor:help}
-.vchip.hot{border-color:var(--bad-bd); background:var(--bad-bg); color:var(--text)}
+.vchip{gap:.35rem; --p-bg:var(--card); cursor:help}
+.vchip.hot{--p-bd:var(--bad-bd); --p-bg:var(--bad-bg); --p-fg:var(--text)}
 .vchip .vc-em{font-size:var(--fs-sm); line-height:1}
 .vchip .vc-n{font-family:var(--mono); font-size:var(--fs-2xs); background:var(--bg-elev); border-radius:var(--r-xs); padding:.05rem .35rem; color:var(--muted)}
 .vline-note{font-size:var(--fs-xs); color:var(--faint); margin-top:.5rem}
@@ -535,13 +541,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 /* ── your setup ────────────────────────────────────────────────────────── */
 .setup-intro{font-size:var(--fs-sm); color:var(--muted); margin:-.3rem 0 .85rem; max-width:72ch}
 .setup .chips{display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-bottom:.9rem}
-.pick-clear{border-style:dashed; color:var(--faint)}
-.pick-clear:hover{color:var(--bad); border-color:var(--bad)}
+.pick-clear{border-style:dashed; --p-fg:var(--faint)}
+.pick-clear:hover{--p-fg:var(--bad); --p-bd:var(--bad-bd)}
 .setup .chip-grp{flex-basis:100%; font-size:var(--fs-2xs); font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-top:.3rem}
 .setup .chip-grp:first-child{margin-top:0}
-.pick{font-size:var(--fs-xs); font-weight:600; padding:.36rem .82rem; border-radius:var(--r-pill); cursor:pointer; background:var(--card); border:1px solid var(--border2); color:var(--muted); transition:.15s var(--ease); display:inline-flex; align-items:center; gap:.4rem}
-.pick:hover{color:var(--text); border-color:var(--accent)}
-.pick[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:700}
+.pick{--p-bg:var(--card)}
 .setup .risk{padding:.9rem 1.1rem; border-radius:var(--r-md); font-size:var(--fs-base); color:var(--text); background:var(--tone-bg); border:1px solid var(--tone-bd)}
 .setup .risk .rh{font-weight:700; margin-bottom:.2rem}
 .setup .hint{color:var(--faint); font-size:var(--fs-sm)}
@@ -554,7 +558,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .risk .prow-list{margin-top:.85rem; display:flex; flex-direction:column; gap:.45rem}
 .risk .prow{display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; font-size:var(--fs-sm)}
 .risk .ppn{font-weight:700; min-width:7rem}
-.pbadge{flex:none; font-size:var(--fs-2xs); font-weight:800; text-transform:uppercase; letter-spacing:.04em; padding:.12rem .5rem; border-radius:var(--r-pill); border:1px solid var(--ic); color:var(--ic)}
+.pbadge{flex:none; text-transform:uppercase; letter-spacing:.04em; --p-fs:var(--fs-2xs); --p-fw:800; --p-pad:.12rem .5rem; --p-bg:transparent; --p-bd:var(--ic); --p-fg:var(--ic)}
 .risk .pdetail{color:var(--muted); font-size:var(--fs-sm)}
 .risk .pdetail.muted2{color:var(--faint); font-style:italic}
 .risk .prow-all{margin-top:.5rem; padding-top:.6rem; border-top:1px dashed var(--border2)}
@@ -638,6 +642,20 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 ::-webkit-scrollbar-thumb{background:var(--border2); border-radius:var(--r-xs)}
 ::-webkit-scrollbar-thumb:hover{background:var(--accent)}
 :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+
+/* ── subtle motion — gated on no-preference; the global reduced-motion kill
+     below never sees any of it ─────────────────────────────────────────── */
+@media (prefers-reduced-motion:no-preference){
+  /* meters fill once when their section reveals. Visual only: the width the
+     browser tests and applyStack read lives on the INLINE style, untouched. */
+  .vfill{transition:width .7s var(--ease) .1s}
+  .reveal:not(.in) .vfill{width:0 !important}
+  /* expanders / tab panels ease in on open; close stays instant by design */
+  .idetail,.rev-detail,.ltab-panel{transition:opacity .18s var(--ease), translate .18s var(--ease)}
+  @starting-style{
+    .idetail:not([hidden]),.rev-detail:not([hidden]),.ltab-panel:not([hidden]){opacity:0; translate:0 -4px}
+  }
+}
 @media(prefers-reduced-motion:reduce){
   *{animation:none !important; transition:none !important; scroll-behavior:auto !important}
   .reveal{opacity:1; transform:none}
