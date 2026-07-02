@@ -884,3 +884,43 @@ def test_pipeline_notifies_on_slow_call(tmp_path, monkeypatch):
     }}
     assert agent.run_assessment_pipeline(raw=raw, single_call=True)["success"] is True
     assert any("🐢 slow model call" in m for m in sent)
+
+
+# ── tiered issue reading (rank/weight-aware context) ─────────────────────────
+
+def test_build_context_reads_issues_in_tiers(monkeypatch):
+    monkeypatch.setattr(config, "MAX_ISSUES_IN_CONTEXT", 30)
+    monkeypatch.setattr(config, "CONTEXT_TIER_TOP", 2)
+    monkeypatch.setattr(config, "CONTEXT_TIER_MID", 2)
+    raw = _raw_with_n_issues(6)
+    for idx, it in enumerate(raw["sources"]["github_issues"]):
+        it.update(weight=80 - idx,
+                  version_match="exact" if idx == 0 else "series",
+                  body="body text " * 60,
+                  url=f"https://x/{it['number']}")
+    ctx = agent.build_context(raw)
+    # the tier map + the do-not-treat-equally instruction
+    assert "TIER 1 (rank 1-2)" in ctx
+    assert "TIER 2 (rank 3-4)" in ctx
+    assert "TIER 3 (rank 5+)" in ctx
+    assert "NOT equal evidence" in ctx
+    # tier 1: full detail — URL, weight, multi-line body, exact-version flag
+    assert "URL: https://x/1" in ctx
+    assert "weight 80" in ctx
+    assert "Body:\nbody text" in ctx
+    assert "NAMES THIS EXACT VERSION" in ctx
+    # tier 2: compact — keeps the ### header and a single-line body, drops the URL
+    assert "### #3 " in ctx
+    assert "URL: https://x/3" not in ctx
+    assert "Body: body text" in ctx
+    # tier 3: one-line bullet, no ### header
+    assert "### #5 " not in ctx
+    assert "- #5 [high, w76, series]" in ctx
+
+
+def test_prompt_pins_tiered_weighting():
+    # Rule 9: the analyst must weigh by rank/tier, not treat issues equally.
+    assert "do NOT treat them as equal evidence" in agent.SYSTEM_PROMPT
+    assert "TIER-1 top blockers" in agent.SYSTEM_PROMPT
+    # The validator must check the verdict rests on the top-ranked evidence.
+    assert "TOP-RANKED EVIDENCE" in agent.VALIDATOR_PROMPT

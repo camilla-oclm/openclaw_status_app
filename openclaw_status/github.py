@@ -311,25 +311,39 @@ def is_diamond(labels) -> bool:
     return any("diamond lobster" in str(l).lower() for l in (labels or []))
 
 
-def version_relevant(text: str, version: str) -> bool:
-    """True if `text` mentions the assessed version or its minor series (e.g. 2026.6)."""
+def version_match(text: str, version: str) -> str:
+    """How specifically `text` pins the assessed version: "exact" (names this exact
+    version), "series" (names only its minor series, e.g. 2026.6), or "none".
+
+    The distinction matters for weighting: on a mature series nearly EVERY open issue
+    mentions the series somewhere, so a series match barely discriminates — while an
+    issue that names this exact release is direct confirmation it applies.
+    """
     if not version:
-        return False
+        return "none"
     t = (text or "").lower()
     v = version.lower()
-    if v in t or ("v" + v) in t:
-        return True
+    # Exact: the full version as a number-token ("2026.6.11"/"v2026.6.11"), not a
+    # prefix of a longer version ("2026.6.11-beta.1" still counts — same version).
+    if re.search(r"(?<!\d)" + re.escape(v) + r"(?!\.?\d)", t) is not None:
+        return "exact"
     parts = v.split(".")
     if len(parts) >= 2:
         series = ".".join(parts[:2])
         if not series:
-            return False
+            return "none"
         # Match the minor series as a whole number-token so "2026.6" doesn't also
         # swallow "2026.60" / "2026.66" (different series) or digits inside a larger
         # number. A same-series patch ("2026.6.1") still matches — a regression in the
         # series may persist in this release — but a different series no longer does.
-        return re.search(r"(?<!\d)" + re.escape(series) + r"(?!\d)", t) is not None
-    return False
+        if re.search(r"(?<!\d)" + re.escape(series) + r"(?!\d)", t) is not None:
+            return "series"
+    return "none"
+
+
+def version_relevant(text: str, version: str) -> bool:
+    """True if `text` mentions the assessed version or its minor series (e.g. 2026.6)."""
+    return version_match(text, version) != "none"
 
 
 def impact_level(thumbs_up: int, comments: int) -> str:
@@ -399,7 +413,8 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
     title = node.get("title", "") or ""
     body = node.get("bodyText", "") or ""
     created = node.get("createdAt", "")
-    affects = version_relevant(title + " " + body, version)
+    vm = version_match(title + " " + body, version)
+    affects = vm != "none"
     impact = impact_level(thumbs, comments)
     # (Vestigial fields dropped 2026-07: snippet / comments_data / platform:"general" /
     # is_feature / total_reactions had no readers anywhere — features are filtered out
@@ -417,6 +432,7 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
         "author": (node.get("author") or {}).get("login", ""),
         "priority": priority_of(labels),
         "affects_version": affects,
+        "version_match": vm,
         "impact": impact,
         "severity": derive_severity(labels, thumbs, comments),
         "category": categorize(created, labels, affects, impact, release_date, title),
@@ -426,15 +442,49 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
 
 _SEV_WEIGHT = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
+# importance_weight point tables. Severity anchors the scale; version specificity is
+# the next-strongest signal (an issue naming THIS exact release is direct confirmation;
+# a bare series mention barely discriminates — on a mature series almost every open
+# issue carries one); a CONFIRMED regression outweighs a plain post-release report; a
+# shipped/staged fix is relief, not a current blocker. Community engagement is
+# deliberately NOT part of the weight: it breaks ties WITHIN a weight (rank_key), so a
+# viral thread can't cross a severity/version tier — preserving the documented
+# invariants (a version-relevant high above an off-version critical however loud; a
+# version-relevant low still below a genuine critical).
+_W_SEV = {"critical": 40, "high": 26, "medium": 14, "low": 5}
+_W_VER = {"exact": 26, "series": 16, "none": 0}
+_W_CAT = {"regression": 12, "post_release": 6, "diamond_lobster": 4, "active": 0}
+
+
+def importance_weight(issue: dict) -> int:
+    """Structural importance score (0–100, ~82 practical max) — the ranking signal.
+
+    Built to DISCRIMINATE where the coarse fields saturate: on a busy release the
+    ledger converges on "high severity / affects this version" for nearly everything,
+    which reads as 60 equal issues. The blend separates them by version specificity,
+    confirmed-regression status and triage signals; it's a pure function of stored
+    fields so the ledger re-derives it every run (like severity/category).
+    """
+    pts = _W_SEV.get(str(issue.get("severity") or "").lower(), 5)
+    vm = issue.get("version_match")
+    if vm not in _W_VER:  # older records / fixtures: fall back to the boolean flag
+        vm = "series" if issue.get("affects_version") else "none"
+    pts += _W_VER[vm]
+    pts += _W_CAT.get(str(issue.get("category") or "").lower(), 0)
+    cs = issue.get("clawsweeper")
+    if isinstance(cs, dict) and cs.get("decision") == "keep_open":
+        pts += 4  # expert triage confirms it's real and unresolved
+    if issue.get("fixed_in"):
+        pts -= 25  # staged/shipped fix: surface as relief, don't let it drive the verdict
+    return max(0, min(100, pts))
+
 
 def rank_key(issue: dict):
-    """Sort key (ascending) blending severity and version relevance, tie-broken by
-    community impact. Affecting THIS version is worth a strong boost: a version-
-    relevant high ranks above a critical that's about some other version, but a
-    version-relevant low still can't outrank a genuine critical."""
-    score = _SEV_WEIGHT.get(issue.get("severity"), 0) * 2 + (3 if issue.get("affects_version") else 0)
+    """Sort key (ascending) — importance weight first, community impact (👍·2 +
+    comments) breaking ties WITHIN a weight, then issue number for determinism.
+    Engagement can order equally-important issues but never cross a tier."""
     impact = int(issue.get("reactions") or 0) * 2 + int(issue.get("comments") or 0)
-    return (-score, -impact)
+    return (-importance_weight(issue), -impact, int(issue.get("number") or 0))
 
 
 def scout_issues(release_date: str = "", version: str = "", limit: int = 25,

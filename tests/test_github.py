@@ -517,3 +517,52 @@ def test_scout_surfaces_unpopular_p0_outside_broad_cut(monkeypatch):
     assert 555 in nums                              # the unpopular P0 is captured…
     crit = next(i for i in out if i["number"] == 555)
     assert crit["severity"] == "critical"           # …and correctly scored as critical
+
+
+# ── version specificity + importance weight ──────────────────────────────────
+
+def test_version_match_levels():
+    v = "2026.6.11"
+    assert github.version_match("broken on v2026.6.11 at boot", v) == "exact"
+    assert github.version_match("started in 2026.6.9, still broken", v) == "series"
+    assert github.version_match("no versions mentioned here", v) == "none"
+    # token boundaries: a longer patch number isn't THIS version (but is its series);
+    # a different series ("2026.60") isn't relevant at all
+    assert github.version_match("seen on 2026.6.110", v) == "series"
+    assert github.version_match("this is about 2026.60 only", v) == "none"
+    assert github.version_match("regressed in v2026.6.1", v) == "series"
+    assert github.version_relevant("the 2026.6 series has this bug", v) is True
+    assert github.version_relevant("nothing relevant", v) is False
+
+
+def test_importance_weight_discriminates_within_a_severity():
+    base = {"severity": "high", "category": "post_release", "reactions": 3, "comments": 2}
+    exact = github.importance_weight(dict(base, version_match="exact"))
+    series = github.importance_weight(dict(base, version_match="series"))
+    none = github.importance_weight(dict(base, version_match="none"))
+    assert exact > series > none                     # version specificity separates equals
+    regr = github.importance_weight(dict(base, version_match="series", category="regression"))
+    assert regr > series                             # confirmed regression outranks post-release
+    fixed = github.importance_weight(dict(base, version_match="series", fixed_in=["v9.9"]))
+    assert fixed < series - 20                       # a staged fix stops driving the verdict
+    kept = github.importance_weight(dict(base, version_match="series",
+                                         clawsweeper={"decision": "keep_open"}))
+    assert kept > series                             # expert keep-open bumps
+
+
+def test_importance_weight_falls_back_to_affects_version_flag():
+    # Older ledger records / fixtures carry only the boolean — treated as a series match.
+    w_flag = github.importance_weight({"severity": "high", "affects_version": True})
+    w_series = github.importance_weight({"severity": "high", "version_match": "series"})
+    assert w_flag == w_series
+
+
+def test_rank_key_engagement_orders_within_a_tier_never_across():
+    # A loud lower-tier issue can NOT cross above a quiet top-tier one…
+    quiet_top = {"severity": "critical", "version_match": "exact", "reactions": 0, "comments": 0}
+    loud_mid = {"severity": "high", "version_match": "series", "reactions": 80, "comments": 40}
+    assert sorted([loud_mid, quiet_top], key=github.rank_key)[0] is quiet_top
+    # …but WITHIN the same weight, engagement decides the order.
+    a = {"severity": "high", "version_match": "series", "reactions": 9, "comments": 0, "number": 2}
+    b = {"severity": "high", "version_match": "series", "reactions": 2, "comments": 0, "number": 1}
+    assert sorted([b, a], key=github.rank_key)[0] is a

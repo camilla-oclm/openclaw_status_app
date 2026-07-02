@@ -1892,7 +1892,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ki.sort(function(a,b){
       var s = rank(order,a.severity) - rank(order,b.severity);
       if (s) return s;
-      return rank(catOrder,a.category) - rank(catOrder,b.category);
+      var c = rank(catOrder,a.category) - rank(catOrder,b.category);
+      if (c) return c;
+      // importance weight (pipeline-computed) orders within severity × category
+      return (Number(b.weight)||0) - (Number(a.weight)||0);
     });
     var s = el("div",{"class":"section", id:"issues"});
     var newCount = ki.filter(function(i){return i.is_new;}).length;

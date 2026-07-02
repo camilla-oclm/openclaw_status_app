@@ -145,3 +145,43 @@ def test_is_new_flags_issues_first_seen_after_prior_run(led):
          ledger.merge_version_issues("1.0", [_issue(1), _issue(2)], now="2026-01-02T00:00:00+00:00")}
     assert b[2]["is_new"] is True
     assert b[1]["is_new"] is False
+
+
+# ── importance weight + version specificity in the ledger ────────────────────
+
+def test_weight_and_version_match_persist_and_rederive(led):
+    from openclaw_status import github
+    out = ledger.merge_version_issues(
+        "2026.6.11",
+        [_issue(1, version_match="exact", labels=["regression"])],
+        release_date="2026-06-30")
+    one = next(i for i in out if i["number"] == 1)
+    assert one["version_match"] == "exact"
+    assert one["weight"] == github.importance_weight(one)
+    disp = ledger.display_known_issues(out)
+    assert disp[0]["weight"] == one["weight"]
+    assert disp[0]["version_match"] == "exact"
+
+
+def test_ledger_migrates_missing_version_match(led):
+    # A record stored before the field existed self-heals from its stored text.
+    ledger.merge_version_issues(
+        "2026.6.11", [_issue(1, body="crashes on v2026.6.11 at boot")],
+        release_date="2026-06-30")
+    raw = json.loads(config.ISSUE_LEDGER_FILE.read_text())
+    raw["2026.6.11"]["issues"]["1"].pop("version_match", None)
+    raw["2026.6.11"]["issues"]["1"].pop("weight", None)
+    config.ISSUE_LEDGER_FILE.write_text(json.dumps(raw))
+    out = ledger.merge_version_issues("2026.6.11", [], release_date="2026-06-30")
+    one = next(i for i in out if i["number"] == 1)
+    assert one["version_match"] == "exact"          # re-derived from stored title+body
+    assert isinstance(one["weight"], int) and one["weight"] > 0
+
+
+def test_ledger_orders_by_importance_weight(led):
+    out = ledger.merge_version_issues("2026.6.11", [
+        _issue(1, version_match="series"),
+        _issue(2, version_match="exact"),
+        _issue(3, version_match="exact", labels=["regression"]),
+    ], release_date="2026-06-30")
+    assert [i["number"] for i in out] == [3, 2, 1]   # regression+exact > exact > series

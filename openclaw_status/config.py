@@ -99,6 +99,10 @@ PIPELINE_BUDGET_S = 900
 # full ranked set to raw-data.json; only the top-N by rank go to the model, which
 # bounds both the input context (~1k chars/issue) and the known_issues output.
 MAX_ISSUES_IN_CONTEXT = 30
+# Reading tiers within the prompt's issue list (agent.build_context): tier 1 gets full
+# detail and must drive the verdict, tier 2 is compact support, the rest one-liners.
+CONTEXT_TIER_TOP = 8
+CONTEXT_TIER_MID = 12
 
 # Latency watch: a single LLM call at/over this many seconds gets flagged (log +
 # webhook ping). High-reasoning analyst/validator calls normally run ~2–3 min;
