@@ -110,10 +110,12 @@ const DATA = {
   t("grid is sorted hot-first", meters.length > 0 && /gateway/i.test(meters[0].name));
   t("old segmented meters are gone", await page.evaluate(() =>
     document.querySelectorAll(".plat .seg").length) === 0);
-  t("platform heatmap carries all 8 surfaces incl. mobile", await page.evaluate(() =>
-    document.querySelectorAll("#platforms .plat").length === 8 &&
-    Array.from(document.querySelectorAll("#platforms .pname"))
-      .some((n) => n.textContent === "iOS")));
+  t("platform heatmap carries all 11 surfaces (mobile/web/channels)", await page.evaluate(() => {
+    const names = Array.from(document.querySelectorAll("#platforms .pname"))
+      .map((n) => n.textContent);
+    return document.querySelectorAll("#platforms .plat").length === 11 &&
+      ["iOS", "Web UI", "WhatsApp", "Other channels"].every((x) => names.includes(x));
+  }));
 
   // 5. Known-issues filters: category × subsystem are combinable dimensions.
   const visible = () => page.evaluate(() =>
@@ -148,9 +150,10 @@ const DATA = {
     return !!intro && !!chips &&
       (intro.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
   }));
-  t("mobile platform chips are pickable (ios + android)", await page.evaluate(() =>
-    !!document.querySelector('.setup .pick[data-k="ios"]') &&
-    !!document.querySelector('.setup .pick[data-k="android"]')));
+  t("new surface chips are pickable (ios/android/web/whatsapp/other-channel)",
+    await page.evaluate(() =>
+      ["ios", "android", "web", "whatsapp", "other-channel"].every((k) =>
+        !!document.querySelector('.setup .pick[data-k="' + k + '"]'))));
 
   // 8. A11y: skip-link + live region present; changelog tabs carry a roving tabindex.
   t("skip-link targets #app", await page.evaluate(() => {

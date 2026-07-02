@@ -68,6 +68,12 @@ const CASES = [
   ["a mobile-only blocker spares a desktop stack",
    D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["ios"] })]),
    ["linux"], "⚠️"],
+  ["a long-tail channel blocker pins the other-channel stack",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["other-channel"] })]),
+   ["other-channel"], "⏸️"],
+  ["a long-tail channel blocker spares a discord stack",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["other-channel"] })]),
+   ["discord"], "⚠️"],
 ];
 
 (async () => {
