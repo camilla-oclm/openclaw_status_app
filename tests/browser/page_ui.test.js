@@ -184,6 +184,20 @@ const DATA = {
     revState.text.indexOf("checked the labels, sound") >= 0 &&
     revState.text.indexOf("#777") >= 0);
 
+  // 11b. Per-component verdict line: chips per affected component, hot-first; the
+  //      fixture's cross-cutting "all" critical pins every component to the global ⚠️.
+  t("verdict-by-component line renders, hot-first, pinned to global", await page.evaluate(() => {
+    const vl = document.getElementById("verdict-line");
+    if (!vl || !vl.closest("#ltp-impact")) return false;
+    const chips = Array.from(vl.querySelectorAll(".vchip"));
+    const note = vl.querySelector(".vline-note");
+    return chips.length === 2 &&
+      /gateway/i.test(chips[0].textContent) && chips[0].querySelector(".vc-n").textContent === "3" &&
+      chips.every((c) => c.querySelector(".vc-em").textContent === "⚠️") &&   // no softening past a cross-cutting blocker
+      chips.every((c) => c.classList.contains("hot")) &&
+      !!note && note.textContent.indexOf("9 other components") >= 0;
+  }));
+
   // 11a. Verdict track record lives in the History tab: per-version rows with
   //      path + direction badges, and the summary counts repeat-assessed versions.
   t("track record renders rows with direction badges", await page.evaluate(() => {
