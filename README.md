@@ -222,7 +222,28 @@ Caddy):
 > that intentionally diverge, so filter on `severity` for "how bad is it". **`weight`** is the
 > composite importance score the ranking uses (severity + version specificity + category +
 > triage signals), and **`version_match`** says how specifically the report pins the assessed
-> version (`exact` / `series` / `none`).
+> version (`exact` / `series` / `none`). **`platforms`** uses the tokens
+> `windows / macos / linux / ios / android / web / discord / slack / telegram / whatsapp /
+> other-channel`, or `all` for a cross-cutting issue.
+
+### Gate your own updates on the verdict
+
+`latest.json` is a stable public API, so your own update automation can defer to it — e.g. in
+the cron job or script that updates OpenClaw:
+
+```bash
+verdict=$(curl -fsS https://clawstat.us/latest.json | jq -r '.recommendation')
+if [ "$verdict" = "✅" ]; then
+  your-openclaw-update-command
+else
+  echo "clawstat.us says $verdict — holding this update"
+fi
+```
+
+That's the strict form (update only on a clean ✅). A permissive variant proceeds on ⚠️ too and
+holds only on a skip verdict: `[ "$verdict" != "⏸️" ]`. For a firmer gate, also read
+`.confidence`, compare `.version` against what you're running (so you only gate *new* updates),
+and skim `.flip_conditions` — the concrete events that would change the verdict.
 
 ---
 
@@ -268,7 +289,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 329 tests, hermetic (no network)
+python3 -m pytest        # 330 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
