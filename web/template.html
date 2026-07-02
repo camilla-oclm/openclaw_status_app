@@ -1121,6 +1121,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   }
   function issueUrl(n){ return "https://github.com/openclaw/openclaw/issues/" + n; }
 
+  // This app's own repo — the report-a-problem path (keep in sync w/ config.APP_REPO_URL).
+  var REPO = "https://github.com/camilla-oclm/openclaw_status_app";
+  // Prefilled new-issue URL: the report lands with the exact page state (version,
+  // verdict, assessed-at) already filled in, so "this looks wrong" is actionable.
+  function reportUrl(){
+    var title = "[report] v"+(DATA.version||"?")+" "+(DATA.recommendation||"")+" — something looks wrong";
+    var body = "Page: https://clawstat.us/ · assessed "+(DATA.assessed_at||"?")+"\n"
+             + "Version assessed: v"+(DATA.version||"?")+" · verdict shown: "+(DATA.recommendation||"?")+"\n\n"
+             + "**What looks wrong?** (a mis-tagged issue, a wrong severity, a verdict that doesn't match the evidence, a page bug...)\n\n";
+    return REPO+"/issues/new?title="+encodeURIComponent(title)+"&body="+encodeURIComponent(body);
+  }
+
   // turn "#91035" inside prose into a github link
   function linkify(text){
     var out = [], re = /#(\d{3,})/g, last = 0, m;
@@ -2246,7 +2258,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       el("div",{"class":"meta"}, meta.concat([
         el("a",{href:"https://github.com/openclaw/openclaw/releases"}, "Releases ↗"),
         el("a",{href:"latest.json"}, "JSON API ↗"),
-        el("a",{href:"llms.txt"}, "llms.txt (for AI agents) ↗")
+        el("a",{href:"llms.txt"}, "llms.txt (for AI agents) ↗"),
+        el("a",{href:reportUrl(), title:"Something on this page looks wrong? File it — the report opens prefilled with this page's version, verdict and timestamp."}, "Report a problem ↗")
       ])),
       el("div",{"class":"disclaimer"},
         "Independent, unofficial project — not affiliated with, or endorsed by, OpenClaw or its maintainers. Verdicts are generated automatically and may be wrong; confirm against the linked issues before you update. Data is drawn from the public github.com/openclaw/openclaw issue tracker and releases via the GitHub API.")
@@ -2256,7 +2269,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // ── what is this? (independence + how the verdict is made — surfaced up top so a
   //    first-time / skeptical visitor learns it's an unofficial automated tool) ──
   function about(){
-    var REPO = "https://github.com/camilla-oclm/openclaw_status_app";
     return el("div",{"class":"about"},[
       el("span",{"class":"ai"},"ℹ️"),
       el("div",{"class":"atxt"},[
@@ -2270,7 +2282,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         ]),
         el("p",{"class":"alinks"},[
           el("a",{href:REPO},"How it works / source ↗"),
-          el("a",{href:"llms.txt"},"For AI agents (llms.txt) ↗")
+          el("a",{href:"llms.txt"},"For AI agents (llms.txt) ↗"),
+          el("a",{href:reportUrl(), title:"Something looks wrong? File it — the report opens prefilled with this page's version, verdict and timestamp."},"Report a problem ↗")
         ])
       ]),
       el("img",{"class":"about-sticker", src:"/sticker.png", loading:"lazy",

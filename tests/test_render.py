@@ -1013,3 +1013,13 @@ def test_build_data_track_record_empty_without_timeline(tmp_path, monkeypatch):
     data = render._build_assessment_data({"assessment": {}, "version": "1.0"}, {"sources": {}})
     assert data["track_record"] == {"versions": [], "summary": {
         "tracked": 0, "held": 0, "hardened": 0, "softened": 0, "mixed": 0, "single": 0}}
+
+
+def test_llms_txt_offers_report_a_problem(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    render._write_llms({"version": "2.0", "recommendation": "⏸️", "confidence": "high",
+                        "assessed_at": "2026-06-14T00:00:00+00:00"}, str(out))
+    txt = (tmp_path / "llms.txt").read_text()
+    assert f"{config.APP_REPO_URL}/issues/new" in txt
+    assert "Report a problem" in txt

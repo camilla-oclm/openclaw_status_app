@@ -218,6 +218,16 @@ const DATA = {
     return sec.textContent.indexOf("hardens to ⏸️") >= 0 && !!link;
   }));
 
+  // 12. Report-a-problem: footer + about carry a prefilled new-issue link that
+  //     lands with this page's version and verdict already in the title.
+  t("report-a-problem links are prefilled with page state", await page.evaluate(() => {
+    const links = Array.from(document.querySelectorAll('a[href*="openclaw_status_app/issues/new"]'));
+    if (links.length < 2) return false;                       // footer + about
+    const href = decodeURIComponent(links[0].getAttribute("href"));
+    return href.indexOf("v2026.6.1") >= 0 && href.indexOf("⚠️") >= 0 &&
+      href.indexOf("What looks wrong?") >= 0;
+  }));
+
   t("no page errors", errs.length === 0);
 
   fs.unlinkSync(tmp);
