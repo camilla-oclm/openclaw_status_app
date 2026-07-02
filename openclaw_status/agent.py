@@ -69,7 +69,7 @@ RULES:
 6. Consider ALL platforms — a Windows-only issue still matters for Windows users
 7. Clawsweeper decisions are expert automated analysis — weight them highly
 8. **A staged fix does NOT lift the verdict.** When the current release has blocking issues, it is ⏸️ (skip) or ⚠️ even if a fix is staged in a pre-release — the fix isn't in the released version yet. Keep the cautious verdict and call out the staged fix and its pre-release tag in the thesis/headline so users know relief is near.
-9. **Weight issues by impact and relevance.** A high-severity issue flagged "AFFECTS THIS VERSION" with many 👍 reactions / comments is a strong signal — these are what should drive the recommendation. A widely-felt regression that affects this version pushes toward ⏸️/⚠️; do not let it be outweighed by low-impact noise. Mention reaction counts when they're high.
+9. **Issues arrive RANKED and TIERED — do NOT treat them as equal evidence.** Each carries a rank and an importance weight (severity + how specifically the report pins THIS version + confirmed-regression status + triage signals; ties broken by community engagement). The verdict must be driven by the TIER-1 top blockers — weigh them individually and cite them by number. Tier-2 refines counts and platform/component attribution; tier-3 and "Ongoing Majors" are context and must never flip the verdict by sheer volume. An issue that merely mentions the release SERIES is weaker evidence than one naming THIS exact version; an issue with a staged fix (fixed_in) is relief-is-near, not a current blocker. A widely-felt regression that affects this version pushes toward ⏸️/⚠️; do not let it be outweighed by low-impact noise. Mention reaction counts when they're high.
 10. **Categorize each known issue** with one of exactly four `category` values, matching the data, and do NOT inflate:
    - `regression`: a CONFIRMED regression — it carries a `regression` label or "regression" in its title (worked before, broken by a recent release). Do not label a bug "regression" just because it was filed after the release.
    - `post_release`: filed after the release and affects this version, but NOT a confirmed regression.
@@ -114,6 +114,11 @@ YOUR TASK:
   are right. Watch for: inflating a post-release bug to "regression", over- or
   under-stating severity, and attributing the wrong OS/channel (e.g. tagging a macOS
   report as Windows). List every mis-categorization you find with the issue number.
+- CHECK THE VERDICT IS DRIVEN BY THE TOP-RANKED EVIDENCE — the issues arrive ranked
+  and tiered by importance (tier 1 = the top blockers). Flag the assessment if its
+  thesis/evidence rests mainly on tier-2/3 or ongoing-major items while a tier-1
+  blocker goes unaddressed, or if it counts a pile of low-weight issues as equivalent
+  to a top blocker.
 
 STANCE:
 - Your default is skeptical scrutiny, NOT agreement. Do not rubber-stamp the analyst's
@@ -234,49 +239,103 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
             "Either way, justify the call against the current broken-state in the thesis."
         )
 
-    # Issues — ordered by the collector as severity → version-relevance → impact.
-    # Only the top-N by rank are fed to the model (raw-data.json keeps them all):
-    # this bounds the prompt size and the per-issue known_issues output so the
-    # analyst's JSON doesn't truncate on releases with many open issues.
+    # Issues — RANKED by importance weight (github.importance_weight) and presented in
+    # READING TIERS, so the model's attention follows the ranking instead of treating
+    # 30 uniform blocks as equal evidence: tier 1 (top blockers) gets full detail and
+    # is instructed to drive the verdict; tier 2 is compact support; the tail is
+    # one-liners that must not flip the verdict by volume. Only the top-N by rank are
+    # fed at all (raw-data.json keeps the full set), bounding prompt + output size.
     if issues:
         relevant = sum(1 for i in issues if i.get("affects_version"))
+        exact = sum(1 for i in issues if i.get("version_match") == "exact")
         shown = issues[:config.MAX_ISSUES_IN_CONTEXT]
-        header = f"\n## Open Issues ({len(issues)} total, {relevant} reference this version)\n"
+        n_top = max(1, min(config.CONTEXT_TIER_TOP, len(shown)))
+        n_mid = max(0, min(config.CONTEXT_TIER_MID, len(shown) - n_top))
+        top, mid, tail = shown[:n_top], shown[n_top:n_top + n_mid], shown[n_top + n_mid:]
+        header = (f"\n## Open Issues ({len(issues)} total, {relevant} reference this version, "
+                  f"{exact} name it exactly)\n")
         if len(shown) < len(issues):
             header += (
                 f"Showing the top {len(shown)} by rank; the remaining "
                 f"{len(issues) - len(shown)} are lower severity/impact. "
             )
         header += (
-            f"Ordered by severity, version-relevance, then community impact (👍 + comments). "
-            f"'AFFECTS THIS VERSION' = the report mentions {version} or its series."
+            "Issues are RANKED by importance weight — severity + how specifically the report "
+            "pins THIS version (naming it exactly beats mentioning its series) + confirmed-"
+            "regression status + triage signals, ties broken by community engagement (👍 + "
+            "comments). They are NOT equal evidence; read by tier:\n"
+            f"- TIER 1 (rank 1-{n_top}), full detail: the top blockers. These drive the "
+            "verdict — weigh each individually and cite them.\n"
         )
+        if mid:
+            header += (f"- TIER 2 (rank {n_top + 1}-{n_top + n_mid}), compact: supporting "
+                       "signal — sharpens counts and platform/component attribution.\n")
+        if tail:
+            header += (f"- TIER 3 (rank {n_top + n_mid + 1}+), one-line: context only — "
+                       "must not drive the verdict by volume alone.\n")
+
+        def _ver_flag(i):
+            vm = i.get("version_match") or ("series" if i.get("affects_version") else "none")
+            if vm == "exact":
+                return f"NAMES THIS EXACT VERSION ({version})"
+            if vm == "series" or i.get("affects_version"):
+                return "mentions this release series"
+            return ""
+
         parts.append(header)
-        for i in shown:
-            cs_data = i.get("clawsweeper", {})
-            cs_info = ""
-            if cs_data:
-                cs_info = (
-                    f" | Clawsweeper: decision={cs_data.get('decision', '?')}, "
-                    f"fixed_release={cs_data.get('fixed_release', 'none')}"
-                )
+        for rank, i in enumerate(shown, start=1):
             flags = []
-            if i.get("affects_version"):
-                flags.append("AFFECTS THIS VERSION")
+            vf = _ver_flag(i)
+            if vf:
+                flags.append(vf)
             if i.get("fixed_in"):
                 flags.append(f"fixed_in={','.join(i['fixed_in'])}")
-            flag_str = (" | " + " | ".join(flags)) if flags else ""
-            parts.append(f"\n### #{i['number']} [{i.get('category', '?')}] {i['title']}")
-            parts.append(f"URL: {i.get('url', '')}")
-            parts.append(
-                f"Severity: {i.get('severity', '?')} | impact: {i.get('impact', '?')} | "
-                f"👍 {i.get('reactions', 0)} | Comments: {i.get('comments', 0)} | "
-                f"Created: {i.get('created_at', '?')[:10]}{flag_str}{cs_info}"
-            )
-            if i.get("labels"):
-                parts.append(f"Labels: {', '.join(i['labels'][:6])}")
-            if i.get("body"):
-                parts.append(f"Body:\n{i['body'][:800]}")
+            weight = i.get("weight")
+            wtxt = f"weight {weight}" if weight is not None else ""
+            meta_bits = [b for b in (f"Rank {rank}", wtxt,
+                                     f"Severity: {i.get('severity', '?')}",
+                                     f"👍 {i.get('reactions', 0)}",
+                                     f"Comments: {i.get('comments', 0)}") if b]
+            if i in top or i in mid:
+                parts.append(f"\n### #{i['number']} [{i.get('category', '?')}] {i['title']}")
+            if i in top:
+                cs_data = i.get("clawsweeper", {})
+                cs_info = ""
+                if cs_data:
+                    cs_info = (
+                        f" | Clawsweeper: decision={cs_data.get('decision', '?')}, "
+                        f"fixed_release={cs_data.get('fixed_release', 'none')}"
+                    )
+                flag_str = (" | " + " | ".join(flags)) if flags else ""
+                parts.append(f"URL: {i.get('url', '')}")
+                parts.append(
+                    " | ".join(meta_bits)
+                    + f" | impact: {i.get('impact', '?')}"
+                    + f" | Created: {i.get('created_at', '?')[:10]}{flag_str}{cs_info}"
+                )
+                if i.get("labels"):
+                    parts.append(f"Labels: {', '.join(i['labels'][:8])}")
+                if i.get("body"):
+                    parts.append(f"Body:\n{i['body'][:1200]}")
+            elif i in mid:
+                flag_str = (" | " + " | ".join(flags)) if flags else ""
+                parts.append(" | ".join(meta_bits) + flag_str)
+                if i.get("body"):
+                    body_line = " ".join(str(i["body"])[:240].split())
+                    parts.append(f"Body: {body_line}")
+            else:
+                w = f", w{weight}" if weight is not None else ""
+                fx = ", staged fix" if i.get("fixed_in") else ""
+                vm_short = ""
+                vmv = i.get("version_match")
+                if vmv == "exact":
+                    vm_short = ", exact"
+                elif vmv == "series" or (vmv is None and i.get("affects_version")):
+                    vm_short = ", series"
+                parts.append(
+                    f"- #{i['number']} [{i.get('severity', '?')}{w}{vm_short}{fx}] "
+                    f"{str(i.get('title', ''))[:110]} (👍 {i.get('reactions', 0)})"
+                )
 
     # Ongoing majors — high-impact OPEN issues that are NOT specific to this version
     # (they predate it / don't reference it and aren't post-release regressions).

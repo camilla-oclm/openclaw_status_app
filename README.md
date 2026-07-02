@@ -130,9 +130,16 @@ Each issue is then scored from the repo's real labels:
   release and affects this version, but not confirmed as a regression) / `diamond_lobster` /
   `active`.
 
-Results are **ranked by severity blended with version-relevance** (an issue confirmed in the
-assessed version outranks a critical about some *other* version, but a trivial version
-mention can't outrank a real critical), tie-broken by community impact. Feature requests and
+Results are **ranked by a continuous importance weight** so issues are never treated as
+equals: severity anchors the scale, then *version specificity* — an issue that names the
+assessed version **exactly** outweighs one that merely mentions its minor series (on a
+mature series nearly every open issue name-drops the series, so a bare series mention
+barely discriminates) — then confirmed-regression status and triage signals (Clawsweeper's
+keep-open verdict bumps an issue; a staged fix sharply demotes it — relief on the way, not
+a current blocker). Community engagement (👍 + comments) breaks ties *within* a weight but
+can never lift a loud issue across a severity/version tier. The documented invariants hold:
+an issue confirmed in the assessed version outranks a critical about some *other* version,
+but a trivial version mention can't outrank a real critical. Feature requests and
 proposals are dropped — a wished-for feature is no reason to skip an update. Finally, an
 issue is marked **fixed** only if the release/pre-release body explicitly closes it
 (`fixes/closes/resolves #N`), not for any bare `#N` (usually a PR number).
@@ -143,13 +150,20 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 
 1. **Analyst** (`deepseek/deepseek-v4-pro`, high reasoning) produces a structured
    assessment from the collected data. Only the top-N issues by rank are fed to the
-   prompt (`config.MAX_ISSUES_IN_CONTEXT`) and the output budget is widened
-   (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on busy releases.
+   prompt (`config.MAX_ISSUES_IN_CONTEXT`), and they arrive in **reading tiers** that
+   mirror the ranking — the top blockers in full detail (these must drive the verdict,
+   individually weighed and cited), the mid-ranked compactly, the tail as one-liners
+   that may not flip the verdict by volume — so the model's attention follows the
+   importance weight instead of treating 30 uniform blocks as equal evidence. The
+   output budget is widened (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't
+   truncate on busy releases.
 2. **Validator** (`qwen/qwen3.7-plus`) — a *different* provider from the analyst, so it's
    an independent second opinion, not the model checking its own work. It re-derives each
    top issue's severity / category (regression vs post-release) / platform from the raw data
    rather than trusting the analyst's labels, and flags missed issues, **mis-categorizations**,
-   and unsupported claims. A spotted mis-categorization forces a refinement pass even if the
+   and unsupported claims — including whether the verdict actually **rests on the top-ranked
+   evidence** (a thesis leaning on tail items while a top blocker goes unaddressed gets
+   flagged). A spotted mis-categorization forces a refinement pass even if the
    validator otherwise agrees — so the analyst's first answer is never taken as correct by
    default.
 3. **Refine** (analyst again) — only if the validator disagrees.
@@ -204,7 +218,10 @@ Caddy):
 
 > Per-issue API note: **`severity`** is the harm class (from the repo's `P0…P4` + breakage/impact
 > labels), while **`impact`** is a *community-engagement* bucket (👍 + comments) — different axes
-> that intentionally diverge, so filter on `severity` for "how bad is it".
+> that intentionally diverge, so filter on `severity` for "how bad is it". **`weight`** is the
+> composite importance score the ranking uses (severity + version specificity + category +
+> triage signals), and **`version_match`** says how specifically the report pins the assessed
+> version (`exact` / `series` / `none`).
 
 ---
 
@@ -250,7 +267,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 320 tests, hermetic (no network)
+python3 -m pytest        # 329 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output

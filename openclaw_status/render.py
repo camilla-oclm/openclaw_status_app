@@ -695,6 +695,11 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "reactions": raw_i.get("reactions", 0),
             "impact": raw_i.get("impact"),
             "affects_version": raw_i.get("affects_version", False),
+            # Importance weight + version specificity (ledger-derived; see
+            # github.importance_weight) — the page uses weight to order issues
+            # within a severity × category bucket.
+            "version_match": issue.get("version_match") or raw_i.get("version_match"),
+            "weight": issue.get("weight", raw_i.get("weight")),
             "platforms": plats,
             "components": comps,
             # How the platform/component tags were assigned (analyst | derived | untagged).

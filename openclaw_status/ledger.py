@@ -61,7 +61,9 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         "number": it.get("number"),
         "title": it.get("title") or prev.get("title", ""),
         "url": it.get("url") or prev.get("url", ""),
-        "body": (it.get("body") or prev.get("body", ""))[:600],
+        # 1200 chars: enough for the analyst's tier-1 reading (repro + version info
+        # often sits mid-body); older 600-char records heal as issues are re-scouted.
+        "body": (it.get("body") or prev.get("body", ""))[:1200],
         "comments": max(int(it.get("comments") or 0), int(prev.get("comments") or 0)),
         "reactions": max(int(it.get("reactions") or 0), int(prev.get("reactions") or 0)),
         "created_at": it.get("created_at") or prev.get("created_at", ""),
@@ -72,6 +74,12 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         # walks a stale "affects this version" back; falls back to prev only if absent.
         "affects_version": bool(it["affects_version"]) if "affects_version" in it
                            else bool(prev.get("affects_version")),
+        # Version specificity (exact/series/none) follows the same scout-wins rule:
+        # the scout derives it from the FULL issue body, which the ledger truncates —
+        # so the scouted value is authoritative and stored, not recomputed from the
+        # truncated copy. Absent on both (pre-migration record) → filled in
+        # _rederive_stored from the stored text as a one-time approximation.
+        "version_match": it.get("version_match") or prev.get("version_match"),
         "impact": it.get("impact") or prev.get("impact"),
         "severity": it.get("severity") or prev.get("severity") or "medium",
         "category": it.get("category") or prev.get("category") or "active",
@@ -82,13 +90,13 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
     }
 
 
-def _rederive_stored(store: dict, release_date: str) -> None:
-    """Re-derive the label-derived fields (severity, category) for EVERY accumulated
-    issue, not just the ones re-scouted this run, then drop any that fall out of
-    relevance. Severity/category are pure functions of the issue's labels/text — all of
-    which the ledger already stores — so recomputing them each run lets a scoring-formula
-    change or a maintainer re-label self-correct across the whole ledger, instead of
-    freezing on entries that happen not to surface in a given run's top-N scout.
+def _rederive_stored(store: dict, release_date: str, version: str = "") -> None:
+    """Re-derive the derived fields (severity, category, importance weight) for EVERY
+    accumulated issue, not just the ones re-scouted this run, then drop any that fall
+    out of relevance. These are pure functions of fields the ledger already stores —
+    so recomputing them each run lets a scoring-formula change or a maintainer
+    re-label self-correct across the whole ledger, instead of freezing on entries that
+    happen not to surface in a given run's top-N scout.
     """
     for key in list(store.keys()):
         rec = store[key]
@@ -98,6 +106,17 @@ def _rederive_stored(store: dict, release_date: str) -> None:
         rec["category"] = github.categorize(
             rec.get("created_at", ""), labels, bool(rec.get("affects_version")),
             rec.get("impact") or "low", release_date, rec.get("title", ""))
+        if not rec.get("version_match"):
+            # Pre-migration record never scouted since the field landed: approximate
+            # from the stored (truncated) text once; scouted values overwrite later.
+            vm = github.version_match(
+                (rec.get("title") or "") + " " + (rec.get("body") or ""), version)
+            if vm == "none" and rec.get("affects_version"):
+                # The stored flag came from the FULL body at scout time; the truncated
+                # copy may have lost the mention — trust the flag as a series floor.
+                vm = "series"
+            rec["version_match"] = vm
+        rec["weight"] = github.importance_weight(rec)
         if not is_version_relevant(rec):
             del store[key]   # no longer affects this release and isn't a regression
 
@@ -135,7 +154,7 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None,
         store[key] = _lean(it, now, store.get(key))
 
     entry["last_seen"] = now
-    _rederive_stored(store, release_date)   # self-correct the whole accumulated set
+    _rederive_stored(store, release_date, version)   # self-correct the whole accumulated set
 
     # Cap per version (keep the highest-ranked) so the ledger / prompt can't grow without
     # bound, then prune to the most-recently-seen versions.
@@ -189,6 +208,8 @@ def display_known_issues(accumulated: list) -> list:
             "reactions": it.get("reactions", 0),
             "impact": it.get("impact"),
             "affects_version": bool(it.get("affects_version")),
+            "version_match": it.get("version_match") or ("series" if it.get("affects_version") else "none"),
+            "weight": int(it.get("weight") or github.importance_weight(it)),
             "first_seen": it.get("first_seen"),
             "is_new": bool(it.get("is_new")),
         })
