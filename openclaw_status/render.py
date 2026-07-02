@@ -680,6 +680,13 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "evidence": a.get("evidence", {"for_updating": [], "against_updating": [], "neutral": []}),
         "known_issues": known_issues,
         "changes": a.get("changes", {"breaking": [], "fixes": [], "features": []}),
+        # Concrete, checkable events that would move the verdict (analyst-stated, evidence-
+        # cited) — the page's "what would change this verdict" tripwires. Absent on
+        # assessments made before the field existed; the page then skips the section.
+        "flip_conditions": [
+            _truncate(c, 240) for c in (a.get("flip_conditions") or [])
+            if isinstance(c, str) and c.strip()
+        ][:4],
         "sentiment_summary": a.get("sentiment_summary", ""),
         # Evidence-grounded per-platform impact (worst severity per surface from the
         # issue tags); the analyst's free-text value is only a fallback (it saturates).
@@ -1060,6 +1067,10 @@ def _llms_full_md(data: dict) -> str:
         items = ev.get(key) or []
         if items:
             L += [f"## {title}", ""] + [f"- {str(it).strip()}" for it in items] + [""]
+
+    fc = data.get("flip_conditions") or []
+    if fc:
+        L += ["## What would change this verdict", ""] + [f"- {str(c).strip()}" for c in fc] + [""]
 
     ki = data.get("known_issues") or []
     if ki:

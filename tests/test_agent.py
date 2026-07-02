@@ -727,3 +727,29 @@ def test_validator_disagrees_triggers_refine():
         {"agrees": True, "miscategorized_issues": ["#92843: windows -> macos"]}) is True
     # a failed/unreviewed validator never forces a refine
     assert agent._validator_disagrees({"agrees": False, "unreviewed": True}) is False
+
+
+# ── flip conditions ("what would change this verdict") ──────────────────────
+
+def test_prompt_asks_for_flip_conditions():
+    # The schema carries the field and the rules explain it (concrete, direction-named,
+    # evidence-cited) — the page's falsifiability tripwires depend on both.
+    assert '"flip_conditions"' in agent._OUTPUT_SCHEMA
+    assert "flip_conditions" in agent.SYSTEM_PROMPT
+    assert "naming the direction" in agent.SYSTEM_PROMPT
+    # The shared schema flows to the refine pass too.
+    assert '"flip_conditions"' in agent.REFINEMENT_PROMPT
+
+
+def test_validate_detects_xss_in_flip_conditions():
+    a = _valid_assessment()
+    a["flip_conditions"] = ["fine", "<script>alert(1)</script> lands a fix"]
+    errors = agent.validate_assessment(a)
+    assert any("flip_conditions" in e for e in errors)
+
+
+def test_validate_flip_conditions_optional():
+    # Absent on older assessments / terse fallback models — must not block a deploy.
+    a = _valid_assessment()
+    a.pop("flip_conditions", None)
+    assert agent.validate_assessment(a) == []

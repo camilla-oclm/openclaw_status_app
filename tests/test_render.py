@@ -877,3 +877,36 @@ def test_build_data_normalizes_retired_wait_in_history_and_timeline(tmp_path, mo
     # Both the past-verdicts list and the Trends timeline drop the retired 🔄.
     assert [h["recommendation"] for h in data["version_history"]] == ["⏸️"]
     assert [t["recommendation"] for t in data["timeline"]] == ["⏸️", "⏸️"]
+
+
+# ── flip conditions (what would change this verdict) ────────────────────────
+
+def test_build_passes_flip_conditions_capped_and_truncated():
+    a = {"assessment": {"flip_conditions": [
+        "⏸️ eases to ⚠️ once a stable release ships the #123 fix",
+        "  ",                     # blank → dropped
+        123,                      # junk type → dropped
+        "x" * 500,                # over-long → truncated
+        "c3", "c4", "c5",         # beyond the cap → dropped
+    ]}, "version": "2026.6.6"}
+    fc = render._build_assessment_data(a, {"sources": {}})["flip_conditions"]
+    assert fc[0] == "⏸️ eases to ⚠️ once a stable release ships the #123 fix"
+    assert len(fc) == 4                      # capped
+    assert len(fc[1]) <= 241 and fc[1].endswith("…")
+
+
+def test_build_flip_conditions_absent_is_empty_list():
+    data = render._build_assessment_data({"assessment": {}, "version": "2026.6.6"}, {"sources": {}})
+    assert data["flip_conditions"] == []
+
+
+def test_llms_full_includes_flip_conditions(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    data = {"version": "2.0", "recommendation": "⏸️", "confidence": "high",
+            "assessed_at": "2026-06-14T00:00:00+00:00", "headline": "h", "thesis": "t",
+            "flip_conditions": ["⏸️ eases to ⚠️ once #123 ships in stable"]}
+    render._write_llms(data, str(out))
+    full = (tmp_path / "llms-full.txt").read_text()
+    assert "## What would change this verdict" in full
+    assert "eases to ⚠️ once #123 ships in stable" in full

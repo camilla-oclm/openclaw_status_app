@@ -303,6 +303,13 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .ev-for li::before{background:var(--good)} .ev-against li::before{background:var(--bad)} .ev-neutral li::before{background:var(--gray)}
 .ev-neutral{grid-column:1/-1}
 
+/* ── flip conditions (what would change this verdict) ──────────────────── */
+.flip-card{background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:1.1rem 1.2rem; box-shadow:var(--shadow-1)}
+.flip-card ul{list-style:none; display:flex; flex-direction:column; gap:.65rem}
+.flip-card li{position:relative; padding-left:1.5rem; font-size:.9rem; color:var(--text)}
+.flip-card li::before{content:"⚡"; position:absolute; left:0; top:0; font-size:.85rem; color:var(--accent)}
+.flip-note{font-size:.76rem; color:var(--faint); margin-top:.8rem}
+
 /* ── filters / issues ──────────────────────────────────────────────────── */
 .filters{display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:1rem}
 .fbtn{
@@ -1582,6 +1589,24 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return s;
   }
 
+  // What would change this verdict — the analyst's concrete, checkable tripwires
+  // (evidence-cited), so the verdict is falsifiable rather than a black box. Absent
+  // on assessments made before the field existed → the section simply doesn't render.
+  function flipConditions(){
+    var fc = (DATA.flip_conditions || []).filter(function(c){ return String(c||"").trim(); });
+    if (!fc.length) return null;
+    var s = el("div",{"class":"section", id:"flip"});
+    s.appendChild(sectionHead("What would change this verdict", null, "tripwires we watch between runs"));
+    var card = el("div",{"class":"flip-card"});
+    var ul = el("ul");
+    fc.forEach(function(c){ ul.appendChild(el("li", null, linkify(String(c)))); });
+    card.appendChild(ul);
+    card.appendChild(el("div",{"class":"flip-note"},
+      "Stated by the analyst with the verdict, re-checked every run — if one of these happens, the next assessment should move (see the track record under History)."));
+    s.appendChild(card);
+    return s;
+  }
+
   function issueCard(i){
     var sev = String(i.severity||"medium");
     var mine = issueHitsStack(i);
@@ -2587,7 +2612,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     // tab strip (Impact / What's new / Trends / History), and below it the Known
     // issues section (its own category-tab strip); footer stays at the bottom.
     [ lowConfBanner(), freshBanner(), hero(v), about(), bestVersion(), stats(),
-      personalize(), thesis(), evidence(),
+      personalize(), thesis(), evidence(), flipConditions(),
       tabbedLongTail(),
       issues(),
       footer()
