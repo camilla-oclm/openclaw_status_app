@@ -753,3 +753,86 @@ def test_validate_flip_conditions_optional():
     a = _valid_assessment()
     a.pop("flip_conditions", None)
     assert agent.validate_assessment(a) == []
+
+
+# ── compact validator review (the ⚖︎-chip expander payload) ──────────────────
+
+def test_compact_review_none_when_unreviewed_or_junk():
+    assert agent._compact_validator_review({"unreviewed": True, "agrees": True}) is None
+    assert agent._compact_validator_review(None) is None
+    assert agent._compact_validator_review("nope") is None
+
+
+def test_compact_review_screens_and_caps():
+    review = {
+        "agrees": True,
+        "critique": "  solid   work\n overall  ",
+        "confidence_in_review": "high",
+        "suggested_recommendation": "🔄",          # retired glyph → normalized ⏸️
+        "miscategorized_issues": [
+            "#1: windows -> macos",
+            "<script>alert(1)</script>",           # XSS → dropped, doesn't block
+            "x" * 500,                             # over-long → truncated
+            "#4", "#5", "#6", "#7",                # beyond cap of 5 (after the drop)
+        ],
+        "missed_issues": ["#42"],
+        "logical_errors": [123],                   # junk type → stringified
+        "overruled_claims": [],
+    }
+    d = agent._compact_validator_review(review)
+    assert d["critique"] == "solid work overall"
+    assert d["suggested_recommendation"] == "⏸️"
+    assert d["confidence"] == "high"
+    assert "#1: windows -> macos" in d["miscategorized_issues"]
+    assert all("<script" not in s for s in d["miscategorized_issues"])
+    assert len(d["miscategorized_issues"]) == 5
+    assert max(len(s) for s in d["miscategorized_issues"]) <= 240
+    assert d["missed_issues"] == ["#42"]
+    assert d["logical_errors"] == ["123"]
+
+
+def test_compact_review_drops_non_verdict_suggestion_and_xss_critique():
+    d = agent._compact_validator_review(
+        {"agrees": False, "critique": "<script>x</script>", "suggested_recommendation": "null"})
+    assert d["critique"] == ""                     # screened out, not blocking
+    assert d["suggested_recommendation"] == ""
+
+
+def test_pipeline_persists_validator_review(tmp_path, monkeypatch):
+    """The compact review must land in assessment.json (render ships it as review.detail)."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    valid = _valid_assessment()
+    review = {"agrees": True, "critique": "checked the labels, sound",
+              "confidence_in_review": "high", "suggested_recommendation": None,
+              "miscategorized_issues": [], "missed_issues": ["#77"]}
+
+    def fake_call(model, system, user, **kw):
+        parsed = review if "VALIDATOR" in system else valid
+        return {"success": True, "parsed": parsed, "model": model,
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [], "clawsweeper": {}, "release_history": [],
+    }}
+    assert agent.run_assessment_pipeline(raw=raw)["success"] is True
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["validator_review"]["critique"] == "checked the labels, sound"
+    assert saved["validator_review"]["missed_issues"] == ["#77"]
+
+
+def test_pipeline_validator_review_none_in_single_call(tmp_path, monkeypatch):
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    valid = _valid_assessment()
+    monkeypatch.setattr(agent, "openrouter_call", lambda *a, **kw: {
+        "success": True, "parsed": valid, "model": "m",
+        "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}})
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [], "clawsweeper": {}, "release_history": [],
+    }}
+    assert agent.run_assessment_pipeline(raw=raw, single_call=True)["success"] is True
+    assert json.loads(config.ASSESSMENT_FILE.read_text())["validator_review"] is None

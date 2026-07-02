@@ -202,6 +202,21 @@ a.chip:hover{border-color:var(--accent); color:var(--text)}
 .chip.lvl-medium{color:var(--warn); border-color:var(--warn-bd); background:var(--warn-bg)}
 .chip.lvl-low{color:var(--bad); border-color:var(--bad-bd); background:var(--bad-bg)}
 
+/* ── ⚖︎ chip → second-model review expander ─────────────────────────────── */
+button.chip{font:inherit; font-size:.75rem; cursor:pointer; transition:border-color .15s var(--ease), color .15s var(--ease)}
+button.chip:hover{border-color:var(--accent); color:var(--text)}
+.chip .cx{font-size:.58rem; color:var(--muted); transition:transform .15s var(--ease); display:inline-block}
+.chip[aria-expanded="true"] .cx{transform:rotate(180deg)}
+.rev-detail{margin-top:.85rem; max-width:62ch; background:var(--card); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:var(--r-md); padding:.95rem 1.1rem; font-size:.86rem; text-align:left}
+.rev-detail .rvd-h{font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; font-weight:800; color:var(--accent); margin-bottom:.5rem}
+.rev-detail .rvd-status{color:var(--text)}
+.rev-detail .rvd-quote{border-left:2px solid var(--border2); margin:.6rem 0; padding:.1rem 0 .1rem .75rem; color:var(--muted); font-style:italic}
+.rev-detail .rvd-k{font-weight:700; font-size:.78rem; margin-top:.7rem; color:var(--text)}
+.rev-detail .rvd-list{list-style:none; margin-top:.35rem; display:flex; flex-direction:column; gap:.3rem}
+.rev-detail .rvd-list li{position:relative; padding-left:1rem; color:var(--muted)}
+.rev-detail .rvd-list li::before{content:"›"; position:absolute; left:0; color:var(--accent)}
+.rev-detail .rvd-note{margin-top:.7rem; font-size:.76rem; color:var(--faint)}
+
 /* hero right column: the "signal panel" — confidence gauge + live mini-viz */
 .signal{
   align-self:stretch; min-width:0;
@@ -1407,21 +1422,33 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     // Dual-model review outcome — the central reason to trust an automated verdict: show
     // that a second, independent model concurred, or that the verdict was REVISED after it
-    // pushed back, rather than asking the user to take the first analyst on faith.
+    // pushed back, rather than asking the user to take the first analyst on faith. The chip
+    // expands into the validator's actual findings (reviewDetail) — the trust claim is
+    // inspectable, not just asserted in a tooltip.
     var rv = DATA.review || {};
+    var rvPanel = null;
     if (rv.validated){
       var rvText, rvTip;
       if (rv.refined && rv.primary_recommendation && rv.primary_recommendation !== (DATA.recommendation||"")){
         rvText = "Revised "+rv.primary_recommendation+"→"+(DATA.recommendation||"")+" on review";
-        rvTip = "The first analyst model said "+rv.primary_recommendation+"; an independent second model challenged it and the verdict was revised."+(rv.critique?(" Validator: "+rv.critique):"");
+        rvTip = "The first analyst model said "+rv.primary_recommendation+"; an independent second model challenged it and the verdict was revised.";
       } else if (rv.agreed){
         rvText = "2nd model agreed";
-        rvTip = "An independent second model reviewed this verdict and concurred."+(rv.critique?(" Validator: "+rv.critique):"");
+        rvTip = "An independent second model reviewed this verdict and concurred.";
       } else {
         rvText = "2nd model flagged; held";
-        rvTip = "An independent second model flagged details, but the verdict held after re-check."+(rv.critique?(" Validator: "+rv.critique):"");
+        rvTip = "An independent second model flagged details, but the verdict held after re-check.";
       }
-      chips.push(el("span",{"class":"chip", title:rvTip},[document.createTextNode("⚖︎ "), el("b",null,rvText)]));
+      rvPanel = reviewDetail(rv);
+      var rvBtn = el("button",{"class":"chip", type:"button", title:rvTip+" Click for what it said.",
+                               "aria-expanded":"false", "aria-controls":"rev-detail"},
+        [document.createTextNode("⚖︎ "), el("b",null,rvText), el("span",{"class":"cx","aria-hidden":"true"},"▾")]);
+      rvBtn.addEventListener("click", function(){
+        var open = rvBtn.getAttribute("aria-expanded")==="true";
+        rvBtn.setAttribute("aria-expanded", open?"false":"true");
+        if (open) rvPanel.setAttribute("hidden",""); else rvPanel.removeAttribute("hidden");
+      });
+      chips.push(rvBtn);
     } else if (rv.unreviewed){
       // The validator call failed this run — be honest that only one model looked at it,
       // rather than dropping the chip (which would read as a plain single-call page).
@@ -1448,9 +1475,44 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       el("div",{"class":"verdict-blurb"}, heroBlurb),
       DATA.headline ? el("div",{"class":"hero-headline"}, DATA.headline) : null,
       el("div",{"class":"conf-row"}, chips),
+      rvPanel,
       setupCta()
     ]);
     return el("div",{"class":"hero "+v.tone},[ main, signalPanel(v) ]);
+  }
+  // What the second model actually said — expands from the ⚖︎ chip. Shows the exchange's
+  // outcome, the validator's own words, and its specific findings when the pipeline
+  // persisted them (review.detail; runs before the field carry only the short critique).
+  function reviewDetail(rv){
+    var d = rv.detail || {};
+    var kids = [ el("div",{"class":"rvd-h"},"Second-model review") ];
+    var status;
+    if (rv.refined && rv.primary_recommendation && rv.primary_recommendation !== (DATA.recommendation||""))
+      status = "An independent second model challenged the first analyst's read ("+rv.primary_recommendation+") and the published verdict was revised to "+(DATA.recommendation||"")+" after a refinement pass.";
+    else if (rv.refined)
+      status = "An independent second model flagged the specifics below; the analyst re-checked each one and the verdict held.";
+    else if (rv.agreed)
+      status = "An independent second model re-derived the top issues' severity, category and platforms from the raw data and concurred with this verdict.";
+    else
+      status = "An independent second model disagreed with details of this verdict; shown is the analyst's final read.";
+    kids.push(el("p",{"class":"rvd-status"}, status));
+    var crit = String((d.critique || rv.critique || "")).trim();
+    if (crit) kids.push(el("blockquote",{"class":"rvd-quote"}, "“"+crit+"”"));
+    function part(label, items){
+      if (!items || !items.length) return;
+      var ul = el("ul",{"class":"rvd-list"});
+      items.forEach(function(it){ ul.appendChild(el("li", null, linkify(String(it)))); });
+      kids.push(el("div",{"class":"rvd-k"}, label));
+      kids.push(ul);
+    }
+    part("Mis-categorizations it flagged", d.miscategorized_issues);
+    part("Issues it flagged as missed", d.missed_issues);
+    part("Reasoning it challenged", (d.logical_errors||[]).concat(d.overruled_claims||[]));
+    if (d.suggested_recommendation && d.suggested_recommendation !== (DATA.recommendation||""))
+      kids.push(el("p",{"class":"rvd-note"}, "The validator's own suggestion was "+d.suggested_recommendation+" — the published verdict is the analyst's final call after this exchange."));
+    kids.push(el("p",{"class":"rvd-note"}, "The analyst and validator run on different model providers, so a verdict is never a model approving its own reasoning."));
+    return el("div",{"class":"rev-detail", id:"rev-detail", role:"region",
+                     "aria-label":"Second-model review detail", hidden:""}, kids);
   }
   // Hero → "Your setup" CTA. Before a stack is picked it nudges; once picked it shows a
   // live per-setup verdict mini-summary (kept in sync by applyStack()). A button (not an

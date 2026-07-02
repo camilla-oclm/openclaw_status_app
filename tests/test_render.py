@@ -910,3 +910,20 @@ def test_llms_full_includes_flip_conditions(tmp_path, monkeypatch):
     full = (tmp_path / "llms-full.txt").read_text()
     assert "## What would change this verdict" in full
     assert "eases to ⚠️ once #123 ships in stable" in full
+
+
+def test_build_review_ships_detail_when_present():
+    detail = {"critique": "sound", "missed_issues": ["#7"], "miscategorized_issues": []}
+    rv = render._build_assessment_data(
+        {"assessment": {}, "version": "1.0", "validator_model": "qwen/x",
+         "validator_agrees": True, "validator_review": detail}, {"sources": {}})["review"]
+    assert rv["detail"] == detail
+
+
+def test_build_review_detail_none_on_old_or_junk_records():
+    # Pre-field assessment.json (no key) and a junk-typed value both degrade to None.
+    for extra in ({}, {"validator_review": "garbage"}):
+        rv = render._build_assessment_data(
+            {"assessment": {}, "version": "1.0", "validator_model": "qwen/x", **extra},
+            {"sources": {}})["review"]
+        assert rv["detail"] is None

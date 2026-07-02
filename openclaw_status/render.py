@@ -676,6 +676,11 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "primary_recommendation": _norm_rec(
                 assessment_raw.get("primary_recommendation") or a.get("recommendation", "")),
             "critique": _truncate(str(assessment_raw.get("validator_critique") or ""), 280),
+            # The validator's full (compact, pre-screened) findings — powers the ⚖︎-chip
+            # expander. None on runs that predate the field / had no validator; the page
+            # then falls back to the short critique above.
+            "detail": (assessment_raw.get("validator_review")
+                       if isinstance(assessment_raw.get("validator_review"), dict) else None),
         },
         "evidence": a.get("evidence", {"for_updating": [], "against_updating": [], "neutral": []}),
         "known_issues": known_issues,
