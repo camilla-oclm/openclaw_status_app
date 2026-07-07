@@ -74,6 +74,17 @@ const CASES = [
   ["a long-tail channel blocker spares a discord stack",
    D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["other-channel"] })]),
    ["discord"], "⚠️"],
+  // D03 client fail-closed: a version-confirmed blocker we could not classify to ANY platform
+  // (platforms=[]) must NOT spare a platform-only picker. Without the fallback the old client
+  // softened ⏸️→⚠️ here; with it the picker is pinned. (The server now ships such a blocker as
+  // 'all', but the client stays fail-closed in its own right.)
+  ["⏸️ NOT softened by a version-confirmed blocker with no platform, on a platform-only stack",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: [], components: ["auth"] })]),
+   ["windows"], "⏸️"],
+  // ...but a component-only picker still pins via the component axis (fallback is platform-only).
+  ["⏸️ that same no-platform blocker pins a picker who selected its component",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: [], components: ["auth"] })]),
+   ["auth"], "⏸️"],
 ];
 
 (async () => {

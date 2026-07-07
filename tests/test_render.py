@@ -511,6 +511,23 @@ def test_build_tags_untagged_blocker_as_all():
     assert ki["tag_source"] == "untagged"
 
 
+def test_build_tags_component_only_platform_empty_blocker_as_all():
+    """D03: a serious blocker that derives a COMPONENT but NO platform (e.g. impact:security
+    → auth, whose title names no OS) must still reach 'all'. The guard previously required
+    `not comps` too, so such an issue shipped platforms=[] and false-spared a platform-only
+    picker. A component is a subsystem, not a platform — so it is cross-cutting ACROSS
+    platforms, and keeps its component tag so it pins on both axes."""
+    raw = {"sources": {"github_issues": [
+        {"number": 60, "title": "Sensitive data exposed in error response", "severity": "critical",
+         "labels": [{"name": "impact:security"}], "affects_version": True}]}}
+    a = {"assessment": {"known_issues": [
+        {"number": 60, "title": "Sensitive data exposed in error response",
+         "severity": "critical", "category": "post_release"}]}, "version": "2.0"}
+    ki = render._build_assessment_data(a, raw)["known_issues"][0]
+    assert ki["platforms"] == ["all"]          # no platform derived → cross-cutting
+    assert "auth" in ki["components"]           # component still recorded (pins that axis too)
+
+
 def test_build_does_not_force_all_on_nonblocking_untagged():
     """The guard only fires for blockers — a low-severity untagged issue stays untagged
     (forcing 'all' on everything would saturate every platform meter with noise)."""
