@@ -1368,6 +1368,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       if (s !== "high" && s !== "critical") return false;
       if (!i.affects_version && !fresh) return false;        // only version-confirmed counts
       if (issuePlatforms(i).indexOf("all") >= 0) return true; // cross-cutting → hits everyone
+      // Fail-closed (mirrors the server's untagged->'all' guard): a version-confirmed blocker
+      // we could NOT classify to ANY platform must never "spare" a platform-only picker. If
+      // the user picked platforms but the issue resolves to no platform at all, count it.
+      // Component-only pickers (plats empty) are unaffected — they still match via hitsKeys.
+      if (plats.length && issuePlatforms(i).length === 0) return true;
       return hitsKeys(i, plats, comps);
     });
   }

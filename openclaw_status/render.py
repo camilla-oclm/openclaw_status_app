@@ -736,12 +736,15 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             tag_source = "untagged"
         # GUARD (the most dangerous failure for the per-setup read): a BLOCKING issue
         # — high/critical, or a confirmed/post-release regression — that resolves to NO
-        # platform AND NO component would silently drop out of every per-setup row and the
-        # cross-cutting row, telling a user they're "spared" when we simply couldn't classify
-        # a serious bug. Tag it "all" so it flows into the severity-weighted cross-cutting row
-        # (and platform_impact, latest.json, SSR — all derive from this) instead of vanishing.
-        if not plats and not comps and (sev in ("critical", "high")
-                                        or cat in ("regression", "post_release")):
+        # platform would tell a platform-only picker they're "spared". Fire whenever the
+        # platform axis is empty, REGARDLESS of component: a component is a subsystem (auth,
+        # gateway, memory…), not a platform, so a serious blocker with a component but no
+        # platform (e.g. impact:security → auth, whose text names no OS) is cross-cutting
+        # ACROSS platforms and must reach "all" — it keeps its component tag too, so it pins
+        # on both axes. (Previously required `not comps` as well, so a component-tagged,
+        # platform-empty blocker silently shipped platforms=[] and false-spared everyone.)
+        if not plats and (sev in ("critical", "high")
+                          or cat in ("regression", "post_release")):
             plats = ["all"]
 
         known_issues.append({
