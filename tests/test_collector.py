@@ -84,6 +84,30 @@ def test_fetch_github_issues_ok_on_full_scout(monkeypatch):
     assert status.results["github_issues"]["status"] == "ok"
 
 
+def test_fetch_github_issues_marks_failed_on_wholly_failed_scout(monkeypatch):
+    """D01: scout_issues returns None when EVERY search failed. That must be recorded
+    'failed', NOT the clean 'empty' — otherwise a dead scout reads as a clean release and
+    the assessment can publish a false 'no known issues → update now'."""
+    monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: None)
+    status = SourceStatus()
+    issues = collector.fetch_github_issues(status=status)
+    assert issues == []
+    assert status.results["github_issues"]["status"] == "failed"
+
+
+def test_fetch_github_issues_marks_failed_when_all_queries_dropped(monkeypatch):
+    """D01: even when scout returns [] (not None), 0/N searches succeeding means every query
+    failed — still 'failed', never a clean 'empty'."""
+    def fake_scout(release_date, version, coverage=None, **k):
+        if coverage is not None:
+            coverage.update(queries_total=5, queries_ok=0, broad_ok=False)
+        return []
+    monkeypatch.setattr(collector.github, "scout_issues", fake_scout)
+    status = SourceStatus()
+    collector.fetch_github_issues(status=status)
+    assert status.results["github_issues"]["status"] == "failed"
+
+
 def test_fetch_github_issues_marks_fixed_from_release_body(monkeypatch):
     issues = [{"number": 42, "affects_version": True}, {"number": 99, "affects_version": False}]
     monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: issues)

@@ -156,6 +156,10 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
 
     coverage = {}
     issues = github.scout_issues(release_date, version, coverage=coverage)
+    # scout_issues returns None when EVERY search failed (a wholly-failed scout — GitHub
+    # search down, token revoked, secondary rate-limit on all queries). Capture that before
+    # coercing to [], so a broken scout is recorded distinctly from a genuinely clean release.
+    scout_failed = issues is None
     if issues is None:
         print("  ❌ GitHub API unavailable (no token?) — no issues collected", file=sys.stderr)
         issues = []
@@ -180,17 +184,26 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
     n_relevant = sum(1 for i in issues if i.get("affects_version"))
     print(f"  Found {len(issues)} issues ({n_relevant} reference this version)")
     # A partial scout (the broad recency sweep dropped, or some searches failed) is recorded
-    # as "degraded", NOT "ok", so the assessment's thin-evidence floor caps confidence and we
-    # never read an incomplete issue set as a genuinely clean release. See github.scout_issues.
+    # "degraded"; a WHOLLY-failed scout (every search failed / scout returned None) is "failed".
+    # Crucially this is decided REGARDLESS of issue count — dropping the old `issues and` guard,
+    # which let a wholly-failed scout with zero results record as a genuinely clean "empty".
+    # The assessment then fails closed on "failed" with no cached ledger issues, or caps
+    # confidence otherwise — see agent._degraded_input_reason / _cap_thin_evidence_confidence.
     broad_ok = coverage.get("broad_ok")
-    some_failed = coverage.get("queries_ok", 0) < coverage.get("queries_total", 0)
+    queries_ok = coverage.get("queries_ok", 0)
+    queries_total = coverage.get("queries_total", 0)
+    some_failed = queries_ok < queries_total
+    wholly_failed = scout_failed or (queries_total > 0 and queries_ok == 0)
     degraded = broad_ok is False or (broad_ok is None and some_failed)
     if status is not None:
-        if issues and degraded:
+        if wholly_failed:
+            status.record("github_issues", "failed",
+                          f"scout wholly failed ({queries_ok}/{queries_total} searches ok) "
+                          f"— no usable issue data", elapsed)
+        elif degraded:
             status.record("github_issues", "degraded",
                           f"{len(issues)} issues — PARTIAL scout "
-                          f"({coverage.get('queries_ok')}/{coverage.get('queries_total')} searches ok)",
-                          elapsed)
+                          f"({queries_ok}/{queries_total} searches ok)", elapsed)
         else:
             status.record("github_issues", "ok" if issues else "empty",
                           f"{len(issues)} issues ({n_relevant} version-relevant)", elapsed)

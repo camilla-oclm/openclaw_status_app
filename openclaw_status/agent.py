@@ -959,6 +959,14 @@ def _degraded_input_reason(raw: dict, version: str) -> str | None:
         return "no collected sources"
     if not ((raw.get("sources") or {}).get("latest_release") or {}).get("tag"):
         return "no usable latest_release"
+    # A WHOLLY-failed issue scout (GitHub search down / token revoked) that left NO cached
+    # ledger issues either means the analyst would see zero evidence and could publish a
+    # confident false-clean "no known issues" over a scout that saw nothing — fail closed.
+    # If the ledger still carries accumulated issues we proceed (there IS evidence, so it
+    # can't be a false-clean) but cap confidence — see _cap_thin_evidence_confidence.
+    scout_status = ((raw.get("source_status") or {}).get("github_issues") or {}).get("status")
+    if scout_status == "failed" and not ((raw.get("sources") or {}).get("github_issues") or []):
+        return "issue scout failed with no cached issues"
     return None
 
 
@@ -1166,7 +1174,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     # A single-model verdict (validator unavailable) or an incomplete issue scout must not
     # publish "high". Deterministic, applied here so history/timeline/latest.json/llms agree.
     scout_degraded = (((raw.get("source_status") or {}).get("github_issues") or {})
-                      .get("status") == "degraded")
+                      .get("status") in ("degraded", "failed"))
     thin_reason = _cap_thin_evidence_confidence(
         final_assessment, validator_unreviewed=validator_unreviewed, scout_degraded=scout_degraded)
     if thin_reason:
