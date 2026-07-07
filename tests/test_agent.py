@@ -301,6 +301,35 @@ def test_cap_thin_evidence_no_cap_when_full_evidence():
     assert a["confidence"] == "high"            # a fully-reviewed, fully-scouted high stands
 
 
+# ── _degraded_input_reason: fail closed on a wholly-failed scout (D01) ────────
+
+def test_degraded_input_fails_closed_on_failed_scout_with_no_issues():
+    # A wholly-failed scout (source_status github_issues 'failed') that left NO cached ledger
+    # issues must fail closed — never publish a clean verdict over a scout that saw nothing.
+    raw = {"target_version": "2026.6.11",
+           "sources": {"latest_release": {"tag": "v2026.6.11"}, "github_issues": []},
+           "source_status": {"github_issues": {"status": "failed"}}}
+    assert agent._degraded_input_reason(raw, "2026.6.11") is not None
+
+
+def test_degraded_input_proceeds_when_failed_scout_has_cached_issues():
+    # If the scout failed but the ledger still carries issues, proceed (there IS evidence —
+    # not a false-clean); confidence is capped by _cap_thin_evidence_confidence instead.
+    raw = {"target_version": "2026.6.11",
+           "sources": {"latest_release": {"tag": "v2026.6.11"},
+                       "github_issues": [{"number": 1, "affects_version": True}]},
+           "source_status": {"github_issues": {"status": "failed"}}}
+    assert agent._degraded_input_reason(raw, "2026.6.11") is None
+
+
+def test_degraded_input_proceeds_on_clean_empty_scout():
+    # A genuinely clean release (scout 'empty', 0 issues) is NOT degraded — it must assess.
+    raw = {"target_version": "2026.6.11",
+           "sources": {"latest_release": {"tag": "v2026.6.11"}, "github_issues": []},
+           "source_status": {"github_issues": {"status": "empty"}}}
+    assert agent._degraded_input_reason(raw, "2026.6.11") is None
+
+
 def test_cap_thin_evidence_leaves_medium_and_low_alone():
     for level in ("medium", "low"):
         a = {"confidence": level}
