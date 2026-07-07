@@ -464,26 +464,32 @@ def check_cost_thresholds():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def parallel_fetch(func, items, max_workers=4):
-    """Run func(item) in parallel for each item. Returns {item: result} dict.
-    Items that fail get None as their result (no crash).
+    """Run func(item) in parallel for each item. Returns a list of results ALIGNED with
+    `items` by position — results[i] is func(items[i]). Items that fail get None (no crash).
+
+    Position-keyed, NOT keyed by item value: a duplicate item is a distinct call whose
+    result must not collapse onto another's. Callers that count per-occurrence outcomes
+    (e.g. scout coverage: "one of two identical queries failed") depend on this — a
+    value-keyed dict would silently discard one real result and miscount coverage.
     """
-    results = {}
+    items = list(items)
+    results = [None] * len(items)
     if ThreadPoolExecutor is None or len(items) <= 1:
-        for item in items:
+        for i, item in enumerate(items):
             try:
-                results[item] = func(item)
+                results[i] = func(item)
             except Exception:
-                results[item] = None
+                results[i] = None
         return results
 
     with ThreadPoolExecutor(max_workers=min(max_workers, len(items))) as executor:
-        futures = {executor.submit(func, item): item for item in items}
+        futures = {executor.submit(func, item): i for i, item in enumerate(items)}
         for future in as_completed(futures):
-            item = futures[future]
+            i = futures[future]
             try:
-                results[item] = future.result()
+                results[i] = future.result()
             except Exception:
-                results[item] = None
+                results[i] = None
     return results
 
 
