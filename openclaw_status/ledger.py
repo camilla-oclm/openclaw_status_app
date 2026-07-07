@@ -69,7 +69,11 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         "created_at": it.get("created_at") or prev.get("created_at", ""),
         # Current scout's labels win when present (even if now empty — a removed label must
         # propagate so severity/category can re-derive); fall back to prev only if absent.
-        "labels": (it["labels"] if "labels" in it else (prev.get("labels") or []))[:6],
+        # Store the FULL fetched set (GraphQL already caps it at labels(first:20)) — do NOT
+        # truncate here: _rederive_stored recomputes severity/category/weight from these
+        # STORED labels, so dropping a P0/impact:* label past index 6 would silently downgrade
+        # a heavily-triaged critical. (The page's label-chip display caps separately in render.)
+        "labels": it["labels"] if "labels" in it else (prev.get("labels") or []),
         # Re-derived from the current scout (not OR'd with prev) so a tightened match
         # walks a stale "affects this version" back; falls back to prev only if absent.
         "affects_version": bool(it["affects_version"]) if "affects_version" in it
