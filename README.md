@@ -348,3 +348,9 @@ openclaw_status_app/
 ├── tests/                  pytest suite
 └── data/                   pipeline outputs (gitignored)
 ```
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE) — free to use, fork, self-host, and modify. Attribution is appreciated but not required.
