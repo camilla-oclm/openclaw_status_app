@@ -774,6 +774,7 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         # `impact` (per known-issue) is a community-engagement bucket from 👍 + comment
         # volume — NOT a second severity axis; it intentionally differs from `severity`.
         "schema_version": SCHEMA_VERSION,
+        "app_version": config.APP_VERSION,
         "assessed_at": assessment_raw.get("assessed_at", ""),
         "version": assessment_raw.get("version", ""),
         "recommendation": _norm_rec(a.get("recommendation", "⏸️")),

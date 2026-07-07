@@ -203,7 +203,8 @@ Caddy):
 
 - **`latest.json`** — the full payload as a documented public **JSON API**; the page also
   `fetch()`es it at runtime to refresh data without an HTML rebuild (the inlined copy is the
-  offline fallback). Carries a `schema_version` so consumers can guard against shape drift.
+  offline fallback). Carries a `schema_version` so consumers can guard against shape drift, and
+  an `app_version` naming the release of this tool that produced the verdict.
 - **`feed.xml`** + **`badge.svg`** — an RSS feed of verdicts and an embeddable shields-style
   status badge (`[![OpenClaw status](https://clawstat.us/badge.svg)](https://clawstat.us)`).
 - **`llms.txt`** / **`llms-full.txt`** — an [agent-readable mirror](https://llmstxt.org) of the

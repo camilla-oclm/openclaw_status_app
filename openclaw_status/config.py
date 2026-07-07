@@ -12,6 +12,14 @@ ROOT = Path(__file__).parent.parent
 DATA_DIR = ROOT / "data"
 WEB_DIR = ROOT / "web"
 
+# ── App version ─────────────────────────────────────────────────────────────
+# This app's OWN release version — distinct from every other "version" in the
+# codebase, which refers to the assessed OpenClaw *product*. Mirrors
+# openclaw_status.__version__ (a test pins them equal); surfaced additively in
+# latest.json (`app_version`) and the page footer. Bump on release, then cut the
+# matching annotated git tag (e.g. `v1.0.0`) from this value.
+APP_VERSION = "1.0.0"
+
 # ── .env ────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")

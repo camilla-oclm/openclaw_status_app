@@ -304,6 +304,15 @@ def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
     assert sorted(data["archived_versions"]) == ["2026.5.28", "2026.6.1"]
 
 
+def test_app_version_surfaced_and_in_sync():
+    import openclaw_status
+    # Single source of truth: the two constants must never drift.
+    assert config.APP_VERSION == openclaw_status.__version__
+    # Surfaced additively in latest.json (no schema_version bump needed).
+    data = render._build_assessment_data({"assessment": {}, "version": "2026.6.6"}, {"sources": {}})
+    assert data["app_version"] == config.APP_VERSION
+
+
 def test_norm_platforms_keeps_known_tokens_and_drops_junk():
     assert render._norm_platforms(["Linux", "WIN", "osx", "discord", "haxxor"]) == \
         ["linux", "windows", "macos", "discord"]
