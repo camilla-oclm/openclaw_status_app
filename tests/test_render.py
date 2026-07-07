@@ -179,6 +179,20 @@ def test_inject_escapes_script_close_in_data():
     assert _parse_injected_json(out)["thesis"] == "evil </script><script>alert(1)</script>"
 
 
+def test_inject_escapes_all_lt_blocks_comment_script_breakout():
+    # D02: escaping only "</" let a hostile issue title like "<!--<script" enter the
+    # HTML script-data-double-escaped state (no "</" needed) and swallow the document,
+    # so the page never hydrated. Every "<" must be escaped to <.
+    payload = "<!--<script foo crashes on v2026.6.11"
+    tpl = ('<html><body>'
+           '<script id="assessment-data" type="application/json">{}</script>'
+           '<script>run()</script></body></html>')
+    out = render._inject_data(tpl, {"thesis": payload})
+    body = out.split('application/json">', 1)[1].split("</script>", 1)[0]
+    assert "<" not in body                                  # no markup can start inside the data zone
+    assert _parse_injected_json(out)["thesis"] == payload   # round-trips through JSON.parse / json.loads
+
+
 def test_inject_legacy_var_data_contract():
     tpl = "<script>var DATA = {};\nrender();</script>"
     out = render._inject_data(tpl, {"version": "9.9.9"})

@@ -874,14 +874,18 @@ def _inject_data(html: str, data: dict) -> str:
     """Inject the assessment data dict into the template.
 
     Preferred contract: a `<script id="assessment-data" type="application/json">`
-    block whose body is replaced with the JSON. `</` is escaped to `<\\/` so no
-    string value can break out of the <script> tag (standard safe-embed trick).
+    block whose body is replaced with the JSON. EVERY `<` is escaped to its JSON
+    unicode escape `\\u003c` so no string value can break out of the <script> tag.
+    Escaping only `</` is not enough: a value like `<!--<script` enters the HTML
+    script-data-double-escaped state (no `</` needed) and swallows the rest of the
+    document, so we neutralise `<` wholesale — exactly as `_json_ld` does. `<`
+    round-trips through JSON.parse / json.loads unchanged.
 
     Falls back to the legacy `var DATA = {...};` contract for older templates.
     A replacement *function* is used so backslashes in the JSON are never treated
     as regex backreferences.
     """
-    safe_json = json.dumps(data, indent=2, ensure_ascii=False).replace("</", "<\\/")
+    safe_json = json.dumps(data, indent=2, ensure_ascii=False).replace("<", "\\u003c")
 
     sd_pattern = re.compile(
         r'(<script id="assessment-data" type="application/json">)(.*?)(</script>)',
@@ -894,9 +898,9 @@ def _inject_data(html: str, data: dict) -> str:
     legacy = re.compile(r"var DATA = \{.*?\};", flags=re.DOTALL)
     m = legacy.search(html)
     if m:
-        # Escape "</" exactly like the preferred path so no string value can close the
-        # <script> early (e.g. a thesis containing "</script>").
-        legacy_json = json.dumps(data, indent=4, ensure_ascii=True).replace("</", "<\\/")
+        # Escape every "<" exactly like the preferred path so no string value can close
+        # the <script> early or open a comment/nested-script (e.g. "</script>" or "<!--<script").
+        legacy_json = json.dumps(data, indent=4, ensure_ascii=True).replace("<", "\\u003c")
         return html[:m.start()] + f"var DATA = {legacy_json};" + html[m.end():]
 
     print("⚠️ Could not find a data injection point in template — data not injected")
