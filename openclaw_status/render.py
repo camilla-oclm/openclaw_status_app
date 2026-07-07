@@ -939,8 +939,17 @@ _VERDICT_TEXT = {
 }
 
 
+# XML 1.0 forbids most C0 control bytes outright — only tab/LF/CR are legal, and the
+# rest cannot be represented even as entities, so a single one makes the WHOLE document
+# unparseable (not just the field). Strip them at this shared sink — feed.xml,
+# sitemap.xml and badge.svg all escape through here — so untrusted text (issue titles,
+# LLM headlines) can never produce a malformed machine artifact.
+_XML_ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
 def _xml_escape(s) -> str:
-    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    s = _XML_ILLEGAL.sub("", str(s))
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             .replace('"', "&quot;").replace("'", "&apos;"))
 
 

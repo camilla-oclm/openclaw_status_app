@@ -732,6 +732,34 @@ def test_extract_highlights_truncates_on_word_boundary():
     assert h.replace("…", "").endswith("word")   # cut landed on a word boundary, not "wo…"
 
 
+def test_xml_escape_strips_illegal_control_chars():
+    import xml.etree.ElementTree as ET
+    # D31: XML 1.0 forbids C0 controls except tab/LF/CR — they cannot be entity-encoded,
+    # so _xml_escape must DROP them. The five predefined entities stay escaped, and the
+    # legal whitespace is preserved.
+    esc = render._xml_escape("a\x00b\x01c\x0bd\x0ce\x1ff")
+    assert esc == "abcdef"                                   # every illegal control byte removed
+    assert render._xml_escape("tab\tnl\ncr\r") == "tab\tnl\ncr\r"   # legal whitespace kept
+    assert render._xml_escape("<a & b>") == "&lt;a &amp; b&gt;"     # entities still escaped
+    # The escaped output is genuinely well-formed inside an element.
+    ET.fromstring(f"<x>{render._xml_escape('bad\x0bvalue<')}</x>")
+
+
+def test_write_feed_wellformed_with_control_char(tmp_path, monkeypatch):
+    import xml.etree.ElementTree as ET
+    # A control byte in an LLM headline (the reachable untrusted path into <description>)
+    # must not make feed.xml unparseable — the whole-document break D31 warns about.
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    data = {"version": "2.0", "recommendation": "⏸️", "archived_versions": [],
+            "version_history": [{"version": "2.0", "recommendation": "⏸️",
+                                 "headline": "vertical\x0btab and null\x00 in headline",
+                                 "assessed_at": "2026-06-14T00:00:00+00:00"}]}
+    render._write_feed(data, str(out))
+    feed = (tmp_path / "feed.xml").read_text()
+    ET.fromstring(feed)                                      # raises ParseError if the control byte leaked
+
+
 def test_write_feed_emits_rss(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SITE_URL", "https://example.test")
     out = tmp_path / "index.html"
