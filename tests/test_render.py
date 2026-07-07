@@ -382,6 +382,26 @@ def test_derive_platforms_channel_long_tail():
         {"title": "x", "labels": [{"name": "channel: whatsapp-web"}]}) == ["whatsapp"]
 
 
+def test_derive_platforms_channel_signal_no_false_fire_on_prose():
+    # N2: _CHANNEL_SIGNAL was unanchored and matched common words INSIDE ordinary prose
+    # ("AbortSignal", "permission matrix", "message channel"), wrongly suppressing the
+    # cross-cutting ["all"] fallback for a genuine core regression — a per-setup false-spare.
+    # With severity/category set the fallback gate IS reached, so these must resolve to ["all"].
+    for title in ("Gateway auth hangs on AbortSignal timeout",
+                  "permission matrix rework breaks auth for every session",
+                  "core worker drops the message channel for all users"):
+        assert render._derive_platforms({"title": title}, severity="critical",
+                                        category="regression") == ["all"], title
+    # A DISTINCTIVE channel name in free text still suppresses "all" (it IS channel-specific,
+    # here via the other-channel platform signal)...
+    assert render._derive_platforms({"title": "msteams adapter core crash-loop"},
+                                    severity="critical", category="regression") == ["other-channel"]
+    # ...and a `channel:` label still buckets, never "all".
+    assert render._derive_platforms(
+        {"title": "session drops", "labels": [{"name": "channel: signal"}]},
+        severity="critical", category="regression") == ["other-channel"]
+
+
 def test_derive_platforms_no_substring_false_positives():
     # regression (issue #92843): a macOS report whose body mentions
     # `tools.exec.security` must NOT be tagged Windows — `\.exe` is a file
