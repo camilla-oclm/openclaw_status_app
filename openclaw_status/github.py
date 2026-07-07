@@ -549,20 +549,20 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25,
         queries.append(f"{repo} is:issue is:open {_label_q('P1')} {no_feat} sort:reactions-+1-desc")
     queries.append(f"{repo} is:issue is:open {no_feat} sort:reactions-+1-desc")
 
-    # Run the searches concurrently — the (all-distinct) queries are independent, and up
-    # to 11 sequential GraphQL round-trips dominated collect wall-time (the reason
-    # COLLECT_TIMEOUT_S sits at 480s). Aggregation below walks the ORIGINAL query order
-    # (the result dict is keyed by query string), so dedup winners, coverage counts, and
-    # the final ranking are identical to the serial path. max_workers stays low for
+    # Run the searches concurrently — the queries are independent, and up to 11 sequential
+    # GraphQL round-trips dominated collect wall-time (the reason COLLECT_TIMEOUT_S sits at
+    # 480s). parallel_fetch returns results POSITION-ALIGNED with `queries`, so aggregation
+    # walks the ORIGINAL query order and coverage counts one outcome per query occurrence —
+    # dedup winners, coverage counts, and the final ranking are identical to the serial path
+    # (and correct even if two queries were ever identical). max_workers stays low for
     # GitHub's search secondary rate limit; per-call retries live inside search_issues,
-    # and a query that fails (None, or an unexpected raise → None) counts as dropped,
-    # exactly as before.
+    # and a query that fails (None, or an unexpected raise → None) counts as dropped.
     results = parallel_fetch(lambda q: search_issues(q, limit), queries, max_workers=3)
 
     seen, issues, any_ok = set(), [], False
     ok_count, broad_ok = 0, None
     for idx, q in enumerate(queries):
-        nodes = results.get(q)
+        nodes = results[idx]
         # Query #1 in the post-release window is the broad, no-label recency sweep — the only
         # search that surfaces un-triaged, un-thumbed, freshly-filed breakage. Track it apart.
         if release_date and idx == 0:

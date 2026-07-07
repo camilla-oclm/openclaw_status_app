@@ -125,7 +125,9 @@ def fetch_clawsweeper_records(issue_numbers: list[int],
         return None
 
     raw_results = parallel_fetch(_fetch_one, issue_numbers, max_workers=6)
-    records = {num: meta for num, meta in raw_results.items() if meta}
+    # parallel_fetch returns results position-aligned with issue_numbers; key each record by
+    # its issue number (a re-run with a duplicate number simply overwrites, which is fine).
+    records = {num: meta for num, meta in zip(issue_numbers, raw_results) if meta}
 
     elapsed = _time.time() - t0
     if status is not None:
