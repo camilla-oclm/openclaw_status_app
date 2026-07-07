@@ -362,8 +362,19 @@ _CORE_SIGNAL = re.compile(
     r"\b(build|compile|memory|index|reindex|engine|session|auth|gateway|database|migration|startup|worker|core)\b",
     re.IGNORECASE,
 )
-# A serious core regression that names a *channel* surface isn't "all platforms".
-_CHANNEL_SIGNAL = re.compile(r"msteams|teams|wechat|whatsapp|signal|matrix|imessage|channel|plugin", re.IGNORECASE)
+# A serious core regression that names a *distinctive* channel surface in free text is
+# channel-specific, not "all platforms". Common-word channel names (signal, matrix, teams,
+# "channel", plugin) are deliberately NOT free-text matched here: unanchored, they false-fired
+# on ordinary prose ("AbortSignal", "permission matrix", "message channel") and wrongly
+# suppressed the cross-cutting ["all"] fallback. Per the taxonomy invariant those names arrive
+# only via `channel:` labels — handled in _derive_platforms above, which returns before this
+# gate. Every name here is \b-anchored so it can't match inside a larger word.
+_CHANNEL_SIGNAL = re.compile(
+    r"\bmsteams\b|\bmicrosoft teams\b|\bwhatsapp\b|\bbaileys\b|\bwechat\b|\bimessage\b"
+    r"|\bmattermost\b|\bbluebubbles\b|\bnostr\b|\bfeishu\b|\bzalo\b|\btwitch\b"
+    r"|\bnextcloud\b|\bsynology\b|\bqqbot\b|\btlon\b|\bdiscord\b|\bslack\b|\btelegram\b",
+    re.IGNORECASE,
+)
 
 
 def _derive_platforms(raw_issue: dict, severity=None, category=None) -> list:
