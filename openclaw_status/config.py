@@ -208,3 +208,9 @@ FRESH_RELEASE_MAX_RUNS = 3
 ASSESS_CADENCE_TIERS = [(48, 8), (96, 12), (None, 24)]
 # Fire a touch early so an hourly tick never drifts a full slot late (timer jitter).
 SCHEDULE_GRACE_H = 0.5
+# New-release retry backoff. A new release fires an immediate assessment, but if that assess
+# persistently FAILS, assessment.json never advances past the old version, so the "new release"
+# signal would re-fire every hourly tick and re-spend / alert-storm. Only re-fire once this many
+# hours have passed since the last run (a genuinely new release is normally detected after a
+# cadence gap ≫ this, so first detection stays prompt; only rapid re-attempts back off).
+NEW_RELEASE_RETRY_H = 6
