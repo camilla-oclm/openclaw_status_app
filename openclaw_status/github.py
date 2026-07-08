@@ -93,7 +93,11 @@ def search_issues(query_string: str, limit: int = 25, timeout: int = 30) -> list
 def _load_etag_cache() -> dict:
     if config.ETAG_CACHE_FILE.exists():
         try:
-            return load_json(config.ETAG_CACHE_FILE)
+            data = load_json(config.ETAG_CACHE_FILE)
+            # Guard non-object JSON (null / [] / a bare scalar from a truncated or edited file):
+            # gh_rest calls cache.get() OUTSIDE its try, so a non-dict would crash the whole
+            # collect with an uncaught AttributeError instead of degrading gracefully.
+            return data if isinstance(data, dict) else {}
         except Exception:
             return {}
     return {}
@@ -300,10 +304,17 @@ def extract_closing_refs(body: str) -> set:
 def is_feature(title: str, labels) -> bool:
     """True if the issue is a feature request / proposal rather than a defect."""
     low = [str(l).lower() for l in (labels or [])]
+    # A guaranteed-severity signal (P0/P1/regression/bug:crash/impact:*) means this is a real
+    # defect the scout MUST NOT drop — even if it also carries a feature/proposal label or its
+    # title matches a feature marker. This preserves the guaranteed-inclusion backstop (D07).
+    if any(g.lower() in low for g in _GUARANTEED_LABELS):
+        return False
     if any(f in low for f in _FEATURE_LABELS):
         return True
-    t = (title or "").lower()
-    return any(k in t for k in _FEATURE_TITLE)
+    # PREFIX-anchored: a feature marker only counts at the START of the title, so an ordinary
+    # bug like "Crash when clicking the feature request button" is not misfiled as a feature.
+    t = (title or "").lower().lstrip()
+    return any(t.startswith(k) for k in _FEATURE_TITLE)
 
 
 def priority_of(labels) -> str | None:
