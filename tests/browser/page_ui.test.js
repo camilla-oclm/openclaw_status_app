@@ -26,18 +26,24 @@ const LONG_TITLE = "Intermittent memory_search \"index metadata is missing\" des
   "builtin memory index; likely search/reindex race on all platforms with long tail";
 
 const DATA = {
-  schema_version: 6, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",
+  schema_version: 1, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",   // matches render.SCHEMA_VERSION
   recommendation: "⚠️", confidence: "medium", headline: "test headline", thesis: "t",
   freshness: { fresh: false },
+  // known_issues carry the real-shape keys (weight / version_match / tag_source) the emitted
+  // payload has (D26). Weights descend with severity so display order is unchanged.
   known_issues: [
     { number: 90361, title: LONG_TITLE, severity: "critical", category: "regression",
-      affects_version: true, platforms: ["all"], components: ["memory"], reactions: 3 },
+      affects_version: true, platforms: ["all"], components: ["memory"], reactions: 3,
+      weight: 90, version_match: "exact", tag_source: "derived" },
     { number: 2, title: "Second issue", severity: "high", category: "post_release",
-      affects_version: false, platforms: ["linux"], components: ["gateway"] },
+      affects_version: false, platforms: ["linux"], components: ["gateway"],
+      weight: 62, version_match: "none", tag_source: "derived" },
     { number: 3, title: "Third issue", severity: "medium", category: "regression",
-      affects_version: false, platforms: ["linux"], components: ["gateway"] },
+      affects_version: false, platforms: ["linux"], components: ["gateway"],
+      weight: 40, version_match: "none", tag_source: "derived" },
     { number: 4, title: "Fourth issue", severity: "low", category: "active",
-      affects_version: false, platforms: ["discord"], components: ["gateway"] },
+      affects_version: false, platforms: ["discord"], components: ["gateway"],
+      weight: 20, version_match: "none", tag_source: "derived" },
   ],
   evidence: {},
   changes: { features: [{ title: "New turbo mode", value: "twice the speed" }],
