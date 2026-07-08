@@ -17,3 +17,24 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: python -m pytest
+
+  # The template's entire client runtime (render hydration, the conservative per-setup /
+  # per-component verdict logic, filters, ?stack= boot) is covered ONLY by the Node browser
+  # suites. Without this job a JS-broken-but-structurally-valid template.html would pass
+  # pytest + the HTML smoke test and deploy blank/wrong to the (Node-less) box undetected.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Installs puppeteer and its matching Chromium (postinstall → ~/.cache/puppeteer).
+      - run: npm install puppeteer
+      - name: Browser suites (per-setup verdict + page UI)
+        env:
+          PUPPETEER_PATH: ${{ github.workspace }}/node_modules/puppeteer
+        run: |
+          export CHROME_PATH="$(node -e "console.log(require('puppeteer').executablePath())")"
+          node tests/browser/per_setup_verdict.test.js
+          node tests/browser/page_ui.test.js
