@@ -29,9 +29,19 @@ def test_first_tier_matches_fresh_release_window():
 
 # ── should_run ───────────────────────────────────────────────────────────────
 
-def test_new_release_runs_even_if_just_assessed():
-    run, why = scheduler.should_run(NOW, ago(1), "2026.7.0", "2026.6.8", ago(0.5))
+def test_new_release_runs_on_first_detection():
+    # A newly-appeared release detected after a normal cadence gap (last run well behind the
+    # NEW_RELEASE_RETRY_H window) assesses promptly.
+    run, why = scheduler.should_run(NOW, ago(1), "2026.7.0", "2026.6.8", ago(8))
     assert run is True and "new release" in why
+
+
+def test_new_release_backs_off_after_a_recent_attempt():
+    # D12: a new release whose assess keeps FAILING (assessment.json never advances) must NOT
+    # re-fire every hourly tick. A run within NEW_RELEASE_RETRY_H does not re-launch — the
+    # runaway (hourly re-spend / OnFailure alert storm) is bounded to one attempt per window.
+    run, _ = scheduler.should_run(NOW, ago(1), "2026.7.0", "2026.6.8", ago(0.5))
+    assert run is False
 
 
 def test_no_prior_run_runs():
