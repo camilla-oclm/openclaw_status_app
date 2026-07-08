@@ -1520,7 +1520,15 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
         return ""
 
     # ── Rollback: backup existing page ──
-    _backup_existing(out, new_version=assessment_raw.get("version", ""))
+    # Best-effort (D11): archiving the OUTGOING page is a non-critical SEO snapshot. If it fails
+    # (e.g. a root-owned archive/<v>.html from a mixed sudo seed → PermissionError), it must NOT
+    # abort the primary publish — that would freeze the live page on the last verdict while
+    # collect/assess keep producing valid ones, and fire an alert every cadence. Matches the
+    # never-raise contract of the feed/badge/llms sibling writers.
+    try:
+        _backup_existing(out, new_version=assessment_raw.get("version", ""))
+    except Exception as e:
+        print(f"  ⚠️ Archive snapshot failed (non-fatal, continuing publish): {e}")
 
     with open(config.TEMPLATE_FILE) as f:
         html = f.read()

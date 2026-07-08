@@ -119,6 +119,32 @@ def test_render_assessment_page_happy_path_emits_all_surfaces(tmp_path, monkeypa
     assert (tmp_path / "archive" / "2026.6.10.html").exists()         # the prior page was archived by its version
 
 
+def test_render_publishes_even_if_archive_backup_fails(tmp_path, monkeypatch):
+    """D11: archiving the OUTGOING page is a non-critical snapshot. If it raises (e.g. a
+    root-owned archive file → PermissionError) the primary publish must still proceed — a
+    backup hiccup must never freeze the live page on the last verdict."""
+    monkeypatch.setattr(config, "WEB_DIR", tmp_path)
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    monkeypatch.setattr(config, "TIMELINE_FILE", tmp_path / "timeline.json")
+
+    def boom(*a, **k):
+        raise PermissionError("archive/<v>.html is root-owned")
+    monkeypatch.setattr(render, "_backup_existing", boom)
+
+    out = tmp_path / "index.html"
+    out.write_text("PREVIOUS PAGE")
+    assessment_raw = {"version": "2026.6.11", "validation_errors": [],
+                      "assessed_at": "2026-06-07T00:00:00+00:00",
+                      "assessment": {"confidence": "high", "recommendation": "✅",
+                                     "headline": "ok", "thesis": "Clean release.",
+                                     "known_issues": [], "evidence": {}, "changes": {}}}
+    raw = {"target_version": "2026.6.11", "sources": {"latest_release": {"tag": "v2026.6.11"}}}
+    result = render.render_assessment_page(assessment_raw, raw, output_path=str(out))
+    assert result != ""                                # published despite the backup failure
+    assert (tmp_path / "latest.json").exists()
+
+
 # ── verdict-label consistency across surfaces ───────────────────────────────
 
 def test_verdict_text_and_label_name_the_same_verdict():
