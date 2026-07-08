@@ -87,7 +87,9 @@ def fetch_clawsweeper_state() -> dict:
             rows.append({
                 "number": int(num.group(1)),
                 "title": sanitize(cols[2], 200),
-                key_reason: cols[3].lower() if cols[3] else "unknown",
+                # sanitize like every other community string (D10) — this reason/priority text
+                # reaches the analyst prompt via build_context and must be injection-stripped.
+                key_reason: sanitize(cols[3], 60).lower() if cols[3] else "unknown",
                 ("reviewed_at" if key_reason == "priority" else "closed_at"):
                     cols[4] if len(cols) > 4 else "",
             })
@@ -315,15 +317,18 @@ def collect(output_path=None) -> dict:
             for item in issues:
                 rec = cs_records.get(item["number"])
                 if rec:
+                    # Sanitize every clawsweeper field (D10): these come from a SEPARATE repo's
+                    # markdown and, unlike issue title/body, previously entered build_context (and
+                    # the fixed_in demotion) un-stripped — a prompt-injection + false-staged-fix vector.
                     item["clawsweeper"] = {
-                        "decision": rec.get("decision", "unknown"),
-                        "fixed_release": rec.get("fixed_release", "unknown"),
-                        "fixed_pr_url": rec.get("fixed_pr_url", "unknown"),
-                        "fixed_at": rec.get("fixed_at", "unknown"),
-                        "latest_release": rec.get("latest_release", "unknown"),
-                        "review_status": rec.get("review_status", "unknown"),
+                        "decision": sanitize(rec.get("decision", "unknown"), 80),
+                        "fixed_release": sanitize(rec.get("fixed_release", "unknown"), 80),
+                        "fixed_pr_url": sanitize(rec.get("fixed_pr_url", "unknown"), 200),
+                        "fixed_at": sanitize(rec.get("fixed_at", "unknown"), 40),
+                        "latest_release": sanitize(rec.get("latest_release", "unknown"), 80),
+                        "review_status": sanitize(rec.get("review_status", "unknown"), 80),
                     }
-                    fixed_rel = rec.get("fixed_release", "unknown")
+                    fixed_rel = item["clawsweeper"]["fixed_release"]
                     if fixed_rel != "unknown":
                         existing = item.get("fixed_in") if isinstance(item.get("fixed_in"), list) else []
                         if fixed_rel not in existing:
