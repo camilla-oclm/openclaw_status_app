@@ -1,7 +1,7 @@
 # Fires an hourly *tick* (the service runs `run.py tick`). The tick is cheap: it polls
 # GitHub for a new release and decides whether a full LLM assessment is actually due,
-# running one only when warranted — a new release, or the adaptive cadence (every 6h for
-# the first 48h after a release, then 8h, then 12h). So this is an hourly *heartbeat*,
+# running one only when warranted — a new release, or the adaptive cadence (every 8h for
+# the first 48h after a release, then 12h, then 24h). So this is an hourly *heartbeat*,
 # not an hourly full run; the real cadence lives in config.ASSESS_CADENCE_TIERS.
 [Unit]
 Description=OpenClaw Status — hourly adaptive-scheduler tick

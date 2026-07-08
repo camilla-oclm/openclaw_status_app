@@ -33,8 +33,9 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if not GITHUB_TOKEN:
     print("⚠ WARNING: GITHUB_TOKEN not set. GitHub collection will fail.", file=sys.stderr)
 
-# Optional: a Slack/Discord-style incoming webhook. When set, cost/failure alerts
-# are POSTed to it (as {"text": ...}) in addition to stdout. Unset → stdout only.
+# Optional: a Slack/Discord-style incoming webhook. When set, cost/failure alerts are
+# POSTed to it in addition to stdout — the payload key is auto-selected (see lib.notify):
+# Discord webhooks get {"content": ...}, Slack and others {"text": ...}. Unset → stdout only.
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL")
 
 # ── Repository ──────────────────────────────────────────────────────────────
@@ -180,13 +181,13 @@ ARCHIVE_KEEP = 30
 # bug reports yet, so the known-issues list is mostly carried over from earlier
 # versions and the verdict is preliminary. We flag a release fresh for this many
 # days after its publish date (relative to the assessment time) so the page can
-# tell users to back up and treat the early verdict as provisional. At the ~6h run
-# cadence this spans the first several re-assessments — long enough for reports to
+# tell users to back up and treat the early verdict as provisional. At the ~8h fresh-tier
+# run cadence this spans the first several re-assessments — long enough for reports to
 # start landing and the picture to firm up.
 FRESH_RELEASE_DAYS = 2
 
 # Also retire the fresh-release banner once this version has been assessed MORE than
-# this many times. By the 4th run (~24h at the 6h cadence) enough version-specific
+# this many times. By the 4th run (~24h at the 8h fresh-tier cadence) enough version-specific
 # bugs have been filed that the verdict no longer leans on carried-over issues, so the
 # "early read / preliminary" framing is stale even if the publish date is < 2 days old.
 # Whichever fires first — this OR FRESH_RELEASE_DAYS — hides the banner. So with =3 the
