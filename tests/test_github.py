@@ -145,6 +145,30 @@ def test_is_feature_by_title():
     assert github.is_feature("Regression: sidebar shown by default", []) is False
 
 
+def test_is_feature_never_drops_a_guaranteed_severity_issue():
+    # D07: an issue carrying a guaranteed severity signal (P0/P1/regression/bug:crash/impact:*)
+    # is a real defect the scout must NOT drop — even if its title matches a feature marker or it
+    # also bears a feature/proposal label — or the guaranteed-inclusion backstop is defeated.
+    assert github.is_feature("proposal: gateway P0 crash on boot", ["P0"]) is False
+    assert github.is_feature("Crash on the feature request button", ["bug:crash", "P1"]) is False
+    assert github.is_feature("data-loss on sync", ["P0", "proposal"]) is False
+
+
+def test_is_feature_title_markers_are_prefix_anchored():
+    # D07: a feature marker MID-title (ordinary bug prose) must not misfile the issue as a feature.
+    assert github.is_feature("Crash when clicking the feature request button", []) is False
+    assert github.is_feature("Feature request: dark mode", []) is True   # marker at the START still counts
+
+
+def test_load_etag_cache_guards_non_dict_json(tmp_path, monkeypatch):
+    # D20: a corrupt/non-object etag cache (null / [] / a bare scalar) must degrade to {} —
+    # gh_rest calls cache.get() OUTSIDE its try, so a non-dict would crash the whole collect.
+    monkeypatch.setattr(config, "ETAG_CACHE_FILE", tmp_path / "etag.json")
+    for bad in ("null", "[]", '"a string"', "123"):
+        (tmp_path / "etag.json").write_text(bad)
+        assert github._load_etag_cache() == {}
+
+
 def test_priority_of():
     assert github.priority_of(["P1", "impact:security"]) == "high"
     assert github.priority_of(["P2"]) == "medium"
