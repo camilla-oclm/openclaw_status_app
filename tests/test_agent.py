@@ -942,9 +942,13 @@ def test_build_context_reads_issues_in_tiers(monkeypatch):
     assert "### #3 " in ctx
     assert "URL: https://x/3" not in ctx
     assert "Body: body text" in ctx
-    # tier 3: one-line bullet, no ### header
+    # tier 3: one-line bullet, no ### header. Assert the STRUCTURE (a "- #5" bullet carrying
+    # severity + weight + version-match) rather than the exact bracket punctuation, so a benign
+    # reformat ("w76" → "weight 76", reordering) doesn't fail a behaviourally-intact build (D27).
     assert "### #5 " not in ctx
-    assert "- #5 [high, w76, series]" in ctx
+    tier3_line = next((l for l in ctx.splitlines() if l.lstrip().startswith("- #5")), "")
+    assert tier3_line, "tier-3 issue #5 must appear as a one-line bullet"
+    assert "high" in tier3_line and "76" in tier3_line and "series" in tier3_line
 
 
 def test_prompt_pins_tiered_weighting():
