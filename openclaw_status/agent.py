@@ -477,6 +477,15 @@ def validate_assessment(assessment: dict) -> list[str]:
     if assessment.get("confidence") not in ("high", "medium", "low"):
         errors.append(f"Invalid confidence: {assessment.get('confidence')}")
 
+    # Primary text fields must be strings. A non-str (the LLM emitted a list/int for thesis)
+    # would otherwise crash the len() check and the XSS regex below with an uncaught TypeError,
+    # aborting the run BEFORE the billed primary call is logged (dropping that spend from the
+    # budget gate). Flag it and coerce so validation fails CLEANLY (assessment rejected).
+    for _f in ("headline", "thesis", "sentiment_summary"):
+        if _f in assessment and not isinstance(assessment[_f], str):
+            errors.append(f"{_f} must be a string, got {type(assessment[_f]).__name__}")
+            assessment[_f] = str(assessment[_f])
+
     thesis = assessment.get("thesis", "")
     if len(thesis) < 100:
         errors.append(f"Thesis too short: {len(thesis)} chars (min 100)")
@@ -1122,6 +1131,16 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
                 refined = True
             else:
                 print("   ⚠️ Refinement failed/unparseable, falling back to primary")
+                # If the refine call HTTP-succeeded (billed) but returned unparseable JSON, its
+                # cost is REAL — account for it like the primary path does for its discarded
+                # attempts, so the budget gate isn't blind to it. A truly failed call (deadline /
+                # HTTP error) carries no usage, so this no-ops for it.
+                ru = refinement_result.get("usage") or {}
+                if ru:
+                    for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):
+                        total_usage[k] += ru.get(k, 0)
+                    total_usage["api_calls"] += 1
+                    log_usage(config.PRIMARY_MODEL, ru, False)
         else:
             print(f"\n{'─'*60}")
             print("STEP 3/3 — Skipped (models agree)")

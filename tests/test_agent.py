@@ -80,6 +80,15 @@ def test_validate_thesis_too_long():
     assert any("too long" in e for e in errors)
 
 
+def test_validate_non_string_primary_field_does_not_crash(monkeypatch):
+    # D08: a non-string thesis/headline/sentiment_summary previously crashed len()/the XSS
+    # regex with an uncaught TypeError, aborting before the billed primary spend was logged.
+    # Now it fails CLEANLY as a validation error.
+    for bad in ([("para1",), "list"], 42, {"k": "v"}):
+        errors = agent.validate_assessment(_valid_assessment(thesis=bad))
+        assert any("thesis must be a string" in e for e in errors)   # flagged, not raised
+
+
 def test_validate_detects_xss_in_headline():
     errors = agent.validate_assessment(_valid_assessment(headline="<script>alert(1)</script>"))
     assert any("XSS" in e for e in errors)
@@ -728,6 +737,36 @@ def test_discarded_primary_spend_is_logged_and_counted(tmp_path, monkeypatch):
     costs = sorted(e.get("cost_usd", 0) for e in json.loads(config.USAGE_LOG_FILE.read_text()))
     assert 0.04 in costs and 0.03 in costs           # discarded primary AND kept fallback logged
     assert result["usage"]["cost_usd"] == pytest.approx(0.07)   # run total includes both
+
+
+def test_refine_unparseable_billed_spend_is_logged(tmp_path, monkeypatch):
+    """D09: a refine call that HTTP-succeeds (billed) but returns unparseable JSON must still
+    have its cost logged. Previously it fell to the fallback-to-primary branch and its spend
+    vanished from the usage log / budget gate — the only billed path that dropped its money."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    primary = _valid_assessment()
+    review = {"agrees": False, "critique": "thin", "suggested_recommendation": "⏸️"}
+
+    def fake_call(model, system, user, **kw):
+        if "VALIDATOR" in system:                                    # validator disagrees → refine
+            return {"success": True, "parsed": review, "model": model,
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.02, "latency_ms": 1}}
+        if "previously produced an assessment" in system:            # refine: billed, unparseable
+            return {"success": True, "parsed": {"error": "unparseable"}, "model": model,
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.05, "latency_ms": 1}}
+        return {"success": True, "parsed": primary, "model": model,  # primary succeeds
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.03, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [], "clawsweeper": {}, "release_history": [],
+    }}
+    result = agent.run_assessment_pipeline(raw=raw)
+    assert result["success"] is True                                 # falls back to the primary
+    costs = [e.get("cost_usd", 0) for e in json.loads(config.USAGE_LOG_FILE.read_text())]
+    assert 0.05 in costs                                             # the refine's billed spend was logged
 
 
 def test_run_summary_message_includes_run_and_total_cost():
