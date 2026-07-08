@@ -80,6 +80,15 @@ def test_validate_thesis_too_long():
     assert any("too long" in e for e in errors)
 
 
+def test_validate_non_string_primary_field_does_not_crash(monkeypatch):
+    # D08: a non-string thesis/headline/sentiment_summary previously crashed len()/the XSS
+    # regex with an uncaught TypeError, aborting before the billed primary spend was logged.
+    # Now it fails CLEANLY as a validation error.
+    for bad in ([("para1",), "list"], 42, {"k": "v"}):
+        errors = agent.validate_assessment(_valid_assessment(thesis=bad))
+        assert any("thesis must be a string" in e for e in errors)   # flagged, not raised
+
+
 def test_validate_detects_xss_in_headline():
     errors = agent.validate_assessment(_valid_assessment(headline="<script>alert(1)</script>"))
     assert any("XSS" in e for e in errors)
@@ -299,6 +308,35 @@ def test_cap_thin_evidence_no_cap_when_full_evidence():
     assert agent._cap_thin_evidence_confidence(
         a, validator_unreviewed=False, scout_degraded=False) is None
     assert a["confidence"] == "high"            # a fully-reviewed, fully-scouted high stands
+
+
+# ── _degraded_input_reason: fail closed on a wholly-failed scout (D01) ────────
+
+def test_degraded_input_fails_closed_on_failed_scout_with_no_issues():
+    # A wholly-failed scout (source_status github_issues 'failed') that left NO cached ledger
+    # issues must fail closed — never publish a clean verdict over a scout that saw nothing.
+    raw = {"target_version": "2026.6.11",
+           "sources": {"latest_release": {"tag": "v2026.6.11"}, "github_issues": []},
+           "source_status": {"github_issues": {"status": "failed"}}}
+    assert agent._degraded_input_reason(raw, "2026.6.11") is not None
+
+
+def test_degraded_input_proceeds_when_failed_scout_has_cached_issues():
+    # If the scout failed but the ledger still carries issues, proceed (there IS evidence —
+    # not a false-clean); confidence is capped by _cap_thin_evidence_confidence instead.
+    raw = {"target_version": "2026.6.11",
+           "sources": {"latest_release": {"tag": "v2026.6.11"},
+                       "github_issues": [{"number": 1, "affects_version": True}]},
+           "source_status": {"github_issues": {"status": "failed"}}}
+    assert agent._degraded_input_reason(raw, "2026.6.11") is None
+
+
+def test_degraded_input_proceeds_on_clean_empty_scout():
+    # A genuinely clean release (scout 'empty', 0 issues) is NOT degraded — it must assess.
+    raw = {"target_version": "2026.6.11",
+           "sources": {"latest_release": {"tag": "v2026.6.11"}, "github_issues": []},
+           "source_status": {"github_issues": {"status": "empty"}}}
+    assert agent._degraded_input_reason(raw, "2026.6.11") is None
 
 
 def test_cap_thin_evidence_leaves_medium_and_low_alone():
@@ -701,6 +739,36 @@ def test_discarded_primary_spend_is_logged_and_counted(tmp_path, monkeypatch):
     assert result["usage"]["cost_usd"] == pytest.approx(0.07)   # run total includes both
 
 
+def test_refine_unparseable_billed_spend_is_logged(tmp_path, monkeypatch):
+    """D09: a refine call that HTTP-succeeds (billed) but returns unparseable JSON must still
+    have its cost logged. Previously it fell to the fallback-to-primary branch and its spend
+    vanished from the usage log / budget gate — the only billed path that dropped its money."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    primary = _valid_assessment()
+    review = {"agrees": False, "critique": "thin", "suggested_recommendation": "⏸️"}
+
+    def fake_call(model, system, user, **kw):
+        if "VALIDATOR" in system:                                    # validator disagrees → refine
+            return {"success": True, "parsed": review, "model": model,
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.02, "latency_ms": 1}}
+        if "previously produced an assessment" in system:            # refine: billed, unparseable
+            return {"success": True, "parsed": {"error": "unparseable"}, "model": model,
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.05, "latency_ms": 1}}
+        return {"success": True, "parsed": primary, "model": model,  # primary succeeds
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.03, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": [], "clawsweeper": {}, "release_history": [],
+    }}
+    result = agent.run_assessment_pipeline(raw=raw)
+    assert result["success"] is True                                 # falls back to the primary
+    costs = [e.get("cost_usd", 0) for e in json.loads(config.USAGE_LOG_FILE.read_text())]
+    assert 0.05 in costs                                             # the refine's billed spend was logged
+
+
 def test_run_summary_message_includes_run_and_total_cost():
     msg = agent._run_summary_message("2026.6.6", "⏸️", 0.022, 0.13, 0.45, 7)
     assert "v2026.6.6" in msg
@@ -913,9 +981,13 @@ def test_build_context_reads_issues_in_tiers(monkeypatch):
     assert "### #3 " in ctx
     assert "URL: https://x/3" not in ctx
     assert "Body: body text" in ctx
-    # tier 3: one-line bullet, no ### header
+    # tier 3: one-line bullet, no ### header. Assert the STRUCTURE (a "- #5" bullet carrying
+    # severity + weight + version-match) rather than the exact bracket punctuation, so a benign
+    # reformat ("w76" → "weight 76", reordering) doesn't fail a behaviourally-intact build (D27).
     assert "### #5 " not in ctx
-    assert "- #5 [high, w76, series]" in ctx
+    tier3_line = next((l for l in ctx.splitlines() if l.lstrip().startswith("- #5")), "")
+    assert tier3_line, "tier-3 issue #5 must appear as a one-line bullet"
+    assert "high" in tier3_line and "76" in tier3_line and "series" in tier3_line
 
 
 def test_prompt_pins_tiered_weighting():

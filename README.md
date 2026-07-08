@@ -203,7 +203,8 @@ Caddy):
 
 - **`latest.json`** — the full payload as a documented public **JSON API**; the page also
   `fetch()`es it at runtime to refresh data without an HTML rebuild (the inlined copy is the
-  offline fallback). Carries a `schema_version` so consumers can guard against shape drift.
+  offline fallback). Carries a `schema_version` so consumers can guard against shape drift, and
+  an `app_version` naming the release of this tool that produced the verdict.
 - **`feed.xml`** + **`badge.svg`** — an RSS feed of verdicts and an embeddable shields-style
   status badge (`[![OpenClaw status](https://clawstat.us/badge.svg)](https://clawstat.us)`).
 - **`llms.txt`** / **`llms-full.txt`** — an [agent-readable mirror](https://llmstxt.org) of the
@@ -240,10 +241,22 @@ else
 fi
 ```
 
-That's the strict form (update only on a clean ✅). A permissive variant proceeds on ⚠️ too and
-holds only on a skip verdict: `[ "$verdict" != "⏸️" ]`. For a firmer gate, also read
-`.confidence`, compare `.version` against what you're running (so you only gate *new* updates),
-and skim `.flip_conditions` — the concrete events that would change the verdict.
+That's the strict form (update only on a clean ✅), and it fails **closed**: if clawstat.us is
+unreachable or returns nothing, `$verdict` is the empty string, `[ "" = "✅" ]` is false, and it
+holds. A permissive variant that also proceeds on ⚠️ must be written as an explicit allow-list so
+it *stays* fail-closed — do **not** use `[ "$verdict" != "⏸️" ]`, which proceeds when the value is
+empty (i.e. exactly when the status page is down):
+
+```bash
+if [ "$verdict" = "✅" ] || [ "$verdict" = "⚠️" ]; then
+  your-openclaw-update-command
+else
+  echo "clawstat.us says '$verdict' — holding this update"
+fi
+```
+
+For a firmer gate, also read `.confidence`, compare `.version` against what you're running (so you
+only gate *new* updates), and skim `.flip_conditions` — the concrete events that would change the verdict.
 
 ---
 
@@ -261,7 +274,8 @@ cp .env.example .env      # then fill in the two keys
 - **`OPENROUTER_API_KEY`** — for the LLM assessment. Get one at openrouter.ai.
 - **`GITHUB_TOKEN`** — for all GitHub reads. Least privilege is a **fine-grained PAT** with
   *Repository access → Public repositories (read-only)* and *Issues: Read-only* +
-  *Metadata: Read-only* (or a classic token with **no scopes**). See `.env.example`.
+  *Metadata: Read-only* + *Contents: Read-only* (Contents gates the Releases API — without it
+  release/changelog fetches 403). Or a classic token with **no scopes**. See `.env.example`.
 - **`ALERT_WEBHOOK_URL`** *(optional)* — a Slack or Discord incoming webhook. When set,
   cost/budget/failure alerts and a run-completion summary are POSTed there (the payload key is
   auto-selected: Discord gets `content`, everything else `text`). Leave blank for stdout-only
@@ -289,7 +303,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 330 tests, hermetic (no network)
+python3 -m pytest        # 364 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
@@ -333,8 +347,11 @@ openclaw_status_app/
 │   ├── cli.py              the unified CLI
 │   ├── collector.py        stage 1 — gather data
 │   ├── github.py           GitHub API client + issue scouting/scoring
+│   ├── ledger.py           per-version accumulating issue ledger
+│   ├── release_changes.py  deterministic changelog parser
 │   ├── agent.py            stage 2 — LLM assessment pipeline
 │   ├── render.py           stage 3 — public decision page
+│   ├── scheduler.py        adaptive run cadence (tick → should_run)
 │   ├── lib.py              shared utils (OpenRouter, sanitize, locks, usage, timer)
 │   └── config.py           paths, models, env
 ├── web/
@@ -348,3 +365,9 @@ openclaw_status_app/
 ├── tests/                  pytest suite
 └── data/                   pipeline outputs (gitignored)
 ```
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE) — free to use, fork, self-host, and modify. Attribution is appreciated but not required.

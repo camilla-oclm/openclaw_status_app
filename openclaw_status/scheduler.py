@@ -5,7 +5,7 @@ and decides whether a full LLM assessment is due. Assessments are frequent while
 release is fresh and back off as it matures and the verdict stabilizes:
 
     • a NEW release        → assess now (and the age clock resets to ~0 → fast tier)
-    • else, by release age → < 48h: every 6h · 48–96h: every 8h · ≥ 96h: every 12h
+    • else, by release age → < 48h: every 8h · 48–96h: every 12h · ≥ 96h: every 24h
 
 All the policy lives in this one pure module so it's unit-tested and tweakable via
 ``config`` — instead of being baked into the systemd timer, which can't express a
@@ -42,13 +42,22 @@ def should_run(now: datetime, release_published: datetime | None, release_versio
     """
     grace_h = config.SCHEDULE_GRACE_H if grace_h is None else grace_h
 
-    # A genuinely new stable release is the strongest signal — assess immediately.
-    # (This also resets the effective age to ~0, so we drop back to the fast tier.)
-    if release_version and release_version != last_assessed_version:
-        return True, f"new release {release_version} (last assessed: {last_assessed_version or 'none'})"
-
     if last_run is None:
         return True, "no prior run on record"
+
+    # A genuinely new stable release is the strongest signal — assess promptly.
+    # (This also resets the effective age to ~0, so we drop back to the fast tier.)
+    # Backoff (D12): if assess persistently FAILS, assessment.json never advances, so
+    # last_assessed_version stays behind and this branch would re-fire EVERY hourly tick and
+    # re-spend / storm OnFailure alerts. Re-fire only once NEW_RELEASE_RETRY_H has elapsed since
+    # the last run; otherwise fall through to the (fresh-tier) cadence path. A genuinely new
+    # release is normally detected after a cadence gap ≫ this window, so first detection stays
+    # prompt — only rapid re-attempts of a failing version are throttled.
+    if release_version and release_version != last_assessed_version:
+        since_h = (now - last_run).total_seconds() / 3600
+        if since_h >= config.NEW_RELEASE_RETRY_H:
+            return True, (f"new release {release_version} "
+                          f"(last assessed: {last_assessed_version or 'none'}; {since_h:.1f}h since last run)")
 
     if release_published is not None:
         age_h = (now - release_published).total_seconds() / 3600

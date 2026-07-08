@@ -12,6 +12,14 @@ ROOT = Path(__file__).parent.parent
 DATA_DIR = ROOT / "data"
 WEB_DIR = ROOT / "web"
 
+# ── App version ─────────────────────────────────────────────────────────────
+# This app's OWN release version — distinct from every other "version" in the
+# codebase, which refers to the assessed OpenClaw *product*. Mirrors
+# openclaw_status.__version__ (a test pins them equal); surfaced additively in
+# latest.json (`app_version`) and the page footer. Bump on release, then cut the
+# matching annotated git tag (e.g. `v1.0.0`) from this value.
+APP_VERSION = "1.0.0"
+
 # ── .env ────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -25,8 +33,9 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if not GITHUB_TOKEN:
     print("⚠ WARNING: GITHUB_TOKEN not set. GitHub collection will fail.", file=sys.stderr)
 
-# Optional: a Slack/Discord-style incoming webhook. When set, cost/failure alerts
-# are POSTed to it (as {"text": ...}) in addition to stdout. Unset → stdout only.
+# Optional: a Slack/Discord-style incoming webhook. When set, cost/failure alerts are
+# POSTed to it in addition to stdout — the payload key is auto-selected (see lib.notify):
+# Discord webhooks get {"content": ...}, Slack and others {"text": ...}. Unset → stdout only.
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL")
 
 # ── Repository ──────────────────────────────────────────────────────────────
@@ -172,13 +181,13 @@ ARCHIVE_KEEP = 30
 # bug reports yet, so the known-issues list is mostly carried over from earlier
 # versions and the verdict is preliminary. We flag a release fresh for this many
 # days after its publish date (relative to the assessment time) so the page can
-# tell users to back up and treat the early verdict as provisional. At the ~6h run
-# cadence this spans the first several re-assessments — long enough for reports to
+# tell users to back up and treat the early verdict as provisional. At the ~8h fresh-tier
+# run cadence this spans the first several re-assessments — long enough for reports to
 # start landing and the picture to firm up.
 FRESH_RELEASE_DAYS = 2
 
 # Also retire the fresh-release banner once this version has been assessed MORE than
-# this many times. By the 4th run (~24h at the 6h cadence) enough version-specific
+# this many times. By the 4th run (~24h at the 8h fresh-tier cadence) enough version-specific
 # bugs have been filed that the verdict no longer leans on carried-over issues, so the
 # "early read / preliminary" framing is stale even if the publish date is < 2 days old.
 # Whichever fires first — this OR FRESH_RELEASE_DAYS — hides the banner. So with =3 the
@@ -200,3 +209,9 @@ FRESH_RELEASE_MAX_RUNS = 3
 ASSESS_CADENCE_TIERS = [(48, 8), (96, 12), (None, 24)]
 # Fire a touch early so an hourly tick never drifts a full slot late (timer jitter).
 SCHEDULE_GRACE_H = 0.5
+# New-release retry backoff. A new release fires an immediate assessment, but if that assess
+# persistently FAILS, assessment.json never advances past the old version, so the "new release"
+# signal would re-fire every hourly tick and re-spend / alert-storm. Only re-fire once this many
+# hours have passed since the last run (a genuinely new release is normally detected after a
+# cadence gap ≫ this, so first detection stays prompt; only rapid re-attempts back off).
+NEW_RELEASE_RETRY_H = 6

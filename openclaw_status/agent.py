@@ -50,9 +50,14 @@ _OUTPUT_SCHEMA = """{
     "windows": "none | low | medium | high",
     "macos": "none | low | medium | high",
     "linux": "none | low | medium | high",
+    "ios": "none | low | medium | high",
+    "android": "none | low | medium | high",
+    "web": "none | low | medium | high",
     "discord": "none | low | medium | high",
     "slack": "none | low | medium | high",
-    "telegram": "none | low | medium | high"
+    "telegram": "none | low | medium | high",
+    "whatsapp": "none | low | medium | high",
+    "other-channel": "none | low | medium | high"
   }
 }"""
 
@@ -476,6 +481,15 @@ def validate_assessment(assessment: dict) -> list[str]:
 
     if assessment.get("confidence") not in ("high", "medium", "low"):
         errors.append(f"Invalid confidence: {assessment.get('confidence')}")
+
+    # Primary text fields must be strings. A non-str (the LLM emitted a list/int for thesis)
+    # would otherwise crash the len() check and the XSS regex below with an uncaught TypeError,
+    # aborting the run BEFORE the billed primary call is logged (dropping that spend from the
+    # budget gate). Flag it and coerce so validation fails CLEANLY (assessment rejected).
+    for _f in ("headline", "thesis", "sentiment_summary"):
+        if _f in assessment and not isinstance(assessment[_f], str):
+            errors.append(f"{_f} must be a string, got {type(assessment[_f]).__name__}")
+            assessment[_f] = str(assessment[_f])
 
     thesis = assessment.get("thesis", "")
     if len(thesis) < 100:
@@ -959,6 +973,14 @@ def _degraded_input_reason(raw: dict, version: str) -> str | None:
         return "no collected sources"
     if not ((raw.get("sources") or {}).get("latest_release") or {}).get("tag"):
         return "no usable latest_release"
+    # A WHOLLY-failed issue scout (GitHub search down / token revoked) that left NO cached
+    # ledger issues either means the analyst would see zero evidence and could publish a
+    # confident false-clean "no known issues" over a scout that saw nothing — fail closed.
+    # If the ledger still carries accumulated issues we proceed (there IS evidence, so it
+    # can't be a false-clean) but cap confidence — see _cap_thin_evidence_confidence.
+    scout_status = ((raw.get("source_status") or {}).get("github_issues") or {}).get("status")
+    if scout_status == "failed" and not ((raw.get("sources") or {}).get("github_issues") or []):
+        return "issue scout failed with no cached issues"
     return None
 
 
@@ -1114,6 +1136,16 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
                 refined = True
             else:
                 print("   ⚠️ Refinement failed/unparseable, falling back to primary")
+                # If the refine call HTTP-succeeded (billed) but returned unparseable JSON, its
+                # cost is REAL — account for it like the primary path does for its discarded
+                # attempts, so the budget gate isn't blind to it. A truly failed call (deadline /
+                # HTTP error) carries no usage, so this no-ops for it.
+                ru = refinement_result.get("usage") or {}
+                if ru:
+                    for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):
+                        total_usage[k] += ru.get(k, 0)
+                    total_usage["api_calls"] += 1
+                    log_usage(config.PRIMARY_MODEL, ru, False)
         else:
             print(f"\n{'─'*60}")
             print("STEP 3/3 — Skipped (models agree)")
@@ -1166,7 +1198,7 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     # A single-model verdict (validator unavailable) or an incomplete issue scout must not
     # publish "high". Deterministic, applied here so history/timeline/latest.json/llms agree.
     scout_degraded = (((raw.get("source_status") or {}).get("github_issues") or {})
-                      .get("status") == "degraded")
+                      .get("status") in ("degraded", "failed"))
     thin_reason = _cap_thin_evidence_confidence(
         final_assessment, validator_unreviewed=validator_unreviewed, scout_degraded=scout_degraded)
     if thin_reason:

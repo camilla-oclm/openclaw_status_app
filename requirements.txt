@@ -1,5 +1,8 @@
 # Runtime dependency (everything else is the Python standard library).
-python-dotenv>=1.0
+# Upper-bounded to block a breaking major release from slipping in on a fresh
+# `pip install` (box / CI) while still allowing safe minor + patch updates.
+# Tested against python-dotenv 1.2.x.
+python-dotenv>=1.2,<2
 
-# Dev / tests
-pytest>=7.0
+# Dev / tests. Tested against pytest 9.x; floor kept low for contributor toolchains.
+pytest>=7,<10

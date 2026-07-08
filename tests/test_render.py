@@ -86,6 +86,65 @@ def test_render_keeps_previous_page_when_smoke_test_fails(tmp_path, monkeypatch)
     assert out.read_text() == "GOOD PAGE"                          # last good page untouched
 
 
+def test_render_assessment_page_happy_path_emits_all_surfaces(tmp_path, monkeypatch):
+    """D15: only the 3 fail-closed branches were tested. A VALID assessment must render
+    index.html AND every documented sibling machine surface, pass smoke, and archive the
+    prior page — a regression that drops or mis-paths a sibling (especially latest.json, the
+    public API the README's update-gate curls) would otherwise ship undetected."""
+    monkeypatch.setattr(config, "WEB_DIR", tmp_path)                   # tmp render file + siblings land here
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    monkeypatch.setattr(config, "TIMELINE_FILE", tmp_path / "timeline.json")
+    out = tmp_path / "index.html"
+    out.write_text(_page("2026.6.10"))                                # a prior, version-tagged page to archive
+    assessment_raw = {
+        "version": "2026.6.11", "validation_errors": [],
+        "assessed_at": "2026-06-07T00:00:00+00:00",
+        "assessment": {"confidence": "high", "recommendation": "✅",
+                       "headline": "No blocking issues", "thesis": "Clean release.",
+                       "known_issues": [], "evidence": {}, "changes": {}},
+    }
+    raw = {"target_version": "2026.6.11", "sources": {"latest_release": {"tag": "v2026.6.11"}}}
+
+    result = render.render_assessment_page(assessment_raw, raw, output_path=str(out))
+
+    assert result != ""                                               # published, not fail-closed
+    for name in ("index.html", "latest.json", "feed.xml", "badge.svg",
+                 "llms.txt", "llms-full.txt", "robots.txt", "sitemap.xml"):
+        assert (tmp_path / name).exists(), f"missing sibling artifact: {name}"
+    import json
+    lj = json.loads((tmp_path / "latest.json").read_text())           # latest.json is valid JSON…
+    assert lj["recommendation"] == "✅"                                # …carrying the published verdict…
+    assert lj["version"] == "2026.6.11"                               # …for the assessed version
+    assert (tmp_path / "archive" / "2026.6.10.html").exists()         # the prior page was archived by its version
+
+
+def test_render_publishes_even_if_archive_backup_fails(tmp_path, monkeypatch):
+    """D11: archiving the OUTGOING page is a non-critical snapshot. If it raises (e.g. a
+    root-owned archive file → PermissionError) the primary publish must still proceed — a
+    backup hiccup must never freeze the live page on the last verdict."""
+    monkeypatch.setattr(config, "WEB_DIR", tmp_path)
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    monkeypatch.setattr(config, "TIMELINE_FILE", tmp_path / "timeline.json")
+
+    def boom(*a, **k):
+        raise PermissionError("archive/<v>.html is root-owned")
+    monkeypatch.setattr(render, "_backup_existing", boom)
+
+    out = tmp_path / "index.html"
+    out.write_text("PREVIOUS PAGE")
+    assessment_raw = {"version": "2026.6.11", "validation_errors": [],
+                      "assessed_at": "2026-06-07T00:00:00+00:00",
+                      "assessment": {"confidence": "high", "recommendation": "✅",
+                                     "headline": "ok", "thesis": "Clean release.",
+                                     "known_issues": [], "evidence": {}, "changes": {}}}
+    raw = {"target_version": "2026.6.11", "sources": {"latest_release": {"tag": "v2026.6.11"}}}
+    result = render.render_assessment_page(assessment_raw, raw, output_path=str(out))
+    assert result != ""                                # published despite the backup failure
+    assert (tmp_path / "latest.json").exists()
+
+
 # ── verdict-label consistency across surfaces ───────────────────────────────
 
 def test_verdict_text_and_label_name_the_same_verdict():
@@ -177,6 +236,20 @@ def test_inject_escapes_script_close_in_data():
     assert "</script>" not in body
     # ...but it round-trips back to the original string
     assert _parse_injected_json(out)["thesis"] == "evil </script><script>alert(1)</script>"
+
+
+def test_inject_escapes_all_lt_blocks_comment_script_breakout():
+    # D02: escaping only "</" let a hostile issue title like "<!--<script" enter the
+    # HTML script-data-double-escaped state (no "</" needed) and swallow the document,
+    # so the page never hydrated. Every "<" must be escaped to <.
+    payload = "<!--<script foo crashes on v2026.6.11"
+    tpl = ('<html><body>'
+           '<script id="assessment-data" type="application/json">{}</script>'
+           '<script>run()</script></body></html>')
+    out = render._inject_data(tpl, {"thesis": payload})
+    body = out.split('application/json">', 1)[1].split("</script>", 1)[0]
+    assert "<" not in body                                  # no markup can start inside the data zone
+    assert _parse_injected_json(out)["thesis"] == payload   # round-trips through JSON.parse / json.loads
 
 
 def test_inject_legacy_var_data_contract():
@@ -304,6 +377,15 @@ def test_build_data_injects_archived_versions(tmp_path, monkeypatch):
     assert sorted(data["archived_versions"]) == ["2026.5.28", "2026.6.1"]
 
 
+def test_app_version_surfaced_and_in_sync():
+    import openclaw_status
+    # Single source of truth: the two constants must never drift.
+    assert config.APP_VERSION == openclaw_status.__version__
+    # Surfaced additively in latest.json (no schema_version bump needed).
+    data = render._build_assessment_data({"assessment": {}, "version": "2026.6.6"}, {"sources": {}})
+    assert data["app_version"] == config.APP_VERSION
+
+
 def test_norm_platforms_keeps_known_tokens_and_drops_junk():
     assert render._norm_platforms(["Linux", "WIN", "osx", "discord", "haxxor"]) == \
         ["linux", "windows", "macos", "discord"]
@@ -357,6 +439,26 @@ def test_derive_platforms_channel_long_tail():
         {"title": "x", "labels": [{"name": "channel: telegram"}]}) == ["telegram"]
     assert render._derive_platforms(
         {"title": "x", "labels": [{"name": "channel: whatsapp-web"}]}) == ["whatsapp"]
+
+
+def test_derive_platforms_channel_signal_no_false_fire_on_prose():
+    # N2: _CHANNEL_SIGNAL was unanchored and matched common words INSIDE ordinary prose
+    # ("AbortSignal", "permission matrix", "message channel"), wrongly suppressing the
+    # cross-cutting ["all"] fallback for a genuine core regression — a per-setup false-spare.
+    # With severity/category set the fallback gate IS reached, so these must resolve to ["all"].
+    for title in ("Gateway auth hangs on AbortSignal timeout",
+                  "permission matrix rework breaks auth for every session",
+                  "core worker drops the message channel for all users"):
+        assert render._derive_platforms({"title": title}, severity="critical",
+                                        category="regression") == ["all"], title
+    # A DISTINCTIVE channel name in free text still suppresses "all" (it IS channel-specific,
+    # here via the other-channel platform signal)...
+    assert render._derive_platforms({"title": "msteams adapter core crash-loop"},
+                                    severity="critical", category="regression") == ["other-channel"]
+    # ...and a `channel:` label still buckets, never "all".
+    assert render._derive_platforms(
+        {"title": "session drops", "labels": [{"name": "channel: signal"}]},
+        severity="critical", category="regression") == ["other-channel"]
 
 
 def test_derive_platforms_no_substring_false_positives():
@@ -466,6 +568,23 @@ def test_build_tags_untagged_blocker_as_all():
     ki = render._build_assessment_data(a, raw)["known_issues"][0]
     assert ki["platforms"] == ["all"]
     assert ki["tag_source"] == "untagged"
+
+
+def test_build_tags_component_only_platform_empty_blocker_as_all():
+    """D03: a serious blocker that derives a COMPONENT but NO platform (e.g. impact:security
+    → auth, whose title names no OS) must still reach 'all'. The guard previously required
+    `not comps` too, so such an issue shipped platforms=[] and false-spared a platform-only
+    picker. A component is a subsystem, not a platform — so it is cross-cutting ACROSS
+    platforms, and keeps its component tag so it pins on both axes."""
+    raw = {"sources": {"github_issues": [
+        {"number": 60, "title": "Sensitive data exposed in error response", "severity": "critical",
+         "labels": [{"name": "impact:security"}], "affects_version": True}]}}
+    a = {"assessment": {"known_issues": [
+        {"number": 60, "title": "Sensitive data exposed in error response",
+         "severity": "critical", "category": "post_release"}]}, "version": "2.0"}
+    ki = render._build_assessment_data(a, raw)["known_issues"][0]
+    assert ki["platforms"] == ["all"]          # no platform derived → cross-cutting
+    assert "auth" in ki["components"]           # component still recorded (pins that axis too)
 
 
 def test_build_does_not_force_all_on_nonblocking_untagged():
@@ -707,6 +826,34 @@ def test_extract_highlights_truncates_on_word_boundary():
     assert len(h) <= 241          # 240 cap + the ellipsis
     assert h.endswith("…")
     assert h.replace("…", "").endswith("word")   # cut landed on a word boundary, not "wo…"
+
+
+def test_xml_escape_strips_illegal_control_chars():
+    import xml.etree.ElementTree as ET
+    # D31: XML 1.0 forbids C0 controls except tab/LF/CR — they cannot be entity-encoded,
+    # so _xml_escape must DROP them. The five predefined entities stay escaped, and the
+    # legal whitespace is preserved.
+    esc = render._xml_escape("a\x00b\x01c\x0bd\x0ce\x1ff")
+    assert esc == "abcdef"                                   # every illegal control byte removed
+    assert render._xml_escape("tab\tnl\ncr\r") == "tab\tnl\ncr\r"   # legal whitespace kept
+    assert render._xml_escape("<a & b>") == "&lt;a &amp; b&gt;"     # entities still escaped
+    # The escaped output is genuinely well-formed inside an element.
+    ET.fromstring(f"<x>{render._xml_escape('bad\x0bvalue<')}</x>")
+
+
+def test_write_feed_wellformed_with_control_char(tmp_path, monkeypatch):
+    import xml.etree.ElementTree as ET
+    # A control byte in an LLM headline (the reachable untrusted path into <description>)
+    # must not make feed.xml unparseable — the whole-document break D31 warns about.
+    monkeypatch.setattr(config, "SITE_URL", "https://example.test")
+    out = tmp_path / "index.html"
+    data = {"version": "2.0", "recommendation": "⏸️", "archived_versions": [],
+            "version_history": [{"version": "2.0", "recommendation": "⏸️",
+                                 "headline": "vertical\x0btab and null\x00 in headline",
+                                 "assessed_at": "2026-06-14T00:00:00+00:00"}]}
+    render._write_feed(data, str(out))
+    feed = (tmp_path / "feed.xml").read_text()
+    ET.fromstring(feed)                                      # raises ParseError if the control byte leaked
 
 
 def test_write_feed_emits_rss(tmp_path, monkeypatch):

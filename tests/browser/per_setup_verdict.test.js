@@ -28,11 +28,12 @@ function pageFor(data) {
 }
 
 const issue = (o) => Object.assign(
-  { number: 1, title: "x", severity: "low", affects_version: false, platforms: [], components: [] }, o);
+  { number: 1, title: "x", severity: "low", affects_version: false, platforms: [], components: [],
+    weight: 0, version_match: "none", tag_source: "derived" }, o);   // real-shape keys (D26)
 
 // version, freshness, known_issues for the page DATA
 const D = (rec, fresh, issues) => ({
-  schema_version: 6, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",
+  schema_version: 1, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",   // matches render.SCHEMA_VERSION
   recommendation: rec, confidence: "high", headline: "t", thesis: "t",
   freshness: { fresh: !!fresh }, known_issues: issues || [], evidence: {}, changes: {},
 });
@@ -74,6 +75,17 @@ const CASES = [
   ["a long-tail channel blocker spares a discord stack",
    D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["other-channel"] })]),
    ["discord"], "⚠️"],
+  // D03 client fail-closed: a version-confirmed blocker we could not classify to ANY platform
+  // (platforms=[]) must NOT spare a platform-only picker. Without the fallback the old client
+  // softened ⏸️→⚠️ here; with it the picker is pinned. (The server now ships such a blocker as
+  // 'all', but the client stays fail-closed in its own right.)
+  ["⏸️ NOT softened by a version-confirmed blocker with no platform, on a platform-only stack",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: [], components: ["auth"] })]),
+   ["windows"], "⏸️"],
+  // ...but a component-only picker still pins via the component axis (fallback is platform-only).
+  ["⏸️ that same no-platform blocker pins a picker who selected its component",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: [], components: ["auth"] })]),
+   ["auth"], "⏸️"],
 ];
 
 (async () => {

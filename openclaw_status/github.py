@@ -93,7 +93,11 @@ def search_issues(query_string: str, limit: int = 25, timeout: int = 30) -> list
 def _load_etag_cache() -> dict:
     if config.ETAG_CACHE_FILE.exists():
         try:
-            return load_json(config.ETAG_CACHE_FILE)
+            data = load_json(config.ETAG_CACHE_FILE)
+            # Guard non-object JSON (null / [] / a bare scalar from a truncated or edited file):
+            # gh_rest calls cache.get() OUTSIDE its try, so a non-dict would crash the whole
+            # collect with an uncaught AttributeError instead of degrading gracefully.
+            return data if isinstance(data, dict) else {}
         except Exception:
             return {}
     return {}
@@ -300,10 +304,17 @@ def extract_closing_refs(body: str) -> set:
 def is_feature(title: str, labels) -> bool:
     """True if the issue is a feature request / proposal rather than a defect."""
     low = [str(l).lower() for l in (labels or [])]
+    # A guaranteed-severity signal (P0/P1/regression/bug:crash/impact:*) means this is a real
+    # defect the scout MUST NOT drop — even if it also carries a feature/proposal label or its
+    # title matches a feature marker. This preserves the guaranteed-inclusion backstop (D07).
+    if any(g.lower() in low for g in _GUARANTEED_LABELS):
+        return False
     if any(f in low for f in _FEATURE_LABELS):
         return True
-    t = (title or "").lower()
-    return any(k in t for k in _FEATURE_TITLE)
+    # PREFIX-anchored: a feature marker only counts at the START of the title, so an ordinary
+    # bug like "Crash when clicking the feature request button" is not misfiled as a feature.
+    t = (title or "").lower().lstrip()
+    return any(t.startswith(k) for k in _FEATURE_TITLE)
 
 
 def priority_of(labels) -> str | None:
@@ -549,20 +560,20 @@ def scout_issues(release_date: str = "", version: str = "", limit: int = 25,
         queries.append(f"{repo} is:issue is:open {_label_q('P1')} {no_feat} sort:reactions-+1-desc")
     queries.append(f"{repo} is:issue is:open {no_feat} sort:reactions-+1-desc")
 
-    # Run the searches concurrently — the (all-distinct) queries are independent, and up
-    # to 11 sequential GraphQL round-trips dominated collect wall-time (the reason
-    # COLLECT_TIMEOUT_S sits at 480s). Aggregation below walks the ORIGINAL query order
-    # (the result dict is keyed by query string), so dedup winners, coverage counts, and
-    # the final ranking are identical to the serial path. max_workers stays low for
+    # Run the searches concurrently — the queries are independent, and up to 11 sequential
+    # GraphQL round-trips dominated collect wall-time (the reason COLLECT_TIMEOUT_S sits at
+    # 480s). parallel_fetch returns results POSITION-ALIGNED with `queries`, so aggregation
+    # walks the ORIGINAL query order and coverage counts one outcome per query occurrence —
+    # dedup winners, coverage counts, and the final ranking are identical to the serial path
+    # (and correct even if two queries were ever identical). max_workers stays low for
     # GitHub's search secondary rate limit; per-call retries live inside search_issues,
-    # and a query that fails (None, or an unexpected raise → None) counts as dropped,
-    # exactly as before.
+    # and a query that fails (None, or an unexpected raise → None) counts as dropped.
     results = parallel_fetch(lambda q: search_issues(q, limit), queries, max_workers=3)
 
     seen, issues, any_ok = set(), [], False
     ok_count, broad_ok = 0, None
     for idx, q in enumerate(queries):
-        nodes = results.get(q)
+        nodes = results[idx]
         # Query #1 in the post-release window is the broad, no-label recency sweep — the only
         # search that surfaces un-triaged, un-thumbed, freshly-filed breakage. Track it apart.
         if release_date and idx == 0:

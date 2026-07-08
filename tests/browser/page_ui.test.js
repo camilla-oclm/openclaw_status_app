@@ -26,18 +26,24 @@ const LONG_TITLE = "Intermittent memory_search \"index metadata is missing\" des
   "builtin memory index; likely search/reindex race on all platforms with long tail";
 
 const DATA = {
-  schema_version: 6, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",
+  schema_version: 1, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",   // matches render.SCHEMA_VERSION
   recommendation: "⚠️", confidence: "medium", headline: "test headline", thesis: "t",
   freshness: { fresh: false },
+  // known_issues carry the real-shape keys (weight / version_match / tag_source) the emitted
+  // payload has (D26). Weights descend with severity so display order is unchanged.
   known_issues: [
     { number: 90361, title: LONG_TITLE, severity: "critical", category: "regression",
-      affects_version: true, platforms: ["all"], components: ["memory"], reactions: 3 },
+      affects_version: true, platforms: ["all"], components: ["memory"], reactions: 3,
+      weight: 90, version_match: "exact", tag_source: "derived" },
     { number: 2, title: "Second issue", severity: "high", category: "post_release",
-      affects_version: false, platforms: ["linux"], components: ["gateway"] },
+      affects_version: false, platforms: ["linux"], components: ["gateway"],
+      weight: 62, version_match: "none", tag_source: "derived" },
     { number: 3, title: "Third issue", severity: "medium", category: "regression",
-      affects_version: false, platforms: ["linux"], components: ["gateway"] },
+      affects_version: false, platforms: ["linux"], components: ["gateway"],
+      weight: 40, version_match: "none", tag_source: "derived" },
     { number: 4, title: "Fourth issue", severity: "low", category: "active",
-      affects_version: false, platforms: ["discord"], components: ["gateway"] },
+      affects_version: false, platforms: ["discord"], components: ["gateway"],
+      weight: 20, version_match: "none", tag_source: "derived" },
   ],
   evidence: {},
   changes: { features: [{ title: "New turbo mode", value: "twice the speed" }],
@@ -286,6 +292,24 @@ const DATA = {
   await new Promise((r) => setTimeout(r, 300));
   t("copy-link chip announces", /cop(y|ied)/i.test(
     await page.evaluate(() => document.getElementById("live").textContent)));
+
+  // D17: a stack RESTORED FROM localStorage at boot (no ?stack in the URL, no toggle yet) must
+  // still yield a share link carrying ?stack — the chip previously copied location.href, which
+  // had no ?stack, while announcing "pre-picked".
+  await page.evaluate(() => localStorage.setItem("oc-stack", JSON.stringify(["macos"])));
+  await page.goto(base + "/", { waitUntil: "networkidle0" });   // bare URL; stack comes from localStorage
+  const restored = await page.evaluate(() => ({
+    search: location.search,
+    pressed: Array.from(document.querySelectorAll('.setup .pick[aria-pressed="true"]'))
+      .map((b) => b.getAttribute("data-k")).join(","),
+  }));
+  const copied = await page.evaluate(() => new Promise((resolve) => {
+    if (!navigator.clipboard) navigator.clipboard = {};
+    navigator.clipboard.writeText = (s) => { resolve(s); return Promise.resolve(); };
+    document.getElementById("stack-share").click();
+  }));
+  t("boot-restored stack: the share chip copies a link WITH ?stack (D17)",
+    restored.search === "" && restored.pressed === "macos" && /[?&]stack=[^&]*macos/.test(copied));
   server.close();
 
   t("no page errors", errs.length === 0);

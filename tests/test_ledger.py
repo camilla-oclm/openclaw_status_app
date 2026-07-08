@@ -41,6 +41,18 @@ def test_reactions_monotonic_but_severity_tracks_current_labels(led):
     assert one["severity"] == "medium"     # P2 now, not the frozen P0/critical
 
 
+def test_severity_label_past_index_six_is_not_truncated(led):
+    # D04: _lean stored labels[:6] and _rederive_stored recomputes severity from the STORED
+    # set — so a P0/impact:* label sitting past the 6th position was silently dropped and the
+    # issue downgraded (critical → low). Heavily-triaged issues routinely carry 5-8 labels.
+    labels = ["area:gateway", "channel:whatsapp", "needs-triage",
+              "good-first-issue", "help-wanted", "documentation", "P0"]   # P0 at index 6
+    out = ledger.merge_version_issues("1.0", [_issue(1, labels=labels)])
+    one = next(i for i in out if i["number"] == 1)
+    assert one["severity"] == "critical"    # full set preserved → P0 → critical (was "low")
+    assert "P0" in one["labels"]            # the severity-bearing label survived storage
+
+
 def test_stored_issue_severity_re_derived_even_when_not_re_scouted(led):
     # The bug a pre-launch review caught: an issue accumulated as critical under an old
     # formula and was then NOT in a later run's top-N scout. Its severity must still

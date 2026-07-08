@@ -1,6 +1,7 @@
 """Tests for openclaw_status.lib — JSON extraction, sanitization, locks, timers."""
 import json
 import os
+import threading
 import time
 
 import pytest
@@ -154,7 +155,12 @@ def test_pipeline_lock_acquire_and_release(tmp_path):
     assert lock.exists()
     assert lock.read_text().strip() == str(os.getpid())  # PID recorded
     lib.release_pipeline_lock(lock)
-    assert not lock.exists()
+    # D21: the lock file PERSISTS after release — flock is the mutex, and unlinking after
+    # LOCK_UN opened a flock-over-unlink race. A subsequent acquire on the persistent file
+    # must still succeed (a stale lock file never blocks a future run).
+    assert lock.exists()
+    assert lib.acquire_pipeline_lock(lock) is True
+    lib.release_pipeline_lock(lock)
 
 
 def test_pipeline_lock_blocks_second_acquire(tmp_path):
@@ -347,3 +353,39 @@ def test_openrouter_call_past_deadline_fails_fast_without_network(monkeypatch):
     )
     assert out["success"] is False
     assert "wall-clock" in out["error"]
+
+
+# ── parallel_fetch (D32: position-aligned, duplicate-safe) ───────────────────
+
+def test_parallel_fetch_returns_position_aligned_list():
+    assert lib.parallel_fetch(lambda x: x * 10, [1, 2, 3, 4], max_workers=3) == [10, 20, 30, 40]
+
+
+def test_parallel_fetch_empty_and_single():
+    assert lib.parallel_fetch(lambda x: x, [], max_workers=3) == []
+    assert lib.parallel_fetch(lambda x: x + 1, [41], max_workers=3) == [42]
+
+
+def test_parallel_fetch_failure_becomes_none_in_place():
+    def f(x):
+        if x == 2:
+            raise ValueError("boom")
+        return x
+    assert lib.parallel_fetch(f, [1, 2, 3], max_workers=3) == [1, None, 3]   # only the failing slot
+
+
+def test_parallel_fetch_duplicate_items_do_not_collapse():
+    # D32: a value-keyed result dict discarded one of two identical items' outcomes, so scout
+    # coverage could not record "one of two identical queries failed" — masking a real failure
+    # as a clean scout. Position-keying keeps one slot per occurrence.
+    seen, lock = {}, threading.Lock()
+
+    def f(x):
+        with lock:
+            seen[x] = seen.get(x, 0) + 1
+            n = seen[x]
+        return None if n == 1 else "ok"      # the first call for a value fails, the second succeeds
+
+    out = lib.parallel_fetch(f, ["dup", "dup"], max_workers=2)
+    assert len(out) == 2                       # two slots — a value-keyed dict would collapse to 1
+    assert sorted(out, key=str) == [None, "ok"]  # BOTH per-call outcomes survive (one fail, one ok)

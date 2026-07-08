@@ -16,8 +16,10 @@ User=openclaw
 Group=openclaw
 WorkingDirectory=/opt/openclaw_status_app
 Environment=PYTHONUNBUFFERED=1
-# A failed pull (e.g. offline) must not block the scheduled run, hence the "-".
-ExecStartPre=-/usr/bin/git -C /opt/openclaw_status_app pull --ff-only
+# Pull latest code via a wrapper that tolerates a transient offline pull but SURFACES a
+# persistent non-fast-forward divergence to the alert webhook — otherwise the box would run
+# stale code silently (D30). The "-" stays as a second belt so nothing here blocks the tick.
+ExecStartPre=-/opt/openclaw_status_app/deploy/git-pull.sh
 ExecStart=/opt/openclaw_status_app/.venv/bin/python run.py tick
 # Most ticks finish in seconds; when one decides to run, the full pipeline takes a few
 # minutes. Must stay ABOVE config.COLLECT_TIMEOUT_S + PIPELINE_BUDGET_S + render margin
