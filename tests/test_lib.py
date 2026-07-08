@@ -155,7 +155,12 @@ def test_pipeline_lock_acquire_and_release(tmp_path):
     assert lock.exists()
     assert lock.read_text().strip() == str(os.getpid())  # PID recorded
     lib.release_pipeline_lock(lock)
-    assert not lock.exists()
+    # D21: the lock file PERSISTS after release — flock is the mutex, and unlinking after
+    # LOCK_UN opened a flock-over-unlink race. A subsequent acquire on the persistent file
+    # must still succeed (a stale lock file never blocks a future run).
+    assert lock.exists()
+    assert lib.acquire_pipeline_lock(lock) is True
+    lib.release_pipeline_lock(lock)
 
 
 def test_pipeline_lock_blocks_second_acquire(tmp_path):

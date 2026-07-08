@@ -266,14 +266,26 @@ def load_json_or(path, default):
 def atomic_write_text(path, text: str, mode: int | None = None):
     """Write text atomically: temp file in the same directory, then os.replace().
     A crash/kill mid-write can't leave a half-written file — readers see either the
-    old content or the complete new one. `mode` (e.g. 0o644) is chmod'd after the
-    replace, best-effort, for artifacts a separate server user must read."""
+    old content or the complete new one. The data is fsync'd before the rename and the
+    parent directory after, so the guarantee holds under an ungraceful host crash /
+    power loss too (not just a graceful SIGKILL, where the page cache survives). `mode`
+    (e.g. 0o644) is chmod'd after the replace, best-effort, for a separate server user."""
     path = Path(path)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(text)
+            f.flush()
+            os.fsync(f.fileno())               # persist the data BEFORE the rename
         os.replace(tmp, str(path))
+        try:
+            dir_fd = os.open(str(path.parent), os.O_RDONLY)   # then persist the rename itself
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass                               # best-effort (e.g. a FS without dir fsync)
         if mode is not None:
             try:
                 os.chmod(path, mode)
@@ -582,10 +594,13 @@ def acquire_pipeline_lock(lock_path: Path = None) -> bool:
 
 
 def release_pipeline_lock(lock_path: Path = None):
-    """Release the pipeline lock and remove the lock file."""
-    if lock_path is None:
-        lock_path = config.DATA_DIR / ".pipeline.lock"
+    """Release the pipeline lock (flock LOCK_UN + close).
 
+    Deliberately does NOT unlink the lock file. flock alone provides mutual exclusion and the
+    kernel auto-releases it on process death, so keeping a PERSISTENT lock file is correct.
+    Unlinking after LOCK_UN opened the classic flock-over-unlink race — a second acquirer
+    holding the just-released inode while a third O_CREATs a fresh one, letting two pipelines
+    run at once and double-spend (D21). `lock_path` is accepted for signature compatibility."""
     for fd in _pipeline_lock_fds:
         try:
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -593,12 +608,7 @@ def release_pipeline_lock(lock_path: Path = None):
         except Exception:
             pass
     _pipeline_lock_fds.clear()
-
-    try:
-        lock_path.unlink(missing_ok=True)
-        print(f"  🔓 Pipeline lock released")
-    except Exception:
-        pass
+    print("  🔓 Pipeline lock released")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
