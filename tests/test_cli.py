@@ -1,6 +1,9 @@
 """Tests for openclaw_status.cli — run-log population from pipeline outputs."""
 import json
+import sys
 import types
+
+import pytest
 
 from openclaw_status import cli, config, lib
 from openclaw_status.lib import RunLog
@@ -117,3 +120,43 @@ def test_cmd_tick_skips_benignly_when_full_returns_false(monkeypatch):
     monkeypatch.setattr(cli, "cmd_full", _full_contended)
     cli.cmd_tick(types.SimpleNamespace())   # no exception / no non-zero exit = pass
     assert called["full"] is True           # it did try, then skipped benignly
+
+
+# ── CLI stage wrappers + main() dispatch (D28) ───────────────────────────────
+
+def test_cmd_collect_invokes_collect(monkeypatch):
+    from openclaw_status import collector
+    called = []
+    monkeypatch.setattr(collector, "collect", lambda: called.append(True))
+    cli.cmd_collect(types.SimpleNamespace())
+    assert called == [True]
+
+
+def test_cmd_assess_invokes_pipeline_and_exits_on_failure(monkeypatch):
+    from openclaw_status import agent
+    monkeypatch.setattr(agent, "run_assessment_pipeline", lambda single_call=False: {"success": True})
+    cli.cmd_assess(types.SimpleNamespace(single=False))                 # success → no exit
+    monkeypatch.setattr(agent, "run_assessment_pipeline", lambda single_call=False: {"success": False})
+    with pytest.raises(SystemExit):                                     # failure → exit 1
+        cli.cmd_assess(types.SimpleNamespace(single=False))
+
+
+def test_cmd_render_assessment_passes_output_path(monkeypatch):
+    from openclaw_status import render
+    got = {}
+    monkeypatch.setattr(render, "render_assessment_page",
+                        lambda output_path=None: got.update(out=output_path))
+    cli.cmd_render_assessment(types.SimpleNamespace(output="/tmp/x.html"))
+    assert got["out"] == "/tmp/x.html"
+
+
+def test_main_dispatches_each_command_to_its_handler(monkeypatch):
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "k")             # satisfy the assess/tick key gate
+    for cmd, handler in [("collect", "cmd_collect"), ("assess", "cmd_assess"),
+                         ("render-assessment", "cmd_render_assessment"),
+                         ("full", "cmd_full"), ("tick", "cmd_tick")]:
+        seen = []
+        monkeypatch.setattr(cli, handler, lambda args, _s=seen: _s.append(True))
+        monkeypatch.setattr(sys, "argv", ["run.py", cmd])
+        cli.main()
+        assert seen == [True], f"{cmd} did not dispatch to {handler}"
