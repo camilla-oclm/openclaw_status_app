@@ -292,6 +292,24 @@ const DATA = {
   await new Promise((r) => setTimeout(r, 300));
   t("copy-link chip announces", /cop(y|ied)/i.test(
     await page.evaluate(() => document.getElementById("live").textContent)));
+
+  // D17: a stack RESTORED FROM localStorage at boot (no ?stack in the URL, no toggle yet) must
+  // still yield a share link carrying ?stack — the chip previously copied location.href, which
+  // had no ?stack, while announcing "pre-picked".
+  await page.evaluate(() => localStorage.setItem("oc-stack", JSON.stringify(["macos"])));
+  await page.goto(base + "/", { waitUntil: "networkidle0" });   // bare URL; stack comes from localStorage
+  const restored = await page.evaluate(() => ({
+    search: location.search,
+    pressed: Array.from(document.querySelectorAll('.setup .pick[aria-pressed="true"]'))
+      .map((b) => b.getAttribute("data-k")).join(","),
+  }));
+  const copied = await page.evaluate(() => new Promise((resolve) => {
+    if (!navigator.clipboard) navigator.clipboard = {};
+    navigator.clipboard.writeText = (s) => { resolve(s); return Promise.resolve(); };
+    document.getElementById("stack-share").click();
+  }));
+  t("boot-restored stack: the share chip copies a link WITH ?stack (D17)",
+    restored.search === "" && restored.pressed === "macos" && /[?&]stack=[^&]*macos/.test(copied));
   server.close();
 
   t("no page errors", errs.length === 0);
