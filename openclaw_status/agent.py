@@ -50,9 +50,14 @@ _OUTPUT_SCHEMA = """{
     "windows": "none | low | medium | high",
     "macos": "none | low | medium | high",
     "linux": "none | low | medium | high",
+    "ios": "none | low | medium | high",
+    "android": "none | low | medium | high",
+    "web": "none | low | medium | high",
     "discord": "none | low | medium | high",
     "slack": "none | low | medium | high",
-    "telegram": "none | low | medium | high"
+    "telegram": "none | low | medium | high",
+    "whatsapp": "none | low | medium | high",
+    "other-channel": "none | low | medium | high"
   }
 }"""
 
