@@ -5,7 +5,7 @@ and decides whether a full LLM assessment is due. Assessments are frequent while
 release is fresh and back off as it matures and the verdict stabilizes:
 
     • a NEW release        → assess now (and the age clock resets to ~0 → fast tier)
-    • else, by release age → < 48h: every 6h · 48–96h: every 8h · ≥ 96h: every 12h
+    • else, by release age → < 48h: every 8h · 48–96h: every 12h · ≥ 96h: every 24h
 
 All the policy lives in this one pure module so it's unit-tested and tweakable via
 ``config`` — instead of being baked into the systemd timer, which can't express a
