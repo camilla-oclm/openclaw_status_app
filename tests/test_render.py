@@ -86,6 +86,39 @@ def test_render_keeps_previous_page_when_smoke_test_fails(tmp_path, monkeypatch)
     assert out.read_text() == "GOOD PAGE"                          # last good page untouched
 
 
+def test_render_assessment_page_happy_path_emits_all_surfaces(tmp_path, monkeypatch):
+    """D15: only the 3 fail-closed branches were tested. A VALID assessment must render
+    index.html AND every documented sibling machine surface, pass smoke, and archive the
+    prior page — a regression that drops or mis-paths a sibling (especially latest.json, the
+    public API the README's update-gate curls) would otherwise ship undetected."""
+    monkeypatch.setattr(config, "WEB_DIR", tmp_path)                   # tmp render file + siblings land here
+    monkeypatch.setattr(config, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(config, "HISTORY_FILE", tmp_path / "history.json")
+    monkeypatch.setattr(config, "TIMELINE_FILE", tmp_path / "timeline.json")
+    out = tmp_path / "index.html"
+    out.write_text(_page("2026.6.10"))                                # a prior, version-tagged page to archive
+    assessment_raw = {
+        "version": "2026.6.11", "validation_errors": [],
+        "assessed_at": "2026-06-07T00:00:00+00:00",
+        "assessment": {"confidence": "high", "recommendation": "✅",
+                       "headline": "No blocking issues", "thesis": "Clean release.",
+                       "known_issues": [], "evidence": {}, "changes": {}},
+    }
+    raw = {"target_version": "2026.6.11", "sources": {"latest_release": {"tag": "v2026.6.11"}}}
+
+    result = render.render_assessment_page(assessment_raw, raw, output_path=str(out))
+
+    assert result != ""                                               # published, not fail-closed
+    for name in ("index.html", "latest.json", "feed.xml", "badge.svg",
+                 "llms.txt", "llms-full.txt", "robots.txt", "sitemap.xml"):
+        assert (tmp_path / name).exists(), f"missing sibling artifact: {name}"
+    import json
+    lj = json.loads((tmp_path / "latest.json").read_text())           # latest.json is valid JSON…
+    assert lj["recommendation"] == "✅"                                # …carrying the published verdict…
+    assert lj["version"] == "2026.6.11"                               # …for the assessed version
+    assert (tmp_path / "archive" / "2026.6.10.html").exists()         # the prior page was archived by its version
+
+
 # ── verdict-label consistency across surfaces ───────────────────────────────
 
 def test_verdict_text_and_label_name_the_same_verdict():
