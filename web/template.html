@@ -2186,6 +2186,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
            ? "No blocking issue is confirmed to land here, so the global verdict eases one notch for this subsystem."
            : "Matches the global verdict.");
       line.appendChild(el("span",{"class":"vchip"+(e.kv.blockers.length?" hot":""), role:"listitem",
+                                  // aria-label carries the verdict to AT (D29): the glyph is
+                                  // aria-hidden and the visible text is only name+count, so without
+                                  // this a screen reader hears "Gateway 3" with no verdict.
+                                  "aria-label":e.name+": "+v.label+", "+e.n+" issue"+(e.n===1?"":"s"),
                                   title:e.name+": "+v.label+" — "+why+" Derived on this page from the issue tags; the official verdict stays global."},[
         el("span",{"class":"vc-em","aria-hidden":"true"}, e.kv.rec),
         icon(e.ic,12),
@@ -2481,7 +2485,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         return;
       }
       if (ev.target.closest(".pick-share")){
-        var link = location.href;
+        // Build the link from the CURRENT stack the way saveStack mirrors it — do NOT trust
+        // location.href, which lacks ?stack= until a toggle has run (a boot-restored stack from
+        // localStorage never wrote the URL, so the chip would share a stack-less link while
+        // announcing "pre-picked"). Construct it WITHOUT touching localStorage or the URL — that
+        // would break the ?stack=-boots-view-only invariant for a visitor on a shared link. (D17)
+        var link;
+        try {
+          var qs = new URLSearchParams(location.search), ks = stackKeys();
+          if (ks.length) qs.set("stack", ks.join(",")); else qs.delete("stack");
+          var q = qs.toString().replace(/%2C/gi, ",");
+          link = location.origin + location.pathname + (q ? "?" + q : "") + location.hash;
+        } catch(e){ link = location.href; }
         var done = function(){ announce("Link copied — it opens with this setup pre-picked."); };
         var fail = function(){ announce("Couldn't copy automatically — copy the address bar; it carries your setup."); };
         try {
