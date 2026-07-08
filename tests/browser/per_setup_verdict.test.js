@@ -28,11 +28,12 @@ function pageFor(data) {
 }
 
 const issue = (o) => Object.assign(
-  { number: 1, title: "x", severity: "low", affects_version: false, platforms: [], components: [] }, o);
+  { number: 1, title: "x", severity: "low", affects_version: false, platforms: [], components: [],
+    weight: 0, version_match: "none", tag_source: "derived" }, o);   // real-shape keys (D26)
 
 // version, freshness, known_issues for the page DATA
 const D = (rec, fresh, issues) => ({
-  schema_version: 6, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",
+  schema_version: 1, assessed_at: "2026-06-07T00:00:00Z", version: "2026.6.1",   // matches render.SCHEMA_VERSION
   recommendation: rec, confidence: "high", headline: "t", thesis: "t",
   freshness: { fresh: !!fresh }, known_issues: issues || [], evidence: {}, changes: {},
 });
