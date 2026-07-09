@@ -5,9 +5,9 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-07-09
 
-Preparing the first stable release (`1.0.0`). OpenClaw Status watches the
+The first stable release. OpenClaw Status watches the
 `openclaw/openclaw` repo, scouts and scores post-release bug reports, has two
 independent LLM providers argue out a verdict, and renders a single decision
 page — "should you update?" — plus machine surfaces (`latest.json`, `feed.xml`,
@@ -15,7 +15,7 @@ page — "should you update?" — plus machine surfaces (`latest.json`, `feed.xm
 (a systemd tick timer + Caddy auto-HTTPS).
 
 A full pre-1.0 release-gate review (33 findings) has been addressed — the changes
-below. On the `1.0.0` tag, rename this `[Unreleased]` section to `[1.0.0] - <date>`.
+below.
 
 ### Added
 - MIT `LICENSE` + README License section, this `CHANGELOG`, and an
@@ -57,4 +57,4 @@ below. On the `1.0.0` tag, rename this `[Unreleased]` section to `[1.0.0] - <dat
 - Docs corrected: PAT scope (`Contents: Read-only`), the adaptive cadence
   (8/12/24h), the webhook payload key, and the module layout.
 
-[Unreleased]: https://github.com/camilla-oclm/openclaw_status_app/commits/main
+[1.0.0]: https://github.com/camilla-oclm/openclaw_status_app/releases/tag/v1.0.0
