@@ -306,11 +306,16 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 364 tests, hermetic (no network)
+python3 -m pytest        # 365 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
 validator, the data-injection contract, and the HTML smoke test.
+
+The page's client runtime (hydration, the per-setup verdict, filters, `?stack=` sharing)
+has its own headless-Chrome suites — `node tests/browser/per_setup_verdict.test.js` and
+`node tests/browser/page_ui.test.js` (need Node + puppeteer). CI runs both jobs — pytest
+and the browser suites — on every push.
 
 ---
 
@@ -364,8 +369,8 @@ openclaw_status_app/
 │   └── archive/            per-version page snapshots (gitignored)
 ├── docs/                   README screenshots (hero-dark.png / hero-light.png)
 ├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile
-├── .github/workflows/      ci.yml (hermetic tests on every push)
-├── tests/                  pytest suite
+├── .github/workflows/      ci.yml (pytest + browser suites on every push)
+├── tests/                  pytest suite + headless-Chrome suites (tests/browser/)
 └── data/                   pipeline outputs (gitignored)
 ```
 
