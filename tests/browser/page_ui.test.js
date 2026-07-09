@@ -310,6 +310,23 @@ const DATA = {
   }));
   t("boot-restored stack: the share chip copies a link WITH ?stack (D17)",
     restored.search === "" && restored.pressed === "macos" && /[?&]stack=[^&]*macos/.test(copied));
+
+  // issues_capped: at the ledger cap the count surfaces read "N+" (metric tile + section
+  // head) so a saturated window doesn't read as "nothing new" — while the literal list
+  // counts (the "All (N)" filter tab) stay numeric, since they count the items shown.
+  DATA.issues_capped = true;
+  await page.goto(base + "/", { waitUntil: "networkidle0" });
+  const capped = await page.evaluate(() => ({
+    tile: Array.from(document.querySelectorAll(".stat"))
+      .map((s) => ({ v: s.querySelector(".v").textContent, l: s.querySelector(".l").textContent }))
+      .find((s) => s.l === "Known issues"),
+    secCount: (document.querySelector("#issues .sec-count") || {}).textContent,
+    allTab: (document.querySelector('#issues .ltab[data-f="all"]') || {}).textContent,
+  }));
+  t("capped issue count shows N+ in tile and section head; list tab stays literal",
+    !!capped.tile && capped.tile.v === "4+" && capped.secCount === "4+" &&
+    /All \(4\)/.test(capped.allTab || ""));
+  delete DATA.issues_capped;
   server.close();
 
   t("no page errors", errs.length === 0);

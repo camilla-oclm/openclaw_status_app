@@ -225,7 +225,10 @@ Caddy):
 > triage signals), and **`version_match`** says how specifically the report pins the assessed
 > version (`exact` / `series` / `none`). **`platforms`** uses the tokens
 > `windows / macos / linux / ios / android / web / discord / slack / telegram / whatsapp /
-> other-channel`, or `all` for a cross-cutting issue.
+> other-channel`, or `all` for a cross-cutting issue. The `known_issues` list is capped at the
+> highest-ranked 60 per version, so on a mature release the count saturates there — the top-level
+> **`issues_capped`** is `true` when that's the case (read the count as "60+"; a new severe issue
+> still enters by displacing the lowest-ranked one).
 
 ### Gate your own updates on the verdict
 

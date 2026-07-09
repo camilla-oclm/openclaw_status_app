@@ -386,6 +386,26 @@ def test_app_version_surfaced_and_in_sync():
     assert data["app_version"] == config.APP_VERSION
 
 
+def test_issue_count_shows_plus_when_ledger_cap_saturates(monkeypatch):
+    # At the per-version ledger cap the count pins there while the composition keeps
+    # churning, so every count surface must read "N+" — and plain "N" below the cap.
+    monkeypatch.setattr(config, "LEDGER_MAX_ISSUES_PER_VERSION", 3)
+    issues = [{"number": n, "title": f"issue {n}", "severity": "low"} for n in (1, 2, 3)]
+
+    capped = render._build_assessment_data(
+        {"assessment": {"known_issues": issues}, "version": "2.0"}, {"sources": {}})
+    assert capped["issues_capped"] is True
+    assert render._issue_count_label(capped) == "3+"
+    assert "## Known issues (3+)" in render._llms_full_md(capped)
+    assert "Known issues (3+)" in render._seo_body(capped)
+
+    below = render._build_assessment_data(
+        {"assessment": {"known_issues": issues[:2]}, "version": "2.0"}, {"sources": {}})
+    assert below["issues_capped"] is False
+    assert render._issue_count_label(below) == "2"
+    assert "## Known issues (2)" in render._llms_full_md(below)
+
+
 def test_norm_platforms_keeps_known_tokens_and_drops_junk():
     assert render._norm_platforms(["Linux", "WIN", "osx", "discord", "haxxor"]) == \
         ["linux", "windows", "macos", "discord"]

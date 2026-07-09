@@ -1759,7 +1759,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var fixes = (ch.fixes||[]).length;
     var feats = (ch.features||[]).length;
     var tiles = [
-      {v:ki.length, l:"Known issues", s:severe+" high/critical", c:"var(--accent)"},
+      {v:ki.length+(DATA.issues_capped?"+":""), l:"Known issues", s:severe+" high/critical", c:"var(--accent)"},
       {v:regs, l:"Regressions", s:"since release", c:regs?"var(--bad)":"var(--good)"},
       {v:fixes, l:"Fixes shipped", s:"in this release", c:"var(--good)"},
       {v:feats, l:"New features", s:(ch.breaking||[]).length+" breaking", c:"var(--accent)"}
@@ -1939,8 +1939,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     });
     var s = el("div",{"class":"section", id:"issues"});
     var newCount = ki.filter(function(i){return i.is_new;}).length;
-    s.appendChild(sectionHead("Known issues", ki.length,
-      (newCount ? ("🆕 "+newCount+" new since last run · ") : "")+"critical first"));
+    s.appendChild(sectionHead("Known issues", ki.length+(DATA.issues_capped?"+":""),
+      (newCount ? ("🆕 "+newCount+" new since last run · ") : "")
+      +(DATA.issues_capped ? "highest-ranked · " : "")+"critical first"));
 
     var cats = {};
     ki.forEach(function(i){ if(i.category) cats[i.category]=(cats[i.category]||0)+1; });

@@ -25,6 +25,9 @@ below. On the `1.0.0` tag, rename this `[Unreleased]` section to `[1.0.0] - <dat
   in CI.
 - Test coverage for the render happy path + all sibling artifacts, `collect()`
   end-to-end and the npm/clawsweeper fetchers, and the CLI wrappers/dispatch.
+- `issues_capped` in `latest.json`: `true` when the known-issues list is
+  saturated at the per-version ledger cap; the page, llms and SSR count
+  surfaces then read "60+" so a pinned count doesn't read as "nothing new".
 
 ### Security
 - The inline assessment-data `<script>` now escapes every `<` (not just `</`),

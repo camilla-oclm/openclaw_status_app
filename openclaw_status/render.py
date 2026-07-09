@@ -819,6 +819,11 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         },
         "evidence": a.get("evidence", {"for_updating": [], "against_updating": [], "neutral": []}),
         "known_issues": known_issues,
+        # True when the list is saturated at the per-version ledger cap: the items are the
+        # highest-ranked of MORE seen (new severe issues displace the lowest-ranked, so the
+        # count pins at the cap while the composition churns). Display surfaces render the
+        # count as "60+" so a saturated window doesn't read as "nothing new".
+        "issues_capped": len(known_issues) >= config.LEDGER_MAX_ISSUES_PER_VERSION,
         "changes": a.get("changes", {"breaking": [], "fixes": [], "features": []}),
         # Concrete, checkable events that would move the verdict (analyst-stated, evidence-
         # cited) — the page's "what would change this verdict" tripwires. Absent on
@@ -1098,6 +1103,13 @@ def _verdict_phrase(rec: str) -> str:
     return _VERDICT_LABEL.get(rec, "Assessed")
 
 
+def _issue_count_label(data: dict) -> str:
+    """The known-issue count for display copy — "60+" once the ledger cap saturates the
+    list (see issues_capped in _build_assessment_data). Numeric surfaces stay numeric."""
+    n = len(data.get("known_issues") or [])
+    return f"{n}+" if data.get("issues_capped") else str(n)
+
+
 def _md_issue_line(i: dict) -> str:
     """One known-issue as a markdown bullet: `- #N [sev · category · status] title — 👍`."""
     cat = (i.get("category") or "").strip()
@@ -1240,7 +1252,7 @@ def _llms_full_md(data: dict) -> str:
 
     ki = data.get("known_issues") or []
     if ki:
-        L += [f"## Known issues ({len(ki)})", ""] + [_md_issue_line(i) for i in ki] + [""]
+        L += [f"## Known issues ({_issue_count_label(data)})", ""] + [_md_issue_line(i) for i in ki] + [""]
 
     ch = data.get("changes") or {}
     change_lines = []
@@ -1426,7 +1438,7 @@ def _seo_body(data: dict) -> str:
         out += ["<h2>Why this verdict</h2>", f"<p>{e(thesis.split(chr(10) + chr(10))[0].strip())}</p>"]
     ki = data.get("known_issues") or []
     if ki:
-        out.append(f"<h2>Known issues ({len(ki)})</h2>")
+        out.append(f"<h2>Known issues ({_issue_count_label(data)})</h2>")
         out.append("<ul>")
         for i in ki[:8]:
             out.append(f"<li>#{e(i.get('number'))} ({e(i.get('severity') or '')}) "
@@ -1590,5 +1602,5 @@ def render_assessment_page(assessment_raw: dict = None, raw: dict = None, output
     print(f"✅ Built assessment page: {out}")
     print(f"   Version: {version}")
     print(f"   Recommendation: {data['recommendation']}")
-    print(f"   Known issues: {len(data['known_issues'])}")
+    print(f"   Known issues: {_issue_count_label(data)}")
     return html
