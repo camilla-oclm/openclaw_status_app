@@ -310,7 +310,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 368 tests, hermetic (no network)
+python3 -m pytest        # 377 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
@@ -346,6 +346,16 @@ openclaw-status.service` (runs a tick now — gates; use `run.py full` to force 
 Changes under `deploy/` need a re-run of `provision.sh`
 to reinstall the `/etc` copies.
 
+**External watchdog** — the box's own Discord alerts die with the box, so a scheduled GitHub
+Actions workflow ([`watchdog.yml`](.github/workflows/watchdog.yml), running
+[`deploy/watchdog.py`](deploy/watchdog.py)) checks the live page and `latest.json` freshness
+every ~15 minutes from GitHub's infrastructure and pings the same Discord webhook (repo secret
+`ALERT_WEBHOOK_URL`) on state changes — down, still-down heartbeats, and recovery. A failed
+check also fails the workflow run, so GitHub's failed-run email is a second alert channel.
+Self-hosters can run the same script from any second host (cron + the `WATCHDOG_WEBHOOK` env
+var). Note GitHub pauses cron schedules on public repos after ~60 days without repo activity
+(it emails first; one click re-enables).
+
 ---
 
 ## Project layout
@@ -372,8 +382,10 @@ openclaw_status_app/
 │   ├── latest.json         generated runtime-fetch payload (gitignored)
 │   └── archive/            per-version page snapshots (gitignored)
 ├── docs/                   README screenshots (hero-dark.png / hero-light.png)
-├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile
-├── .github/workflows/      ci.yml (pytest + browser suites on every push)
+├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile,
+│                           and watchdog.py (external uptime check)
+├── .github/workflows/      ci.yml (pytest + browser suites on every push),
+│                           watchdog.yml (external uptime cron)
 ├── tests/                  pytest suite + headless-Chrome suites (tests/browser/)
 └── data/                   pipeline outputs (gitignored)
 ```

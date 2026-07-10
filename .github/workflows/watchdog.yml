@@ -1,0 +1,47 @@
+# External uptime watchdog for clawstat.us (deploy/watchdog.py).
+#
+# Runs OFF the serving box — the box's own Discord alerts die with the box.
+# Every 15 min (GitHub cron drifts; treat as best-effort) it checks the live
+# page + latest.json freshness and pings the Discord webhook on STATE CHANGES
+# only: the alert step passes the prior completed run conclusions so a long
+# outage re-pings hourly-ish, not per run. A failed check also fails this run,
+# so GitHub's own failed-workflow email is a second alert channel for free.
+#
+# NOTE: GitHub disables cron schedules on public repos after ~60 days without
+# repo activity (it emails a warning; one click re-enables, any push resets
+# the clock). If clawstat.us alerts ever go quiet for weeks, check the Actions
+# tab first.
+name: watchdog
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency: watchdog
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch prior run conclusions
+        id: prev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          hist=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/watchdog.yml/runs?status=completed&per_page=30" \
+                 --jq '[.workflow_runs[].conclusion // "unknown"] | join(",")' || echo "")
+          echo "history=$hist" >> "$GITHUB_OUTPUT"
+
+      - name: Check clawstat.us
+        env:
+          WATCHDOG_WEBHOOK: ${{ secrets.ALERT_WEBHOOK_URL }}
+          HISTORY: ${{ steps.prev.outputs.history }}
+        run: python3 deploy/watchdog.py --history "$HISTORY"
