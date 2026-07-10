@@ -164,9 +164,13 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    rather than trusting the analyst's labels, and flags missed issues, **mis-categorizations**,
    and unsupported claims — including whether the verdict actually **rests on the top-ranked
    evidence** (a thesis leaning on tail items while a top blocker goes unaddressed gets
-   flagged). A spotted mis-categorization forces a refinement pass even if the
+   flagged). A *material* mis-categorization forces a refinement pass even if the
    validator otherwise agrees — so the analyst's first answer is never taken as correct by
-   default.
+   default. Material means the flag could actually move a published surface: it touches a
+   verdict-driving top-ranked issue, a high/critical issue (whose platform tags pin the
+   per-setup verdict), or claims an upgrade into that class — and anything unparseable
+   counts as material (fail-closed). A minor tag dispute on a low-ranked non-blocker stays
+   visible in the published review but doesn't burn a refinement call.
 3. **Refine** (analyst again) — only if the validator disagrees.
 
 If the analyst call fails, it falls back to `minimax/minimax-m3` — a third distinct provider,

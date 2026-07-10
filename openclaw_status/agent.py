@@ -651,19 +651,69 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
     return result
 
 
-def _validator_disagrees(review: dict) -> bool:
+# Materiality gate for mis-categorization entries ("#NNN: <was> -> <should be> (why)").
+_MISCAT_REF = re.compile(r"#(\d+)")
+# A claimed correction INTO the blocker/regression class is material wherever the issue
+# ranks — it says the verdict-driving set itself was derived wrong.
+_MISCAT_BLOCKER_CLAIM = re.compile(r"\b(critical|high|regression)\b", re.IGNORECASE)
+
+
+def _miscat_is_material(entry, ranked_issues: list) -> bool:
+    """Whether one mis-categorization finding can move a published verdict surface.
+
+    Material (any of): the flagged issue is in the verdict-driving TIER-1 set; it is
+    blocker-class (high/critical — its platform tags pin per-setup verdicts); or the
+    validator's claimed correction upgrades it into that class (critical/high/regression
+    on the right of the "->"). Every parse failure is MATERIAL: no "#N" reference, an
+    issue number we can't find in the ranked list, or no "->" separator all fail closed
+    to a refine — we only skip when the flag provably touches nothing but low-ranked,
+    non-blocker cosmetics (list-filter platform tags, category shuffles among the
+    non-regression buckets), whose published severity/category are ledger-derived
+    (label-based) anyway, not the analyst's.
+    """
+    text = str(entry)
+    nums = [int(n) for n in _MISCAT_REF.findall(text)]
+    if not nums:
+        return True                      # can't identify the issue → fail closed
+    _, arrow, corrected = text.partition("->")
+    if not arrow or _MISCAT_BLOCKER_CLAIM.search(corrected):
+        return True                      # upgrade claim (or unparseable shape) → material
+    tier1 = {i.get("number") for i in ranked_issues[:config.CONTEXT_TIER_TOP]
+             if isinstance(i, dict)}
+    by_number = {i.get("number"): i for i in ranked_issues if isinstance(i, dict)}
+    for n in nums:
+        issue = by_number.get(n)
+        if issue is None:
+            return True                  # flagged an issue we can't see → fail closed
+        if n in tier1:
+            return True                  # verdict-driving set
+        if str(issue.get("severity") or "").lower() in ("critical", "high"):
+            return True                  # blocker class — platform tags pin per-setup
+    return False
+
+
+def _validator_disagrees(review: dict, ranked_issues: list | None = None) -> bool:
     """Whether the validator's review should trigger a refinement pass.
 
-    An explicit disagreement triggers it; so does a concrete mis-categorization
-    finding even when the model still set "agrees": true — we don't let the
-    validator rubber-stamp the analyst's labels, so a spotted mis-category (wrong
-    severity / regression-vs-post-release / platform) forces the analyst to re-check.
-    An unreviewed (failed) validator never forces a refine."""
+    An explicit disagreement always triggers it. A concrete mis-categorization
+    finding triggers it even when the model still set "agrees": true — we don't let
+    the validator rubber-stamp the analyst's labels — but only when it is MATERIAL
+    (see _miscat_is_material): touching a tier-1 issue, a blocker-class issue, or
+    claiming an upgrade into that class. Minor tag disputes on low-ranked non-blockers
+    stay published in the review detail but don't burn a refine pass. Without
+    `ranked_issues` (no ranking context) every mis-categorization is material — the
+    pre-tightening behavior, and the fail-closed default. An unreviewed (failed)
+    validator never forces a refine."""
     if review.get("unreviewed"):
         return False
     if not review.get("agrees", True):
         return True
-    return bool(review.get("miscategorized_issues"))
+    miscats = review.get("miscategorized_issues") or []
+    if not miscats:
+        return False
+    if ranked_issues is None:
+        return True
+    return any(_miscat_is_material(m, ranked_issues) for m in miscats)
 
 
 def _compact_validator_review(review: dict) -> dict | None:
@@ -744,7 +794,7 @@ def _step_validator(context: str, primary_assessment: dict, deadline: float | No
         agrees = review.get("agrees", True)
         print(f"   Agrees: {agrees}")
         miscat = review.get("miscategorized_issues", [])
-        if miscat:   # surfaced even when the model still "agrees" — it forces a refine
+        if miscat:   # surfaced even when the model still "agrees" — material ones force a refine
             print(f"   Mis-categorized: {', '.join(str(m) for m in miscat[:3])}")
         if not agrees:
             print(f"   Critique: {review.get('critique', '')[:200]}")
@@ -1102,7 +1152,10 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
             pipeline_steps.append({"step": "validator", "model": config.VALIDATOR_MODEL, "usage": vu})
 
         validator_review = validator_result.get("parsed", {"agrees": True, "critique": ""})
-        needs_refine = _validator_disagrees(validator_review)
+        # The ranked ledger list (same ordering build_context tiered) gates materiality:
+        # a mis-tag on a low-ranked non-blocker doesn't buy a refine pass.
+        needs_refine = _validator_disagrees(
+            validator_review, (raw.get("sources") or {}).get("github_issues", []))
         v_agrees = not needs_refine
         validator_critique = validator_review.get("critique", "")
         # An unavailable validator (failed call) is recorded so the page can show a
@@ -1148,7 +1201,12 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
                     log_usage(config.PRIMARY_MODEL, ru, False)
         else:
             print(f"\n{'─'*60}")
-            print("STEP 3/3 — Skipped (models agree)")
+            skipped_miscats = validator_review.get("miscategorized_issues") or []
+            if skipped_miscats:
+                print(f"STEP 3/3 — Skipped (agrees; {len(skipped_miscats)} minor mis-tag(s) "
+                      "on low-ranked non-blockers — kept in the published review)")
+            else:
+                print("STEP 3/3 — Skipped (models agree)")
             print(f"{'─'*60}")
 
     # ── Deterministic, accumulating known-issues ──

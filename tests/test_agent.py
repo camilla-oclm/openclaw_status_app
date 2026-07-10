@@ -709,6 +709,60 @@ def test_refined_validation_errors_reflect_final_not_primary(tmp_path, monkeypat
     assert config.HISTORY_FILE.exists()          # deployable → folded into the persistent record
 
 
+def test_minor_miscat_skips_refine_material_forces_it(tmp_path, monkeypatch):
+    """The materiality gate end-to-end: a validator that AGREES but flags a mis-tag on a
+    low-ranked non-blocker must NOT trigger the refinement call — the flag stays visible
+    in the published review and the run reports the agreement the validator actually
+    stated. The same flag on a tier-1 issue must still force the refine."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+
+    issues = ([{"number": n, "title": f"blocker {n}", "severity": "critical",
+                "affects_version": True} for n in range(1, 9)]
+              + [{"number": 30, "title": "minor glitch", "severity": "medium"}])
+    raw = {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": issues,
+        "clawsweeper": {}, "release_history": [],
+    }}
+
+    def make_fake(review, steps):
+        def fake_call(model, system, user, **kw):
+            if "VALIDATOR" in system:
+                steps.append("validator")
+                parsed = dict(review)
+            elif "previously produced an assessment" in system:
+                steps.append("refine")
+                parsed = _valid_assessment()
+            else:
+                steps.append("primary")
+                parsed = _valid_assessment()
+            return {"success": True, "parsed": parsed, "model": model,
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}}
+        return fake_call
+
+    # minor mis-tag on the low-ranked medium → refine step never called
+    steps = []
+    monkeypatch.setattr(agent, "openrouter_call", make_fake(
+        {"agrees": True, "critique": "categorizations sound",
+         "miscategorized_issues": ["#30: windows -> macos"]}, steps))
+    assert agent.run_assessment_pipeline(raw=raw)["success"] is True
+    assert steps == ["primary", "validator"]
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["refined"] is False
+    assert saved["validator_agrees"] is True     # the agreement the validator itself stated
+    assert saved["validator_review"]["miscategorized_issues"] == ["#30: windows -> macos"]
+
+    # the same dispute on a tier-1 issue → still refines
+    steps = []
+    monkeypatch.setattr(agent, "openrouter_call", make_fake(
+        {"agrees": True, "critique": "categorizations sound",
+         "miscategorized_issues": ["#3: windows -> macos"]}, steps))
+    assert agent.run_assessment_pipeline(raw=raw)["success"] is True
+    assert steps == ["primary", "validator", "refine"]
+    assert json.loads(config.ASSESSMENT_FILE.read_text())["refined"] is True
+
+
 # ── run-completion summary message ───────────────────────────────────────────
 
 def test_discarded_primary_spend_is_logged_and_counted(tmp_path, monkeypatch):
@@ -790,11 +844,64 @@ def test_validator_disagrees_triggers_refine():
     assert agent._validator_disagrees({"agrees": True}) is False
     assert agent._validator_disagrees({"agrees": True, "miscategorized_issues": []}) is False
     # a concrete mis-categorization overrides a soft "agrees" — the validator can't
-    # rubber-stamp the analyst's labels (e.g. the #92843 macOS-tagged-Windows class)
+    # rubber-stamp the analyst's labels (e.g. the #92843 macOS-tagged-Windows class).
+    # Without ranking context every mis-cat is material (the fail-closed default).
     assert agent._validator_disagrees(
         {"agrees": True, "miscategorized_issues": ["#92843: windows -> macos"]}) is True
     # a failed/unreviewed validator never forces a refine
     assert agent._validator_disagrees({"agrees": False, "unreviewed": True}) is False
+
+
+# Ranked ledger list for the materiality gate: 8 tier-1 entries (ranks 1-8), then
+# mid/tail entries — one high-severity non-tier-1 (blocker class) and two mediums.
+_RANKED = (
+    [{"number": n, "severity": "critical"} for n in range(1, 9)]
+    + [{"number": 21, "severity": "high"},
+       {"number": 30, "severity": "medium"},
+       {"number": 31, "severity": "medium"}]
+)
+
+
+def _miscat(entries):
+    return {"agrees": True, "miscategorized_issues": entries}
+
+
+def test_validator_disagrees_material_only_with_ranking():
+    d = agent._validator_disagrees
+    # explicit disagreement refines regardless of the ranking gate
+    assert d({"agrees": False}, _RANKED) is True
+    # THE new skip: a platform/category tag dispute on a low-ranked non-blocker —
+    # its published severity/category are ledger-derived and it can't pin a setup
+    assert d(_miscat(["#30: windows -> macos (report is about a Mac host)"]), _RANKED) is False
+    assert d(_miscat(["#31: post_release -> active (predates the release)"]), _RANKED) is False
+    assert d(_miscat(["#30: medium -> low (cosmetic glitch)"]), _RANKED) is False
+    # tier-1 (verdict-driving) issue → material even for a "minor" tag
+    assert d(_miscat(["#3: linux -> macos"]), _RANKED) is True
+    # blocker-class (high/critical) anywhere in the list → material: its platform
+    # tags decide per-setup pinning (the #92843 class)
+    assert d(_miscat(["#21: windows -> macos"]), _RANKED) is True
+    # claimed upgrade INTO the blocker/regression class → material wherever it ranks
+    assert d(_miscat(["#30: medium -> should be critical (data loss)"]), _RANKED) is True
+    assert d(_miscat(["#31: post_release -> regression (worked in prior release)"]), _RANKED) is True
+    # ONE material entry among minor ones is enough
+    assert d(_miscat(["#30: windows -> macos", "#2: medium -> low"]), _RANKED) is True
+
+
+def test_validator_disagrees_materiality_fails_closed():
+    d = agent._validator_disagrees
+    # no "#N" reference → can't identify the issue → refine
+    assert d(_miscat(["the crash issue is tagged windows but is macOS"]), _RANKED) is True
+    # unknown issue number (not in the ranked list) → refine
+    assert d(_miscat(["#999: windows -> macos"]), _RANKED) is True
+    # no "->" separator (unparseable shape) → refine
+    assert d(_miscat(["#30 severity overstated"]), _RANKED) is True
+    # empty ranked list → nothing resolvable → refine
+    assert d(_miscat(["#30: windows -> macos"]), []) is True
+    # a mention of the blocker class only on the LEFT (analyst's label) of the arrow
+    # is a DOWNGRADE claim on a ledger-medium issue — skippable, not an upgrade
+    assert d(_miscat(["#30: high -> medium (single report)"]), _RANKED) is False
+    # ...but "critical/high/regression" anywhere on the RIGHT stays material
+    assert d(_miscat(["#30: medium -> high"]), _RANKED) is True
 
 
 # ── flip conditions ("what would change this verdict") ──────────────────────
