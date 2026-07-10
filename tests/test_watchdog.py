@@ -121,6 +121,50 @@ def test_webhook_payload_key_selection():
         "https://hooks.slack.com/services/x", "m")) == {"text": "m"}
 
 
+def test_state_file_lifecycle(tmp_path, monkeypatch, capsys):
+    """Cron mode end-to-end: fresh outage alerts once, stays quiet while down,
+    alerts again on recovery, and the state file tracks the consecutive count."""
+    state = str(tmp_path / "state.json")
+    monkeypatch.delenv("WATCHDOG_WEBHOOK", raising=False)
+    args = ["--retry-wait", "0", "--state-file", state]
+
+    monkeypatch.setattr(watchdog, "fetch", _fetcher(page=(502, "bad gateway")))
+    assert watchdog.main(args) == 1                      # ok → down: alert
+    assert "would alert" in capsys.readouterr().out
+    saved = json.loads(open(state).read())
+    assert (saved["status"], saved["fails"]) == ("down", 1)
+
+    assert watchdog.main(args) == 1                      # still down: silence
+    assert "would alert" not in capsys.readouterr().out
+    assert json.loads(open(state).read())["fails"] == 2
+
+    monkeypatch.setattr(watchdog, "fetch", _fetcher())
+    assert watchdog.main(args) == 0                      # down → ok: recovery alert
+    out = capsys.readouterr().out
+    assert "recovered" in out
+    saved = json.loads(open(state).read())
+    assert (saved["status"], saved["fails"]) == ("ok", 0)
+
+
+def test_state_file_missing_or_corrupt_reads_as_ok(tmp_path):
+    missing = str(tmp_path / "nope.json")
+    assert watchdog.load_state(missing) == {"status": "ok", "fails": 0}
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    # fail-toward-alerting: a lost state file means the next real outage still pings
+    assert watchdog.load_state(str(bad)) == {"status": "ok", "fails": 0}
+
+
+def test_webhook_file_wins_over_env(tmp_path, monkeypatch):
+    hook = tmp_path / "webhook"
+    hook.write_text("https://discord.com/api/webhooks/1/from-file\n")
+    monkeypatch.setenv("WATCHDOG_WEBHOOK", "https://discord.com/api/webhooks/1/from-env")
+    sent = []
+    monkeypatch.setattr(watchdog, "send_webhook", lambda url, msg: sent.append(url) or True)
+    assert watchdog.main(["--test", "--webhook-file", str(hook)]) == 0
+    assert sent == ["https://discord.com/api/webhooks/1/from-file"]
+
+
 def test_main_exit_codes_and_no_send_without_webhook(monkeypatch, capsys):
     monkeypatch.delenv("WATCHDOG_WEBHOOK", raising=False)
     monkeypatch.setattr(watchdog, "send_webhook",

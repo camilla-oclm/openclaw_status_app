@@ -15,15 +15,22 @@ Checks, in order (any failure = DOWN, with one retry to ride out blips):
                         A stale page with a live box means runs are silently
                         failing — exactly the state an outside watcher must catch.
 
-Alerting is TRANSITION-based so a long outage doesn't spam: the caller passes the
-prior completed run conclusions (newest first) via --history, and we ping the
-webhook only on ok→down, down→ok, or every --realert-every-th consecutive failure
-(a heartbeat so one missed ping can't mean silence). The webhook URL comes from
-the WATCHDOG_WEBHOOK env var (a secret — never a flag, flags leak into process
-lists and CI logs). Payload key mirrors lib.notify: Discord gets "content",
-everything else "text". Exit code: 0 up, 1 down — so a scheduler that shows red
-runs (GitHub Actions emails the owner on failure) is a second alert channel for
-free. --test sends one labeled test ping and exits, to verify the webhook path.
+Alerting is TRANSITION-based so a long outage doesn't spam: we ping the webhook
+only on ok→down, down→ok, or every --realert-every-th consecutive failure (a
+heartbeat so one missed ping can't mean silence). Two ways to remember the prior
+state:
+
+  --state-file PATH   cron mode (the production setup): a small JSON file on
+                      disk tracks {status, fails}. Missing/corrupt reads as
+                      "was ok", so a real outage still alerts immediately.
+  --history LIST      stateless-scheduler mode (e.g. GitHub Actions): the caller
+                      passes the prior run conclusions, newest first, and exit
+                      codes carry the state (0 up, 1 down).
+
+The webhook URL comes from --webhook-file (a chmod-600 file) or the
+WATCHDOG_WEBHOOK env var — never a flag; flags leak into process lists and CI
+logs. Payload key mirrors lib.notify: Discord gets "content", everything else
+"text". --test sends one labeled test ping and exits, to verify the webhook path.
 """
 
 import argparse
@@ -128,6 +135,31 @@ def decide_alert(ok: bool, reason: str, history: list,
     return None
 
 
+def load_state(path: str) -> dict:
+    """Cron-mode transition memory. Missing/corrupt state reads as a clean
+    {ok, 0} — fail-toward-alerting: a real outage after a lost state file still
+    pings immediately (worst case is one duplicate DOWN ping, never silence)."""
+    try:
+        with open(path) as f:
+            st = json.load(f)
+        return {"status": str(st.get("status", "ok")), "fails": int(st.get("fails", 0))}
+    except (OSError, ValueError):
+        return {"status": "ok", "fails": 0}
+
+
+def save_state(path: str, ok: bool, prev_fails: int) -> None:
+    """Atomic write; checked_at doubles as an is-the-watchdog-itself-alive marker."""
+    state = {
+        "status": "ok" if ok else "down",
+        "fails": 0 if ok else prev_fails + 1,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.replace(tmp, path)
+
+
 def webhook_payload(url: str, message: str) -> bytes:
     """Discord wants {"content"}, Slack/others {"text"} — same pick as lib.notify."""
     key = ("content" if "discord.com/api/webhooks" in url
@@ -154,6 +186,10 @@ def main(argv=None) -> int:
     p.add_argument("--stale-hours", type=float, default=30.0)
     p.add_argument("--history", default="",
                    help="prior completed run conclusions, newest first, comma-separated")
+    p.add_argument("--state-file", default="",
+                   help="JSON state file for transition memory (cron mode; overrides --history)")
+    p.add_argument("--webhook-file", default="",
+                   help="read the webhook URL from this file (else the WATCHDOG_WEBHOOK env var)")
     p.add_argument("--cadence-min", type=float, default=15.0,
                    help="scheduler cadence, for duration estimates in alerts")
     p.add_argument("--realert-every", type=int, default=24,
@@ -164,6 +200,12 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     webhook = os.environ.get("WATCHDOG_WEBHOOK", "")
+    if args.webhook_file:
+        try:
+            with open(args.webhook_file) as f:
+                webhook = f.read().strip()
+        except OSError as e:
+            print(f"⚠ webhook file unreadable ({e}) — falling back to env", file=sys.stderr)
 
     if args.test:
         if not webhook:
@@ -176,7 +218,12 @@ def main(argv=None) -> int:
 
     ok, reason = check_with_retry(fetch, args.url, args.stale_hours,
                                   retry_wait=args.retry_wait)
-    history = [c for c in args.history.split(",") if c]
+    if args.state_file:
+        prev = load_state(args.state_file)
+        prev_fails = prev["fails"] if prev["status"] == "down" else 0
+        history = ["failure"] * prev_fails      # reuse the one tested transition matrix
+    else:
+        history = [c for c in args.history.split(",") if c]
     print(f"{'UP' if ok else 'DOWN'}: {reason}")
 
     message = decide_alert(ok, reason, history, args.cadence_min, args.realert_every)
@@ -186,6 +233,9 @@ def main(argv=None) -> int:
             print(f"alerted: {message}")
         else:
             print(f"(no WATCHDOG_WEBHOOK set — would alert: {message})")
+
+    if args.state_file:
+        save_state(args.state_file, ok, prev_fails)
 
     return 0 if ok else 1
 

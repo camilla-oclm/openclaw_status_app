@@ -310,7 +310,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 377 tests, hermetic (no network)
+python3 -m pytest        # 380 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
@@ -346,15 +346,20 @@ openclaw-status.service` (runs a tick now — gates; use `run.py full` to force 
 Changes under `deploy/` need a re-run of `provision.sh`
 to reinstall the `/etc` copies.
 
-**External watchdog** — the box's own Discord alerts die with the box, so a scheduled GitHub
-Actions workflow ([`watchdog.yml`](.github/workflows/watchdog.yml), running
-[`deploy/watchdog.py`](deploy/watchdog.py)) checks the live page and `latest.json` freshness
-every ~15 minutes from GitHub's infrastructure and pings the same Discord webhook (repo secret
-`ALERT_WEBHOOK_URL`) on state changes — down, still-down heartbeats, and recovery. A failed
-check also fails the workflow run, so GitHub's failed-run email is a second alert channel.
-Self-hosters can run the same script from any second host (cron + the `WATCHDOG_WEBHOOK` env
-var). Note GitHub pauses cron schedules on public repos after ~60 days without repo activity
-(it emails first; one click re-enables).
+**External watchdog** — the box's own Discord alerts die with the box, so
+[`deploy/watchdog.py`](deploy/watchdog.py) (stdlib-only, runs anywhere with Python 3.10+)
+watches from a *separate always-on host*: it checks the live page (HTTP 200 + the rendered-page
+marker) and `latest.json` freshness (`assessed_at` under 30h — catches a silently-dead pipeline
+behind a live web server), and pings a Slack/Discord webhook on state changes only — down,
+periodic still-down heartbeats, and recovery — remembering the prior state in a local JSON
+file. One cron line on any second machine:
+
+```
+*/5 * * * * python3 watchdog.py --state-file ~/.clawstat-state.json --webhook-file ~/.clawstat-webhook --cadence-min 5 --realert-every 72
+```
+
+(`--realert-every 72` ≈ a 6-hour still-down heartbeat at 5-minute checks. The webhook file
+should be `chmod 600`. A `--test` flag sends one labeled ping to verify the alert path.)
 
 ---
 
@@ -383,9 +388,8 @@ openclaw_status_app/
 │   └── archive/            per-version page snapshots (gitignored)
 ├── docs/                   README screenshots (hero-dark.png / hero-light.png)
 ├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile,
-│                           and watchdog.py (external uptime check)
-├── .github/workflows/      ci.yml (pytest + browser suites on every push),
-│                           watchdog.yml (external uptime cron)
+│                           and watchdog.py (external uptime check — run it off-box via cron)
+├── .github/workflows/      ci.yml (pytest + browser suites on every push)
 ├── tests/                  pytest suite + headless-Chrome suites (tests/browser/)
 └── data/                   pipeline outputs (gitignored)
 ```
