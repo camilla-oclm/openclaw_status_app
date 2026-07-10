@@ -73,8 +73,13 @@ FALLBACK_MODELS = [
 #    knob lives in the central config, as this module's docstring promises) ─────────
 MAX_RETRIES = 2
 RETRY_BACKOFF = [1.0, 3.0]   # seconds between attempts
-DAILY_COST_LIMIT = 2.0       # USD — alert threshold, not a hard stop
-MONTHLY_COST_LIMIT = 30.0    # USD
+# Alert thresholds AND the pipeline's hard budget gate (agent.py refuses to start
+# a run once a limit is already exceeded). Monthly = the top of the $5-10 budget
+# band (~$4-5 actual at the 8/12/24h cadence), so a runaway stops at ~2x budget —
+# this IS the spend backstop; no dashboard-side cap needed. Daily stays loose on
+# purpose: it must clear a fresh-release day (~3 runs) plus forced validation runs.
+DAILY_COST_LIMIT = 2.0       # USD
+MONTHLY_COST_LIMIT = 10.0    # USD
 
 # Assessment output budget. The analyst/refine steps emit a full JSON document
 # (thesis + evidence + one known_issues entry per issue + changes), which blows
