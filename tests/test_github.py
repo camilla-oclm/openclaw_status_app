@@ -82,6 +82,20 @@ def test_norm_release_closing_refs_from_raw_body():
     assert "42" not in r["closing_refs"] and "888" not in r["closing_refs"]
 
 
+def test_norm_release_changes_parsed_from_raw_body_opt_in():
+    """with_changes=True stores the RAW-body parse as release["changes"] — like
+    closing_refs, it must come from the raw body: the stored curated body is size-capped
+    and a big release overflows it, silently losing whole sections from the counts.
+    Opt-in: history entries (24 per collect) must not pay for or carry it."""
+    raw_body = ("### Highlights\n\n#### Relay mode\n\n- routing via a relay account\n\n"
+                "### Fixes\n\n- patched the crash\n")
+    r = github._norm_release({"tag_name": "v9.9.9", "body": raw_body}, with_changes=True)
+    assert [f["title"] for f in r["changes"]["features"]] == ["routing via a relay account"]
+    assert [f["title"] for f in r["changes"]["fixes"]] == ["patched the crash"]
+    # default (history entries) stays lean
+    assert "changes" not in github._norm_release({"tag_name": "v9.9.9", "body": raw_body})
+
+
 # ── is_diamond ───────────────────────────────────────────────────────────────
 
 def test_is_diamond():

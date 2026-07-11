@@ -1256,7 +1256,7 @@ def _llms_full_md(data: dict) -> str:
 
     ch = data.get("changes") or {}
     change_lines = []
-    for label, key in [("Features", "features"), ("Fixes", "fixes"), ("Breaking", "breaking")]:
+    for label, key in [("Highlights", "features"), ("Fixes", "fixes"), ("Breaking", "breaking")]:
         items = ch.get(key) or []
         if items:
             change_lines += [f"### {label}", ""] + [f"- {(it.get('title') or '').strip()}" for it in items] + [""]

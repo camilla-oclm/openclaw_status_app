@@ -186,11 +186,11 @@ def fetch_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 20) -> 
 #  Releases (REST)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _norm_release(d: dict | None) -> dict | None:
+def _norm_release(d: dict | None, with_changes: bool = False) -> dict | None:
     if not d:
         return None
     tag = d.get("tag_name", "")
-    return {
+    out = {
         "tag": tag,
         # Clean version (no leading "v"), so consumers don't have to re-derive it
         # from the tag/url. Matches the `lstrip("v")` convention used elsewhere.
@@ -211,11 +211,21 @@ def _norm_release(d: dict | None) -> dict | None:
         "prerelease": d.get("prerelease", False),
         "draft": d.get("draft", False),
     }
+    if with_changes:
+        # The displayed fix/feature/breaking counts, parsed from the RAW body — like
+        # closing_refs, this must happen HERE: the stored curated `body` is size-capped and
+        # a big release (v2026.6.11: 68KB curated) overflows it, so a downstream re-parse
+        # silently loses whole sections. Sanitized first so the parsed titles match the
+        # same trust level as everything else that reaches the page. Opt-in because only
+        # the assessed release needs it (not 24 history entries per collect).
+        out["changes"] = release_changes.parse_changelog(sanitize(d.get("body", ""), 300000))
+    return out
 
 
 def latest_release() -> dict | None:
     """The latest published, non-prerelease release."""
-    return _norm_release(gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/latest"))
+    return _norm_release(gh_rest(f"/repos/{config.REPO_OWNER}/{config.REPO_NAME}/releases/latest"),
+                         with_changes=True)
 
 
 def list_releases(limit: int = 30) -> list[dict]:

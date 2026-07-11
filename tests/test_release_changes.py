@@ -173,6 +173,102 @@ def test_bold_md_link_lead_still_splits_title():
     assert feat["value"].startswith("twice the speed")
 
 
+# ── the 2026 nested release-notes format (v2026.6.10/6.11 shape) ─────────────
+# `### Highlights` holds themed #### subsections; each `### <Area>` section holds themed
+# subsections plus an "#### Additional <area> fixes" tail. Flat matching parsed features
+# to ZERO here (the live "0 New features" tile on a release shipping new capabilities).
+
+_NESTED_BODY = """## 2026.6.11
+
+### Highlights
+
+The themes of this release.
+
+#### Channel delivery reliability
+
+- Telegram reply chains keep cached replies attached. #82909
+- Discord mirrored history stays ordered under load.
+
+#### Slack router relay mode
+
+- Slack can now route through a relay account for org-wide installs.
+
+### Channels and Messaging
+
+#### Message ordering hardening
+
+- Reordering guard for interleaved webhooks.
+
+#### Additional channel fixes
+
+- WhatsApp media captions no longer drop on resend.
+- Matrix reconnects keep encrypted session state.
+
+### Breaking changes
+
+- The legacy `--relay` flag is removed; use `router.relay`.
+
+### Release verification
+
+- Verified on macOS 15, Ubuntu 24.04.
+
+### Additional contributions
+
+- @a (1 PR)
+"""
+
+
+def test_nested_format_highlights_subtree_counts_as_features():
+    ch = rc.parse_changelog(_NESTED_BODY)
+    feats = [f["title"] for f in ch["features"]]
+    # every bullet under Highlights' themed subsections, none from area sections
+    assert "Telegram reply chains keep cached replies attached. #82909" in feats
+    assert "Slack can now route through a relay account for org-wide installs." in feats
+    assert len(feats) == 3
+    # "Additional <area> fixes" subsections land in fixes despite the non-fix parent
+    assert len(ch["fixes"]) == 2
+    assert len(ch["breaking"]) == 1
+    # themed area subsections (not fix-named, not under Highlights) stay uncounted —
+    # the new-format analog of the old excluded "### Changes" catch-all
+    all_titles = [i["title"] for b in ch.values() for i in b]
+    assert not any("Reordering guard" in t for t in all_titles)
+    assert not any("Verified on macOS" in t for t in all_titles)
+
+
+def test_nested_fix_subsection_under_highlights_stays_a_fix():
+    # own-name match is more specific than the parent's
+    body = "### Highlights\n\n#### Hotfix roundup\n\n- patched the crash loop\n"
+    ch = rc.parse_changelog(body)
+    assert [f["title"] for f in ch["fixes"]] == ["patched the crash loop"]
+    assert ch["features"] == []
+
+
+def test_nested_curated_round_trip_preserves_buckets():
+    """The curated output is what gets STORED as the body — re-parsing it must yield the
+    same buckets (headers keep their levels so the hierarchy survives)."""
+    curated = rc.curated_changelog(_NESTED_BODY)
+    assert rc.parse_changelog(curated) == rc.parse_changelog(_NESTED_BODY)
+    assert "Release Verification" not in curated and "Additional Contributions" not in curated
+
+
+def test_changes_for_release_prefers_collect_time_parse():
+    """The stored curated body is size-capped and can lose sections on a big release —
+    the collect-time parse of the RAW body (release["changes"]) must win over it."""
+    parsed = {"breaking": [], "fixes": [{"title": "from-raw", "verified": True}], "features": []}
+    out = rc.changes_for_release("### Fixes\n\n- from-stored-body\n", fallback=None, parsed=parsed)
+    assert [f["title"] for f in out["fixes"]] == ["from-raw"]
+    # …but an EMPTY collect-time parse falls through to the body, then the fallback
+    empty = {"breaking": [], "fixes": [], "features": []}
+    out = rc.changes_for_release("### Fixes\n\n- from-stored-body\n", fallback=None, parsed=empty)
+    assert [f["title"] for f in out["fixes"]] == ["from-stored-body"]
+
+
+def test_prompt_changelog_total_cap():
+    body = "### Highlights\n\n" + "".join(f"- feature bullet number {i} with some length\n"
+                                          for i in range(400))
+    assert len(rc.prompt_changelog(body, per_section=100000, cap=8000)) <= 8000
+
+
 def test_full_changelog_tail_is_not_curated():
     """The bulky '### Full Changelog' PR-log tail must stay OUT of the curated changelog even
     though its name contains 'change'."""

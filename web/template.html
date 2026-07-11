@@ -1762,7 +1762,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       {v:ki.length+(DATA.issues_capped?"+":""), l:"Known issues", s:severe+" high/critical", c:"var(--accent)"},
       {v:regs, l:"Regressions", s:"since release", c:regs?"var(--bad)":"var(--good)"},
       {v:fixes, l:"Fixes shipped", s:"in this release", c:"var(--good)"},
-      {v:feats, l:"New features", s:(ch.breaking||[]).length+" breaking", c:"var(--accent)"}
+      {v:feats, l:"Highlights", s:(ch.breaking||[]).length+" breaking", c:"var(--accent)"}
     ];
     var grid = el("div",{"class":"stats"});
     tiles.forEach(function(t){
@@ -2044,7 +2044,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     // Features first (the reason a release exists); only keep categories that have items
     // so an empty "Breaking" tab never shows.
     var groups = [
-      {key:"features", icon:"✨", label:"Features", items:ch.features||[], sub:function(x){return x.value||"";}, field:"title"},
+      {key:"features", icon:"✨", label:"Highlights", items:ch.features||[], sub:function(x){return x.value||"";}, field:"title"},
       {key:"fixes",    icon:"✓", label:"Fixes",    items:ch.fixes||[],    sub:function(x){return x.verified?"verified":"";}, field:"title"},
       {key:"breaking", icon:"⚠", label:"Breaking", items:ch.breaking||[], sub:function(x){return x.impact||"";}, field:"title"}
     ].filter(function(g){ return g.items.length; });

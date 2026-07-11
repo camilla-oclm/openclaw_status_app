@@ -1234,12 +1234,15 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
 
     # ── Deterministic changelog ──
     # The release body is immutable and structured, so `changes` (breaking/fixes/features) is
-    # parsed straight from its ### sections — exact, stable, and immune to the truncation that
-    # used to drop the whole ### Fixes section (rendering "fixes shipped" as 0). The analyst's
-    # own extraction is kept only as a fallback for an unstructured body. See release_changes.
-    release_body = ((raw.get("sources") or {}).get("latest_release") or {}).get("body") or ""
+    # parsed straight from its sections — exact, stable, and immune to truncation. Preference
+    # order: the collect-time parse of the RAW body (release["changes"] — the stored curated
+    # body is size-capped and big releases overflow it), then a re-parse of the stored body
+    # (raw-data predating the collect-time parse), then the analyst's own extraction for an
+    # unstructured body. See release_changes.
+    release = (raw.get("sources") or {}).get("latest_release") or {}
     final_assessment["changes"] = release_changes.changes_for_release(
-        release_body, fallback=final_assessment.get("changes"))
+        release.get("body") or "", fallback=final_assessment.get("changes"),
+        parsed=release.get("changes"))
 
     # Final safety net: collapse any retired 🔄 the model still emitted (primary &
     # refined are already normalized above; this covers the agree-no-refine path).

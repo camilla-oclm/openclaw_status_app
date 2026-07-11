@@ -182,7 +182,8 @@ is logged to `data/usage.json` (with daily/monthly budget alerts, plus a latency
 pings when a model call drifts toward the pipeline's wall-clock budget — the quiet failure
 mode where runs degrade to single-model long before anything errors). Result shape:
 `recommendation`, `confidence`, `thesis`, `evidence` (for/against/neutral), `known_issues`,
-`changes` (fixes/features/breaking), `flip_conditions` (what would change this verdict),
+`changes` (fixes / highlights / breaking — parsed deterministically from the release
+changelog's section hierarchy, not extracted by the LLM), `flip_conditions` (what would change this verdict),
 `sentiment_summary`, `platform_impact` — plus a compact, screened copy of the validator's
 review so the page can show what the second model actually said.
 
@@ -310,7 +311,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 380 tests, hermetic (no network)
+python3 -m pytest        # 386 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
