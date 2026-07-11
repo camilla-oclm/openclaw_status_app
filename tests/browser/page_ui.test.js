@@ -9,10 +9,25 @@
 
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+
+// CI sets PUPPETEER_PATH/CHROME_PATH; local runs discover the toolchain under $HOME
+// (an npx-cached puppeteer + its downloaded Chrome) so no machine path is hardcoded.
+function firstUnder(base, sub) {
+  try {
+    for (const d of fs.readdirSync(base)) {
+      const p = path.join(base, d, sub);
+      if (fs.existsSync(p)) return p;
+    }
+  } catch {}
+  return null;
+}
 const puppeteer = require(process.env.PUPPETEER_PATH ||
-  "/home/user/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer");
+  firstUnder(path.join(os.homedir(), ".npm", "_npx"), path.join("node_modules", "puppeteer")) ||
+  "puppeteer");
 const CHROME = process.env.CHROME_PATH ||
-  "/home/user/.cache/puppeteer/chrome/linux-149.0.7827.22/chrome-linux64/chrome";
+  firstUnder(path.join(os.homedir(), ".cache", "puppeteer", "chrome"),
+             path.join("chrome-linux64", "chrome"));
 
 const TEMPLATE = fs.readFileSync(path.join(__dirname, "..", "..", "web", "template.html"), "utf8");
 
