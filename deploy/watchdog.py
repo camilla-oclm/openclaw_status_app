@@ -180,7 +180,7 @@ def send_webhook(url: str, message: str) -> bool:
         return False
 
 
-def main(argv=None) -> int:
+def main(argv=None, now=None) -> int:
     p = argparse.ArgumentParser(description="External uptime watchdog for clawstat.us")
     p.add_argument("--url", default=DEFAULT_URL)
     p.add_argument("--stale-hours", type=float, default=30.0)
@@ -217,7 +217,7 @@ def main(argv=None) -> int:
         return 0 if sent else 1
 
     ok, reason = check_with_retry(fetch, args.url, args.stale_hours,
-                                  retry_wait=args.retry_wait)
+                                  retry_wait=args.retry_wait, now=now)
     if args.state_file:
         prev = load_state(args.state_file)
         prev_fails = prev["fails"] if prev["status"] == "down" else 0

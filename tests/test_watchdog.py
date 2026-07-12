@@ -129,17 +129,17 @@ def test_state_file_lifecycle(tmp_path, monkeypatch, capsys):
     args = ["--retry-wait", "0", "--state-file", state]
 
     monkeypatch.setattr(watchdog, "fetch", _fetcher(page=(502, "bad gateway")))
-    assert watchdog.main(args) == 1                      # ok → down: alert
+    assert watchdog.main(args, now=NOW) == 1             # ok → down: alert
     assert "would alert" in capsys.readouterr().out
     saved = json.loads(open(state).read())
     assert (saved["status"], saved["fails"]) == ("down", 1)
 
-    assert watchdog.main(args) == 1                      # still down: silence
+    assert watchdog.main(args, now=NOW) == 1             # still down: silence
     assert "would alert" not in capsys.readouterr().out
     assert json.loads(open(state).read())["fails"] == 2
 
     monkeypatch.setattr(watchdog, "fetch", _fetcher())
-    assert watchdog.main(args) == 0                      # down → ok: recovery alert
+    assert watchdog.main(args, now=NOW) == 0             # down → ok: recovery alert
     out = capsys.readouterr().out
     assert "recovered" in out
     saved = json.loads(open(state).read())
@@ -170,8 +170,8 @@ def test_main_exit_codes_and_no_send_without_webhook(monkeypatch, capsys):
     monkeypatch.setattr(watchdog, "send_webhook",
                         lambda *a: (_ for _ in ()).throw(AssertionError("no send")))
     monkeypatch.setattr(watchdog, "fetch", _fetcher())
-    assert watchdog.main(["--retry-wait", "0"]) == 0
+    assert watchdog.main(["--retry-wait", "0"], now=NOW) == 0
     monkeypatch.setattr(watchdog, "fetch", _fetcher(page=(503, "down")))
-    assert watchdog.main(["--retry-wait", "0", "--history", "success"]) == 1
+    assert watchdog.main(["--retry-wait", "0", "--history", "success"], now=NOW) == 1
     out = capsys.readouterr().out
     assert "would alert" in out       # decision made, send correctly skipped
