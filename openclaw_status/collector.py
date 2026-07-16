@@ -11,8 +11,71 @@ import urllib.request
 
 from openclaw_status import config, github
 from openclaw_status.lib import (
-    sanitize, save_json, now_iso, version_from_release, parallel_fetch, PipelineTimer,
+    sanitize, save_json, load_json_or, notify, now_iso, version_from_release,
+    parallel_fetch, PipelineTimer,
 )
+
+
+def _refresh_ledger_issues(version: str, issues: list, release_date: str) -> list:
+    """Re-fetch the current version's stored ledger issues the scout didn't return
+    this run, so scout-wins re-derivation reaches ALL of them.
+
+    The scout's searches are gated on `created:>=release_date`, so a stored issue
+    created before the release (or one past every search's top-N) is otherwise never
+    re-scouted: its labels, priority provenance, version match and engagement freeze
+    at their stored state — and because severity fails closed on missing provenance,
+    those frozen records would outrank freshly-rescored ones at the ledger cap
+    forever. One extra batched GraphQL call heals them every run.
+
+    Same admission filters as the scout (open, non-stale, non-feature). A failed
+    batch (None) refreshes nothing — records keep their stored state, as today.
+    """
+    from openclaw_status import ledger
+    seen = {i.get("number") for i in issues}
+    stored = ledger.load_ledger().get(version, {}).get("issues", {})
+    missing = [int(k) for k in stored if int(k) not in seen]
+    if not missing:
+        return issues
+    nodes = github.fetch_issues_by_number(missing[:config.LEDGER_MAX_ISSUES_PER_VERSION])
+    if nodes is None:
+        print(f"  ⚠ ledger refresh unavailable ({len(missing)} stored issues keep last state)",
+              file=sys.stderr)
+        return issues
+    refreshed = []
+    for node in nodes:
+        if (node.get("state") or "").upper() != "OPEN":
+            continue   # parity with the is:open searches — closed issues keep stored state
+        labels = [l.get("name", "") for l in (node.get("labels") or {}).get("nodes", [])]
+        if "stale" in labels or github.is_feature(node.get("title", ""), labels):
+            continue
+        refreshed.append(github.normalize_node(node, release_date, version))
+    print(f"  ♻️  Ledger refresh: {len(refreshed)}/{len(missing)} stored issues re-fetched")
+    return issues + refreshed
+
+
+def _label_drift_alert(issues: list, now: str) -> dict:
+    """Ping Discord (once per label, remembered in LABEL_DRIFT_FILE) when labels the
+    severity model doesn't know start trending on the scout. Observability only —
+    returns the current offenders and never raises into the collect path."""
+    try:
+        drift = github.label_drift(issues)
+        if not drift:
+            return {}
+        state = load_json_or(config.LABEL_DRIFT_FILE, {})
+        new = {l: c for l, c in drift.items() if l not in state}
+        if new:
+            listing = ", ".join(f'"{sanitize(l, 60)}" on {c}/{len(issues)}' for l, c in new.items())
+            notify("🏷️ OpenClaw Status: unrecognized label(s) trending on scouted issues — "
+                   f"{listing}. If a label carries severity/impact meaning, teach it to the "
+                   "taxonomy in openclaw_status/github.py; otherwise this stays a one-time note.")
+            state.update({l: now for l in new})
+            save_json(config.LABEL_DRIFT_FILE, state)
+        print(f"  🏷️ Label drift: {len(drift)} unknown trending label(s)"
+              f" ({len(new)} newly alerted)")
+        return drift
+    except Exception as e:   # never let observability break the collect
+        print(f"  ⚠ label-drift check failed: {e}", file=sys.stderr)
+        return {}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -371,6 +434,13 @@ def collect(output_path=None) -> dict:
     # github_issues — so the known-issues list and the verdict stop flip-flopping
     # run-to-run (see openclaw_status/ledger.py).
     from openclaw_status import ledger
+    # Taxonomy drift check on the FRESH scout (not the ledger accumulation — the
+    # point is what the repo looks like right now).
+    _label_drift_alert(issues, now)
+    # Refresh stored issues the searches can't reach, so scout-wins re-derivation
+    # (severity provenance, version tiers, engagement) covers the WHOLE ledger entry.
+    issues = _refresh_ledger_issues(
+        version, issues, release.get("published_at", "") if release else "")
     before = len(issues)
     # Version-agnostic "ongoing majors" — high-impact open issues that don't reference
     # this version and aren't post-release regressions. The ledger doesn't track them

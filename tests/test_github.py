@@ -680,3 +680,73 @@ def test_rank_key_engagement_orders_within_a_tier_never_across():
     a = {"severity": "high", "version_match": "series", "reactions": 9, "comments": 0, "number": 2}
     b = {"severity": "high", "version_match": "series", "reactions": 2, "comments": 0, "number": 1}
     assert sorted([b, a], key=github.rank_key)[0] is a
+
+
+# ── label-drift tripwire ─────────────────────────────────────────────────────
+
+def _drift_issues(n, labels):
+    return [{"number": i, "labels": labels} for i in range(n)]
+
+
+def test_label_drift_flags_unknown_trending_label():
+    # 20 issues, an unknown impact:* member on 10 of them (50% ≥ 15%, 10 ≥ 5)
+    issues = (_drift_issues(10, ["P1", "impact:ux-release-blocker"])
+              + _drift_issues(10, ["P1"]))
+    drift = github.label_drift(issues)
+    assert drift == {"impact:ux-release-blocker": 10}
+
+
+def test_label_drift_known_families_and_members_pass():
+    issues = _drift_issues(20, [
+        "P0", "impact:data-loss", "regression", "bug:crash", "stale",
+        "clawsweeper:brand-new-marker",       # whole family known
+        "issue-rating: 🐚 platinum hermit",   # rating family, any member fine
+        "channel: shiny-new-chat", "app: visionos", "platform: quantum",
+    ])
+    assert github.label_drift(issues) == {}
+
+
+def test_label_drift_thresholds():
+    # Below the share floor → quiet (3/30 = 10% < 15%)…
+    issues = _drift_issues(3, ["mystery:label"]) + _drift_issues(27, ["bug"])
+    assert github.label_drift(issues) == {}
+    # …below the absolute-count floor → quiet even at high share (3/10 = 30% but < 5)
+    issues = _drift_issues(3, ["mystery:label"]) + _drift_issues(7, ["bug"])
+    assert github.label_drift(issues) == {}
+    # empty scout → quiet
+    assert github.label_drift([]) == {}
+
+
+def test_label_drift_counts_an_issue_once_per_label():
+    # Duplicate label entries on one issue must not double-count.
+    issues = _drift_issues(6, ["mystery:label", "Mystery:Label"]) + _drift_issues(14, ["bug"])
+    assert github.label_drift(issues) == {"mystery:label": 6}
+
+
+# ── fetch_issues_by_number (ledger refresh) ──────────────────────────────────
+
+def test_fetch_issues_by_number_batches_one_call(monkeypatch):
+    calls = []
+    def fake_graphql(q, variables=None, timeout=30, tolerate=()):
+        calls.append((q, tolerate))
+        return {"repository": {
+            "i0": {"number": 7, "state": "OPEN"},
+            "i1": None,                        # deleted/transferred → null alias
+            "i2": {"number": 42, "state": "CLOSED"},
+        }}
+    monkeypatch.setattr(github, "gh_graphql", fake_graphql)
+    nodes = github.fetch_issues_by_number([42, 7, 7, 9])   # dedup + one call
+    assert len(calls) == 1
+    q, tolerate = calls[0]
+    assert "NOT_FOUND" in tolerate                          # partial data survives
+    for n in (7, 9, 42):
+        assert f"issue(number: {n})" in q
+    assert q.count("issue(number:") == 3                    # deduped
+    # null aliases dropped; caller sees the found nodes (state filtering is theirs)
+    assert sorted(n["number"] for n in nodes) == [7, 42]
+
+
+def test_fetch_issues_by_number_empty_and_unavailable(monkeypatch):
+    assert github.fetch_issues_by_number([]) == []
+    monkeypatch.setattr(github, "gh_graphql", lambda *a, **k: None)
+    assert github.fetch_issues_by_number([1, 2]) is None    # API down → no refresh

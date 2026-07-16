@@ -22,13 +22,9 @@ from openclaw_status.lib import _retry, sanitize, load_json, save_json, parallel
 #  API client
 # ═══════════════════════════════════════════════════════════════════════════
 
-_SEARCH_QUERY = """
-query($q: String!, $n: Int!) {
-  search(query: $q, type: ISSUE, first: $n) {
-    issueCount
-    nodes {
-      ... on Issue {
-        number title url state createdAt updatedAt
+# One Issue's fields — shared by the search sweep and the by-number ledger refresh so
+# both paths feed normalize_node identically.
+_ISSUE_FIELDS = """number title url state createdAt updatedAt
         author { login }
         comments { totalCount }
         reactions { totalCount }
@@ -39,20 +35,31 @@ query($q: String!, $n: Int!) {
         timelineItems(itemTypes: [LABELED_EVENT], last: 50) {
           nodes { ... on LabeledEvent { actor { __typename login } label { name } } }
         }
-        bodyText
+        bodyText"""
+
+_SEARCH_QUERY = """
+query($q: String!, $n: Int!) {
+  search(query: $q, type: ISSUE, first: $n) {
+    issueCount
+    nodes {
+      ... on Issue {
+        %s
       }
     }
   }
-}"""
+}""" % _ISSUE_FIELDS
 
 
 def has_token() -> bool:
     return bool(config.GITHUB_TOKEN)
 
 
-def gh_graphql(query: str, variables: dict = None, timeout: int = 30) -> dict | None:
+def gh_graphql(query: str, variables: dict = None, timeout: int = 30,
+               tolerate: tuple = ()) -> dict | None:
     """Run a GraphQL query against the GitHub API. Returns the `data` object, or
-    None if there's no token or the call fails."""
+    None if there's no token or the call fails. `tolerate` lists error types that
+    may accompany partial data without failing the call (e.g. "NOT_FOUND" when a
+    batched by-number lookup hits a deleted/transferred issue)."""
     if not config.GITHUB_TOKEN:
         return None
     payload = json.dumps({"query": query, "variables": variables or {}}).encode()
@@ -70,8 +77,9 @@ def gh_graphql(query: str, variables: dict = None, timeout: int = 30) -> dict | 
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read())
-        if data.get("errors"):
-            raise RuntimeError(str(data["errors"])[:200])
+        errors = data.get("errors") or []
+        if errors and not all(e.get("type") in tolerate for e in errors):
+            raise RuntimeError(str(errors)[:200])
         return data.get("data")
 
     try:
@@ -93,6 +101,31 @@ def search_issues(query_string: str, limit: int = 25, timeout: int = 30) -> list
         return None
     nodes = (data.get("search") or {}).get("nodes") or []
     return [n for n in nodes if n]  # drop nulls (non-Issue search hits)
+
+
+def fetch_issues_by_number(numbers, timeout: int = 45) -> list | None:
+    """Fetch specific issues by number in ONE batched GraphQL call (aliased
+    issue(number:) fields — same Issue fields as the search sweep).
+
+    This backs the ledger-refresh pass: the scout's searches are gated on
+    `created:>=release_date`, so a stored issue created before the release (or one
+    that slipped out of every search's top-N) would otherwise never be re-scouted —
+    its labels, provenance, engagement and body would freeze at their stored state.
+    Returns raw Issue nodes (missing/deleted numbers skipped), or None if the API is
+    unavailable — callers treat that as "no refresh this run", never as data.
+    """
+    nums = sorted({int(n) for n in (numbers or [])})
+    if not nums:
+        return []
+    aliases = "\n".join(
+        f"i{idx}: issue(number: {n}) {{ {_ISSUE_FIELDS} }}" for idx, n in enumerate(nums))
+    q = ('query { repository(owner: "%s", name: "%s") {\n%s\n} }'
+         % (config.REPO_OWNER, config.REPO_NAME, aliases))
+    data = gh_graphql(q, timeout=timeout, tolerate=("NOT_FOUND",))
+    if data is None:
+        return None
+    repo = data.get("repository") or {}
+    return [n for n in repo.values() if n]
 
 
 def _load_etag_cache() -> dict:
@@ -309,6 +342,51 @@ def _label_q(name: str) -> str:
 # scout drops them (a wished-for feature is no reason to skip an update).
 _FEATURE_LABELS = ("enhancement", "feature", "feature request", "proposal")
 _FEATURE_TITLE = ("[feature]", "feature request", "feat(", "[rfc]", "design proposal", "proposal:")
+
+# ── Label-drift tripwire ──────────────────────────────────────────────────────
+# The severity/category model interprets SPECIFIC label names, and the repo's
+# taxonomy evolves under it (e.g. "impact:ux-release-blocker" appeared months after
+# _SERIOUS_IMPACT was verified; the P labels quietly became bot-applied). The
+# tripwire flags any label the model doesn't know that starts trending on scouted
+# issues, so drift surfaces as a Discord ping instead of silently mis-scoring runs.
+#
+# "Known" comes in two shapes:
+#   • member-exact families — we interpret specific members (a NEW impact:* or
+#     bug:* name means new semantics we should look at), so only the members the
+#     model actually handles are known;
+#   • whole families — every member is handled uniformly or deliberately ignored
+#     (any channel:/app: label routes through the platform taxonomy generically;
+#     issue-rating:* is a quality rating, never severity; clawsweeper:* is the
+#     triage bot's own bookkeeping).
+_KNOWN_LABELS = frozenset(
+    {l.lower() for l in _PRIORITY}
+    | {l.lower() for l in _SERIOUS_IMPACT}
+    | {l.lower() for l in _FEATURE_LABELS}
+    | {"regression", "bug:crash", "bug", "stale",
+       # GitHub housekeeping defaults — carry no severity meaning.
+       "duplicate", "question", "documentation", "wontfix", "invalid",
+       "help wanted", "good first issue", "needs-triage", "upstream", "dependencies"}
+)
+_KNOWN_LABEL_FAMILIES = ("clawsweeper:", "issue-rating:", "channel:", "app:", "platform:")
+
+
+def label_drift(issues: list, min_share: float = None, min_count: int = None) -> dict:
+    """Unknown labels trending on this run's scouted issues: {label: count} for every
+    label the model doesn't recognize that appears on at least `min_share` of the
+    issues (and at least `min_count` of them — small scouts shouldn't ping on noise).
+    Pure and read-only; the collector decides whether/how to alert."""
+    if not issues:
+        return {}
+    min_share = config.LABEL_DRIFT_MIN_SHARE if min_share is None else min_share
+    min_count = config.LABEL_DRIFT_MIN_COUNT if min_count is None else min_count
+    counts = {}
+    for it in issues:
+        for l in set(str(l).lower().strip() for l in (it.get("labels") or [])):
+            if l in _KNOWN_LABELS or any(l.startswith(f) for f in _KNOWN_LABEL_FAMILIES):
+                continue
+            counts[l] = counts.get(l, 0) + 1
+    floor = max(min_count, min_share * len(issues))
+    return {l: c for l, c in sorted(counts.items(), key=lambda kv: -kv[1]) if c >= floor}
 
 
 def extract_closing_refs(body: str) -> set:

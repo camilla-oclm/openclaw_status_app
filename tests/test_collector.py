@@ -216,3 +216,99 @@ def test_fetch_clawsweeper_state_parses_readme_tables(monkeypatch):
     assert st["work_candidates"][0]["number"] == 10
     assert st["work_candidates"][0]["priority"] == "high"
     assert st["recently_closed"][0]["number"] == 11
+
+
+# ── label-drift alert wiring ─────────────────────────────────────────────────
+
+def _drift_scout(n_unknown, n_plain):
+    mk = lambda i, labels: {"number": i, "labels": labels}
+    return ([mk(i, ["P1", "impact:ux-release-blocker"]) for i in range(n_unknown)]
+            + [mk(100 + i, ["P1"]) for i in range(n_plain)])
+
+
+def test_label_drift_alert_pings_once_and_remembers(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LABEL_DRIFT_FILE", tmp_path / "label-drift.json")
+    sent = []
+    monkeypatch.setattr(collector, "notify", lambda text: sent.append(text) or True)
+    issues = _drift_scout(10, 10)
+    drift = collector._label_drift_alert(issues, "2026-07-16T00:00:00+00:00")
+    assert drift == {"impact:ux-release-blocker": 10}
+    assert len(sent) == 1 and "impact:ux-release-blocker" in sent[0]
+    # state remembers: same offender next run → no second ping
+    drift = collector._label_drift_alert(issues, "2026-07-16T01:00:00+00:00")
+    assert drift == {"impact:ux-release-blocker": 10}
+    assert len(sent) == 1
+    state = json.loads((tmp_path / "label-drift.json").read_text())
+    assert "impact:ux-release-blocker" in state
+
+
+def test_label_drift_alert_never_raises_into_collect(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LABEL_DRIFT_FILE", tmp_path / "label-drift.json")
+    monkeypatch.setattr(collector, "notify",
+                        lambda text: (_ for _ in ()).throw(RuntimeError("webhook down")))
+    # a broken webhook (or any internal error) must degrade to a stderr note, not a raise
+    assert collector._label_drift_alert(_drift_scout(10, 10), "2026-07-16T00:00:00+00:00") == {}
+
+
+# ── ledger refresh (stored issues the searches can't reach) ──────────────────
+
+def _refresh_node(number, state="OPEN", labels=("P0",), title="[Bug]: x"):
+    return {
+        "number": number, "title": title, "url": f"https://x/{number}",
+        "state": state, "createdAt": "2026-07-10T00:00:00Z",
+        "author": {"login": "a"}, "comments": {"totalCount": 0},
+        "reactions": {"totalCount": 0}, "thumbsUp": {"totalCount": 0},
+        "labels": {"nodes": [{"name": l} for l in labels]},
+        "assignees": {"totalCount": 0}, "milestone": None,
+        "timelineItems": {"nodes": [
+            {"label": {"name": labels[0]}, "actor": {"__typename": "Bot", "login": "clawsweeper"}}]},
+        "bodyText": "crashes on 2026.7.1",
+    }
+
+
+def _seed_ledger(tmp_path, monkeypatch, version, numbers):
+    from openclaw_status import ledger
+    monkeypatch.setattr(config, "ISSUE_LEDGER_FILE", tmp_path / "issue-ledger.json")
+    ledger.merge_version_issues(
+        version,
+        [{"number": n, "title": f"issue {n}", "severity": "critical", "category": "post_release",
+          "reactions": 0, "comments": 0, "affects_version": True, "impact": "low",
+          "labels": ["P0"], "fixed_in": []} for n in numbers],
+        release_date="2026-07-13")
+
+
+def test_refresh_ledger_issues_refetches_only_unseen(tmp_path, monkeypatch):
+    _seed_ledger(tmp_path, monkeypatch, "2026.7.1", [1, 2, 3])
+    asked = []
+    monkeypatch.setattr(collector.github, "fetch_issues_by_number",
+                        lambda nums, **k: (asked.extend(nums),
+                                           [_refresh_node(n) for n in nums])[1])
+    scouted = [{"number": 1, "labels": []}]
+    out = collector._refresh_ledger_issues("2026.7.1", scouted, "2026-07-13")
+    assert sorted(asked) == [2, 3]                       # only what the scout missed
+    nums = sorted(i["number"] for i in out)
+    assert nums == [1, 2, 3]
+    ref = next(i for i in out if i["number"] == 2)
+    assert ref["priority_provenance"] == "bot"           # provenance now reaches stored records
+    assert ref["severity"] == "high"                     # bot P0 discounted on the refresh path
+
+
+def test_refresh_ledger_issues_filters_and_fails_safe(tmp_path, monkeypatch):
+    _seed_ledger(tmp_path, monkeypatch, "2026.7.1", [2, 3, 4, 5])
+    monkeypatch.setattr(collector.github, "fetch_issues_by_number",
+                        lambda nums, **k: [
+                            _refresh_node(2, state="CLOSED"),
+                            _refresh_node(3, labels=("stale",)),
+                            _refresh_node(4, labels=("enhancement",), title="[Feature]: y"),
+                            _refresh_node(5),
+                        ])
+    out = collector._refresh_ledger_issues("2026.7.1", [], "2026-07-13")
+    assert [i["number"] for i in out] == [5]             # closed/stale/feature parity with scout
+    # API unavailable → nothing refreshed, nothing lost, no raise
+    monkeypatch.setattr(collector.github, "fetch_issues_by_number", lambda nums, **k: None)
+    assert collector._refresh_ledger_issues("2026.7.1", [], "2026-07-13") == []
+    # nothing missing → no call at all
+    monkeypatch.setattr(collector.github, "fetch_issues_by_number",
+                        lambda nums, **k: (_ for _ in ()).throw(AssertionError("must not call")))
+    scouted = [{"number": n} for n in (2, 3, 4, 5)]
+    assert collector._refresh_ledger_issues("2026.7.1", scouted, "2026-07-13") is scouted

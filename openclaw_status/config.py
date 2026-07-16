@@ -149,6 +149,15 @@ ISSUE_LEDGER_FILE = DATA_DIR / "issue-ledger.json"
 LEDGER_MAX_ISSUES_PER_VERSION = 60   # cap per version (keep the highest-ranked)
 LEDGER_KEEP_VERSIONS = 12            # prune the ledger to the most-recently-seen versions
 
+# Label-drift tripwire (observability only — never blocks a run or changes a verdict):
+# ping Discord once per unknown label that starts trending on scouted issues, so a
+# taxonomy shift in the watched repo (a new impact:* name, a new label family) surfaces
+# instead of silently mis-scoring severity. State file remembers what was already
+# alerted; delete an entry (or the file) to re-arm a label.
+LABEL_DRIFT_FILE = DATA_DIR / "label-drift.json"
+LABEL_DRIFT_MIN_SHARE = 0.15   # unknown label must sit on ≥15% of this run's scout…
+LABEL_DRIFT_MIN_COUNT = 5      # …and on at least this many issues (small-scout noise guard)
+
 # ── API endpoints ───────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
