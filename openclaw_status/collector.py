@@ -122,6 +122,22 @@ def fetch_npm_version() -> dict | None:
         return None
 
 
+def fetch_npm_downloads() -> int | None:
+    """Weekly download count — the DENOMINATOR for verdict calibration (an issue list
+    that always holds the 60 worst reports means nothing without install scale).
+    Fail-soft: None just omits the line from the calibration context; it never gates
+    the run and is deliberately NOT a source_status entry."""
+    url = f"https://api.npmjs.org/downloads/point/last-week/{config.NPM_PACKAGE}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "openclaw-status"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        return int(data.get("downloads") or 0) or None
+    except Exception as e:
+        print(f"  ⚠ npm downloads fetch failed: {e}", file=sys.stderr)
+        return None
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Clawsweeper-state (public repo README + per-issue records)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -457,6 +473,18 @@ def collect(output_path=None) -> dict:
     print(f"  📒 Ledger: {before} scouted → {len(issues)} accumulated "
           f"(+{len(ongoing_majors)} ongoing majors as context) for v{version or '?'}")
 
+    # ── Calibration inputs (deterministic; grounds the verdict in prevalence) ──
+    # A severity-seeking scout over a very large user base ALWAYS returns an alarming
+    # top-60 — without install scale and maintenance velocity the analyst has no way
+    # to tell "normal ambient churn" from "this release is actually worse". All
+    # fail-soft: a missing piece omits its context line, never gates the run.
+    prior = [v for v in ledger.load_ledger() if v != version]
+    calibration = {
+        "npm_weekly_downloads": fetch_npm_downloads(),
+        "closures": ledger.closure_stats(version),
+        "prior_versions": {v: ledger.closure_stats(v) for v in prior[-4:]},
+    }
+
     def _counts(items, key):
         counts = {}
         for item in items:
@@ -466,6 +494,7 @@ def collect(output_path=None) -> dict:
     raw = {
         "collected_at": now,
         "target_version": version,
+        "calibration": calibration,
         "sources": {
             "npm": npm,
             "latest_release": release,

@@ -155,6 +155,10 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None,
     entry = ledger.setdefault(version, {"first_seen": now, "issues": {}})
     prev_run = entry.get("last_seen")   # previous run's timestamp (None on the first run)
     store = entry["issues"]
+    # Closure memory: {issue number: state_reason} for every issue ever observed closed
+    # for this version. Survives the 60-cap (a relieved completed-closure that falls out
+    # of the store must still count toward maintenance velocity — see closure_stats).
+    closures = entry.setdefault("closures", {})
 
     for it in scouted:
         num = it.get("number")
@@ -167,14 +171,20 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None,
             # we simply didn't see this run are still left untouched below (an immutable
             # release doesn't lose an open issue just because a noisier search missed it).
             store.pop(key, None)
+            closures.pop(key, None)
             continue
         if github.closed_as_noise(it):
             # Upstream says it was never a real defect (not-planned / duplicate) — an
             # explicit maintainer verdict, not a search artifact, so the never-drop
             # principle doesn't shield it. Closed-as-COMPLETED stays (relief, not noise).
             store.pop(key, None)
+            closures[key] = it.get("state_reason") or "not_planned"
             continue
         store[key] = _lean(it, now, store.get(key))
+        if store[key].get("state") == "closed":
+            closures[key] = store[key].get("state_reason") or "completed"
+        else:
+            closures.pop(key, None)   # reopened — no longer a closure
 
     entry["last_seen"] = now
     _rederive_stored(store, release_date, version)   # self-correct the whole accumulated set
@@ -213,6 +223,21 @@ def _fixed_label(fixed_in):
     if any(t in joined for t in ("prerelease", "pre-release", "beta", "rc", "next")):
         return "next pre-release"
     return "this release"
+
+
+def closure_stats(version: str) -> dict:
+    """Maintenance-velocity numbers for the calibration context: how many issues we
+    ever tracked for `version` and how upstream resolved them. Reads the closure
+    memory (which survives the per-version cap) plus the live store."""
+    entry = load_ledger().get(version) or {}
+    closures = entry.get("closures") or {}
+    store = entry.get("issues") or {}
+    completed = sum(1 for r in closures.values() if (r or "completed") == "completed")
+    return {
+        "tracked_total": len(set(store) | set(closures)),
+        "closed_completed": completed,
+        "closed_noise": len(closures) - completed,
+    }
 
 
 def display_known_issues(accumulated: list) -> list:

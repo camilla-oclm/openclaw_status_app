@@ -1122,3 +1122,45 @@ def test_prompt_pins_tiered_weighting():
     assert "TIER-1 top blockers" in agent.SYSTEM_PROMPT
     # The validator must check the verdict rests on the top-ranked evidence.
     assert "TOP-RANKED EVIDENCE" in agent.VALIDATOR_PROMPT
+
+
+# ── calibration (prevalence-grounded verdicts) ───────────────────────────────
+
+def test_build_context_renders_calibration_block():
+    raw = _raw_with_n_issues(3)
+    for idx, it in enumerate(raw["sources"]["github_issues"]):
+        it["reactions"] = [12, 2, 0][idx]
+    raw["calibration"] = {
+        "npm_weekly_downloads": 1956582,
+        "closures": {"tracked_total": 91, "closed_completed": 28, "closed_noise": 3},
+        "prior_versions": {"2026.6.11": {"tracked_total": 60, "closed_completed": 41,
+                                         "closed_noise": 5}},
+    }
+    ctx = agent.build_context(raw)
+    assert "## Calibration" in ctx
+    assert "~1,956,582 npm downloads" in ctx
+    assert "14 total 👍" in ctx and "max 12" in ctx and "1 issue(s) with ≥10 👍" in ctx
+    assert "of 91 issues ever tracked, 28 already closed as completed" in ctx
+    assert "2026.6.11: 60 tracked / 41 fixed" in ctx
+    assert "the issue COUNT is not a between-release signal" in ctx
+
+
+def test_build_context_calibration_degrades_gracefully():
+    # No calibration dict at all (old raw-data, failed fetches): the engagement facts
+    # and the cap note still render — they come from the issue list itself.
+    ctx = agent.build_context(_raw_with_n_issues(3))
+    assert "## Calibration" in ctx
+    assert "npm downloads" not in ctx
+    assert "ever tracked" not in ctx
+    assert "total 👍" in ctx
+    assert "not a between-release signal" in ctx
+
+
+def test_prompts_pin_earned_hold_calibration():
+    # Rule 15: a ⏸️ must be earned by a concrete trigger, and the validator checks
+    # calibration in BOTH directions.
+    assert "a ⏸️ must be EARNED" in agent.SYSTEM_PROMPT
+    assert "## Calibration" in agent.SYSTEM_PROMPT
+    assert "does not block ✅" in agent.SYSTEM_PROMPT
+    assert "CHECK THE VERDICT IS CALIBRATED" in agent.VALIDATOR_PROMPT
+    assert "both directions are" in agent.VALIDATOR_PROMPT

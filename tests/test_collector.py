@@ -142,6 +142,7 @@ def _wire_collect(monkeypatch, tmp_path, *, npm, release):
     monkeypatch.setattr(config, "LEDGER_MAX_ISSUES_PER_VERSION", 60)
     monkeypatch.setattr(config, "LEDGER_KEEP_VERSIONS", 12)
     monkeypatch.setattr(collector, "fetch_npm_version", lambda: npm)
+    monkeypatch.setattr(collector, "fetch_npm_downloads", lambda: None)  # hermetic — no live HTTP
     monkeypatch.setattr(collector.github, "list_releases", lambda n=30: [release] if release else [])
     monkeypatch.setattr(collector.github, "latest_release", lambda: release)
     monkeypatch.setattr(collector.github, "latest_prerelease", lambda *a, **k: None)
@@ -315,3 +316,13 @@ def test_refresh_ledger_issues_filters_and_fails_safe(tmp_path, monkeypatch):
                         lambda nums, **k: (_ for _ in ()).throw(AssertionError("must not call")))
     scouted = [{"number": n} for n in (2, 3, 4, 5)]
     assert collector._refresh_ledger_issues("2026.7.1", scouted, "2026-07-13") is scouted
+
+
+def test_fetch_npm_downloads(monkeypatch):
+    monkeypatch.setattr(collector.urllib.request, "urlopen",
+                        lambda *a, **k: _NpmResp({"downloads": 1956582, "package": "openclaw"}))
+    assert collector.fetch_npm_downloads() == 1956582
+    def boom(*a, **k):
+        raise OSError("network down")
+    monkeypatch.setattr(collector.urllib.request, "urlopen", boom)
+    assert collector.fetch_npm_downloads() is None            # fail-soft, never gates

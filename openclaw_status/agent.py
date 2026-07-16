@@ -84,11 +84,17 @@ RULES:
 12. **`platforms` is REQUIRED on EVERY known issue** — never omit it. Use ONLY these tokens: windows, macos, linux, ios, android, web, discord, slack, telegram, whatsapp, other-channel — or the single token "all" for a cross-platform/core regression (build, memory, core engine, session/auth, deploy, etc.) that hits every surface. Map from the issue text/labels, e.g.: a Windows-only crash → ["windows"]; a Docker/self-hosted/containerized deploy bug → ["linux"]; an iOS or Android app bug → ["ios"] / ["android"] (a mobile-app issue is NOT macos/linux); a browser Web-UI bug → ["web"]; a Discord delivery bug → ["discord"]; a WhatsApp delivery bug → ["whatsapp"]; a bug in any other chat channel (Signal, Matrix, MSTeams, iMessage, SMS, …) → ["other-channel"]; a core memory/index/build regression → ["all"]. This MUST justify `platform_impact`: if you rate a surface medium/high, at least one known issue must list that surface (or "all"). Use [] only if the issue truly ties to no surface.
 13. **`components` is REQUIRED on EVERY known issue** — the OpenClaw subsystem(s) it touches (orthogonal to platforms). Use ONLY these tokens, 1–2 most relevant: gateway, models, memory, sessions, auth, channels, plugins, agents, tasks, tools, build. E.g.: a prompt-cache/model-fallback bug → ["models"]; a memory_search/index race → ["memory"]; a cron failure → ["tasks"]; a channel-delivery/message-loss bug → ["channels"]; a keyed-store/trust-gate issue → ["auth"]; a ClawHub/MCP/skill issue → ["plugins"]. Pick from the issue's real subject, not a guess.
 14. **`flip_conditions`** — 2-3 short, CONCRETE, checkable events that would change this verdict, each naming the direction it moves (e.g. "⏸️ eases to ⚠️ once a stable release ships the #12345 fix", "⚠️ hardens to ⏸️ if the #67890 data-loss report is confirmed on stable"). Ground each in cited evidence (issue numbers, the staged pre-release); cover both directions when the evidence allows. These are user-facing tripwires to watch between runs — no vague filler like "if more bugs appear".
+15. **Calibrate against prevalence, not raw counts — a ⏸️ must be EARNED.** The issue list is the output of a severity-seeking search over a very large user base; for a project this size it ALWAYS looks alarming, for every release. Treat the "## Calibration" block as ground truth for scale. ⏸️ requires at least ONE concrete trigger:
+   (a) a WIDESPREAD breaker — real community engagement (an issue with dozens+ of 👍 / a megathread), not just severity labels;
+   (b) a credible UNFIXED security / data-loss / auth-compromise issue confirmed for THIS version;
+   (c) a cluster of upgrade-path breakage (install/gateway fails after updating) with NO staged fixes;
+   (d) an issue profile clearly WORSE than this project's normal churn (compare the prior releases in Calibration).
+   Low-engagement crash reports — even P0-labeled — are normal ambient churn for a project with millions of weekly installs: on their own they justify ⚠️ ("update with precautions"), not ⏸️. State in the thesis which trigger earned a ⏸️. This calibrates the BAR — it never excuses ignoring a genuine trigger (rules 6-9 still apply).
 
 RECOMMENDATION GUIDELINES:
-- ✅ Update now: critical fix or high-value feature, no risky bugs, no open regressions
-- ⚠️ Update with precautions: valuable changes but risky bugs exist; back up first
-- ⏸️ Skip this version: risky bugs present (or no significant value) — skip the current release. A fix staged only in a pre-release does NOT lift this to "update": stay ⏸️ (or ⚠️) and note the staged fix + its pre-release tag so users know relief is near.
+- ✅ Update now: no rule-15 trigger open for this version and the profile is at or below this project's normal churn. Ambient low-engagement bug reports exist for EVERY release of a project this size — their mere existence does not block ✅.
+- ⚠️ Update with precautions: real but CONTAINED risk — a low-prevalence breakage cluster, serious bugs with staged fixes, or a profile mildly above normal churn; back up first. This is the honest default for a normal release of a busy project.
+- ⏸️ Skip this version: an EARNED hold — cite the rule-15 trigger (widespread breaker / unfixed security-or-data-loss / unpatched upgrade-path breakage cluster / clearly worse than baseline). A fix staged only in a pre-release does NOT lift this to "update": stay ⏸️ (or ⚠️) and note the staged fix + its pre-release tag so users know relief is near.
 
 OUTPUT FORMAT: Return ONLY valid JSON. No markdown code fences, no commentary outside the JSON.
 
@@ -124,6 +130,16 @@ YOUR TASK:
   thesis/evidence rests mainly on tier-2/3 or ongoing-major items while a tier-1
   blocker goes unaddressed, or if it counts a pile of low-weight issues as equivalent
   to a top blocker.
+- CHECK THE VERDICT IS CALIBRATED — the "## Calibration" block in the raw data
+  (install base, engagement totals, upstream closure velocity, prior-release
+  baseline) is deterministic ground truth. A ⏸️ must be EARNED by a concrete
+  trigger: a widespread breaker with real engagement, an unfixed
+  security/data-loss issue confirmed for this version, an unpatched upgrade-path
+  breakage cluster, or a profile clearly worse than the prior-release baseline.
+  Flag an unearned ⏸️ that rests on low-engagement severity-labeled reports (the
+  scout ALWAYS returns 60 alarming-looking issues for a project this size) exactly
+  as you would flag a ✅ that ignores a genuine trigger — both directions are
+  calibration errors.
 
 STANCE:
 - Your default is skeptical scrutiny, NOT agreement. Do not rubber-stamp the analyst's
@@ -251,6 +267,44 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
     # one-liners that must not flip the verdict by volume. Only the top-N by rank are
     # fed at all (raw-data.json keeps the full set), bounding prompt + output size.
     if issues:
+        # ── Calibration: deterministic prevalence/velocity facts. The issue list below
+        # is the output of a severity-SEEKING search capped at the 60 worst reports —
+        # without scale context it reads as catastrophic for every release of a large
+        # project. Computed here, never model opinion.
+        cal = raw.get("calibration") or {}
+        cal_lines = ["\n## Calibration (computed, deterministic — ground the verdict "
+                     "in prevalence, not raw counts)"]
+        dl = cal.get("npm_weekly_downloads")
+        if dl:
+            cal_lines.append(f"- Install base: ~{dl:,} npm downloads in the last 7 days.")
+        thumbs = [int(i.get("reactions") or 0) for i in issues]
+        cal_lines.append(
+            f"- Engagement across the {len(issues)} tracked issues: {sum(thumbs)} total 👍, "
+            f"max {max(thumbs) if thumbs else 0} on any single issue, "
+            f"{sum(1 for t in thumbs if t >= 10)} issue(s) with ≥10 👍. A genuinely "
+            "widespread breaker draws dozens-to-hundreds of reactions within days; "
+            "near-zero engagement on every report indicates a low blast radius.")
+        cs = cal.get("closures") or {}
+        if cs.get("tracked_total"):
+            cal_lines.append(
+                f"- Upstream maintenance velocity for this release: of {cs['tracked_total']} "
+                f"issues ever tracked, {cs.get('closed_completed', 0)} already closed as "
+                f"completed (fix merged) and {cs.get('closed_noise', 0)} closed as "
+                "not-planned/duplicate.")
+        prior = cal.get("prior_versions") or {}
+        prior_bits = [f"{v}: {s.get('tracked_total', 0)} tracked / "
+                      f"{s.get('closed_completed', 0)} fixed"
+                      for v, s in prior.items() if isinstance(s, dict)]
+        if prior_bits:
+            cal_lines.append("- Prior releases tracked (same pipeline): "
+                             + "; ".join(prior_bits) + ".")
+        cal_lines.append(
+            "- NOTE: the tracker deliberately hunts the WORST open reports (guaranteed "
+            "severity-label searches) and caps at 60 per release — the cap saturates for "
+            "every recent release, so the issue COUNT is not a between-release signal. "
+            "Judge by composition, prevalence (engagement vs install base) and velocity.")
+        parts.append("\n".join(cal_lines))
+
         relevant = sum(1 for i in issues if i.get("affects_version"))
         exact = sum(1 for i in issues if i.get("version_match") == "exact")
         prerel = sum(1 for i in issues if i.get("version_match") == "prerelease")

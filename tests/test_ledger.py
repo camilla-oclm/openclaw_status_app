@@ -253,3 +253,38 @@ def test_closed_issue_handling(led):
         release_date="2026-07-13")
     two = next(i for i in out if i["number"] == 2)
     assert two["state"] == "open" and two["weight"] == three["weight"]
+
+
+def test_closure_memory_and_stats(led):
+    # Completed and noise closures are remembered; reopen clears the memory.
+    ledger.merge_version_issues(
+        "2026.7.1",
+        [_issue(1, labels=["P0"], state="closed", state_reason="completed"),
+         _issue(2, labels=["P0"], state="closed", state_reason="duplicate"),
+         _issue(3, labels=["P0"])],
+        release_date="2026-07-13")
+    stats = ledger.closure_stats("2026.7.1")
+    assert stats == {"tracked_total": 3, "closed_completed": 1, "closed_noise": 1}
+    # reopened → closure entry removed
+    ledger.merge_version_issues(
+        "2026.7.1", [_issue(1, labels=["P0"], state="open")], release_date="2026-07-13")
+    assert ledger.closure_stats("2026.7.1")["closed_completed"] == 0
+    # unknown version → zeros, no raise
+    assert ledger.closure_stats("nope") == {"tracked_total": 0, "closed_completed": 0,
+                                            "closed_noise": 0}
+
+
+def test_closure_memory_survives_the_cap(led, monkeypatch):
+    # A completed closure whose relief pushes it out of the capped store must still
+    # count toward maintenance velocity — that's the whole point of the memory.
+    monkeypatch.setattr(config, "LEDGER_MAX_ISSUES_PER_VERSION", 2)
+    ledger.merge_version_issues(
+        "2026.7.1",
+        [_issue(1, labels=["P0"], state="closed", state_reason="completed", reactions=0),
+         _issue(2, labels=["P0"], reactions=5),
+         _issue(3, labels=["P0"], reactions=9)],
+        release_date="2026-07-13")
+    raw = json.loads(config.ISSUE_LEDGER_FILE.read_text())
+    assert set(raw["2026.7.1"]["issues"]) == {"2", "3"}      # capped out the relieved one
+    stats = ledger.closure_stats("2026.7.1")
+    assert stats == {"tracked_total": 3, "closed_completed": 1, "closed_noise": 0}
