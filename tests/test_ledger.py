@@ -175,6 +175,30 @@ def test_weight_and_version_match_persist_and_rederive(led):
     assert disp[0]["version_match"] == "exact"
 
 
+def test_priority_provenance_persists_and_keeps_bot_p0_discounted(led):
+    # A bot-triaged P0 stays "high" (not critical) across runs: the stored provenance
+    # feeds _rederive_stored's severity recomputation even when the issue isn't
+    # re-scouted; display exposes the field for the page/API.
+    out = ledger.merge_version_issues(
+        "2026.6.11",
+        [_issue(1, labels=["P0"], priority_provenance="bot")],
+        release_date="2026-06-30")
+    one = next(i for i in out if i["number"] == 1)
+    assert one["priority_provenance"] == "bot"
+    assert one["severity"] == "high"          # notched — not critical
+    disp = ledger.display_known_issues(out)
+    assert disp[0]["priority_provenance"] == "bot"
+    # …and a later run that does NOT re-scout it still re-derives the same discount.
+    out2 = ledger.merge_version_issues("2026.6.11", [], release_date="2026-06-30")
+    one2 = next(i for i in out2 if i["number"] == 1)
+    assert one2["severity"] == "high"
+    # A pre-migration record (no provenance stored) trusts the label — fail-closed.
+    out3 = ledger.merge_version_issues(
+        "2026.6.11", [_issue(2, labels=["P0"])], release_date="2026-06-30")
+    two = next(i for i in out3 if i["number"] == 2)
+    assert two["severity"] == "critical"
+
+
 def test_ledger_migrates_missing_version_match(led):
     # A record stored before the field existed self-heals from its stored text.
     ledger.merge_version_issues(

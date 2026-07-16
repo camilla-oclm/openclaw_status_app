@@ -223,6 +223,55 @@ def test_derive_severity_from_reactions_when_no_priority():
     assert github.derive_severity(["impact:other"], 0, 0) == "low"
 
 
+def test_derive_severity_discounts_uncorroborated_bot_priority():
+    # The triage bot hands out P0/P1 by the hundreds — a bot-only P label is worth
+    # one level less, while human or corroborated labels keep full strength.
+    assert github.derive_severity(["P0"], 0, 0, p_provenance="bot") == "high"
+    assert github.derive_severity(["P1"], 0, 0, p_provenance="bot") == "medium"
+    assert github.derive_severity(["P0"], 0, 0, p_provenance="human") == "critical"
+    assert github.derive_severity(["P0"], 0, 0, p_provenance="bot-corroborated") == "critical"
+    # Unknown provenance (timeline window exceeded / pre-migration record) trusts
+    # the label — fail-closed toward severity.
+    assert github.derive_severity(["P0"], 0, 0, p_provenance="unknown") == "critical"
+    assert github.derive_severity(["P0"], 0, 0) == "critical"
+
+
+def test_derive_severity_bot_notch_floors_at_engagement():
+    # A loud community independently corroborates: the notched base never falls
+    # below what engagement alone would justify.
+    assert github.derive_severity(["P1"], 12, 0, p_provenance="bot") == "high"
+    assert github.derive_severity(["P1"], 4, 0, p_provenance="bot") == "medium"
+    # Breakage bumps still apply on top of the notched base.
+    assert github.derive_severity(["P0", "regression"], 0, 0, p_provenance="bot") == "critical"
+    assert github.derive_severity(["P1", "impact:message-loss"], 0, 0, p_provenance="bot") == "high"
+
+
+def test_priority_provenance():
+    tl = lambda nodes: {"timelineItems": {"nodes": nodes}}
+    ev = lambda label, typename, login: {
+        "label": {"name": label}, "actor": {"__typename": typename, "login": login}}
+    # no P label at all → None (field doesn't apply)
+    assert github.priority_provenance(["bug"], tl([])) is None
+    # human-applied → full trust
+    assert github.priority_provenance(
+        ["P0"], tl([ev("P0", "User", "maintainer")])) == "human"
+    # bot-applied, no human signal → "bot"
+    assert github.priority_provenance(
+        ["P0"], tl([ev("P0", "Bot", "clawsweeper")])) == "bot"
+    # bot-applied but a human took it on (assignee / milestone) → corroborated
+    node = tl([ev("P0", "Bot", "clawsweeper")])
+    assert github.priority_provenance(["P0"], dict(node, assignees={"totalCount": 1})) == "bot-corroborated"
+    assert github.priority_provenance(["P0"], dict(node, milestone={"title": "v2"})) == "bot-corroborated"
+    # escalation: the LAST application of the EFFECTIVE (highest) P label decides —
+    # a human P1 doesn't vouch for the bot's later P0
+    assert github.priority_provenance(
+        ["P0", "P1"], tl([ev("P1", "User", "maintainer"), ev("P0", "Bot", "clawsweeper")])) == "bot"
+    # label event outside the fetched window (or actor gone) → unknown, trusted
+    assert github.priority_provenance(["P0"], tl([])) == "unknown"
+    assert github.priority_provenance(
+        ["P0"], tl([{"label": {"name": "P0"}, "actor": None}])) == "unknown"
+
+
 # ── categorize ───────────────────────────────────────────────────────────────
 
 def test_categorize_diamond():

@@ -765,6 +765,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             # within a severity × category bucket.
             "version_match": issue.get("version_match") or raw_i.get("version_match"),
             "weight": issue.get("weight", raw_i.get("weight")),
+            # Who stands behind the P label (human / bot / bot-corroborated / unknown /
+            # null) — lets API consumers tell human-triaged severity from a bot guess.
+            "priority_provenance": issue.get("priority_provenance", raw_i.get("priority_provenance")),
             "platforms": plats,
             "components": comps,
             # How the platform/component tags were assigned (analyst | derived | untagged).

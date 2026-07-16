@@ -34,6 +34,11 @@ query($q: String!, $n: Int!) {
         reactions { totalCount }
         thumbsUp: reactions(content: THUMBS_UP) { totalCount }
         labels(first: 20) { nodes { name } }
+        assignees(first: 1) { totalCount }
+        milestone { title }
+        timelineItems(itemTypes: [LABELED_EVENT], last: 50) {
+          nodes { ... on LabeledEvent { actor { __typename login } label { name } } }
+        }
         bodyText
       }
     }
@@ -398,22 +403,73 @@ def impact_level(thumbs_up: int, comments: int) -> str:
     return "low"
 
 
-def derive_severity(labels, thumbs_up: int = 0, comments: int = 0) -> str:
+def priority_provenance(labels, node: dict) -> str | None:
+    """Who stands behind the issue's effective (highest-ranked) P label.
+
+    The repo's P0..P4 labels stopped being a scarce maintainer signal: the triage bot
+    (clawsweeper) now auto-assigns them, and it hands out P0/P1 liberally (hundreds of
+    open P1s). The severity model still keys off the P label, but needs to know whether
+    a human is behind it:
+      "human"            — a person applied (or last re-applied) the label
+      "bot"              — a bot applied it and no human triage signal exists
+      "bot-corroborated" — a bot applied it, but a human has engaged (assignee or
+                           milestone — both human acts of taking the issue on)
+      "unknown"          — the labeled event is outside the fetched timeline window
+                           (or the actor is gone); treated as trusted, fail-closed
+      None               — no P label at all
+    """
+    low = [str(l).lower() for l in (labels or [])]
+    present = [l for l in low if l in _PRIORITY]
+    if not present:
+        return None
+    effective = max(present, key=lambda l: _PRIORITY[l])
+    actor_type = actor_login = None
+    for ev in ((node.get("timelineItems") or {}).get("nodes")) or []:
+        if not ev:
+            continue
+        if ((ev.get("label") or {}).get("name") or "").lower() == effective:
+            actor = ev.get("actor") or {}
+            # chronological order — keep overwriting so the LAST application wins
+            # (a missing/deleted actor overwrites back to None → "unknown")
+            actor_type = actor.get("__typename") or None
+            actor_login = (actor.get("login") or "").lower()
+    if not actor_type:
+        return "unknown"
+    if actor_type != "Bot" and not actor_login.endswith("[bot]"):
+        return "human"
+    human_touch = bool((node.get("assignees") or {}).get("totalCount")) or bool(node.get("milestone"))
+    return "bot-corroborated" if human_touch else "bot"
+
+
+def derive_severity(labels, thumbs_up: int = 0, comments: int = 0,
+                    p_provenance: str | None = None) -> str:
     """Severity from the maintainer priority label (P0..P4) when present, else
     community impact, bumped one level for serious harm (security / data-loss /
-    crash-loop / message-loss / session-state) or a regression/crash label."""
+    crash-loop / message-loss / session-state) or a regression/crash label.
+
+    A P label the triage bot applied WITHOUT any human corroboration
+    (`p_provenance == "bot"`, see priority_provenance) is worth one level less —
+    the bot's priority calls are uncalibrated (it hands out P0/P1 by the hundreds).
+    Community engagement independently corroborates, so the notched base never
+    falls below what engagement alone would justify. Provenance "unknown" (or a
+    record from before the field existed) trusts the label — fail-closed."""
     low = [str(l).lower() for l in (labels or [])]
     thumbs_up, comments = int(thumbs_up or 0), int(comments or 0)
+
+    if thumbs_up >= 10 or comments >= 25:
+        eng_base = 2
+    elif thumbs_up >= 3 or comments >= 8:
+        eng_base = 1
+    else:
+        eng_base = 0
 
     ranks = [_PRIORITY[l] for l in low if l in _PRIORITY]
     if ranks:
         base = max(ranks)
-    elif thumbs_up >= 10 or comments >= 25:
-        base = 2
-    elif thumbs_up >= 3 or comments >= 8:
-        base = 1
+        if p_provenance == "bot":
+            base = max(base - 1, eng_base, 0)
     else:
-        base = 0
+        base = eng_base
 
     # Breakage labels (regression/crash/data-loss) bump one level toward critical.
     # A serious harm area (security/data/message-loss/…) only floors at "high"
@@ -457,6 +513,7 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
     vm = version_match(title + " " + body, version)
     affects = vm != "none"
     impact = impact_level(thumbs, comments)
+    p_prov = priority_provenance(labels, node)
     # (Vestigial fields dropped 2026-07: snippet / comments_data / platform:"general" /
     # is_feature / total_reactions had no readers anywhere — features are filtered out
     # in scout_issues before storage, and the taxonomy uses per-issue platforms/components.)
@@ -472,10 +529,11 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
         "labels": labels,
         "author": (node.get("author") or {}).get("login", ""),
         "priority": priority_of(labels),
+        "priority_provenance": p_prov,
         "affects_version": affects,
         "version_match": vm,
         "impact": impact,
-        "severity": derive_severity(labels, thumbs, comments),
+        "severity": derive_severity(labels, thumbs, comments, p_prov),
         "category": categorize(created, labels, affects, impact, release_date, title),
         "source": "github_api",
     }

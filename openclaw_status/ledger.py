@@ -85,6 +85,11 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         # _rederive_stored from the stored text as a one-time approximation.
         "version_match": it.get("version_match") or prev.get("version_match"),
         "impact": it.get("impact") or prev.get("impact"),
+        # Who stands behind the P label (human/bot/bot-corroborated/unknown) — scout-wins
+        # like the other label-derived inputs; _rederive_stored feeds it back into
+        # derive_severity so a bot-triaged P0 stays discounted across runs. Absent on
+        # pre-migration records → None → derive_severity trusts the label (fail-closed).
+        "priority_provenance": it.get("priority_provenance") or prev.get("priority_provenance"),
         "severity": it.get("severity") or prev.get("severity") or "medium",
         "category": it.get("category") or prev.get("category") or "active",
         "fixed_in": _merge_fixed(prev.get("fixed_in"), it.get("fixed_in")),
@@ -106,7 +111,8 @@ def _rederive_stored(store: dict, release_date: str, version: str = "") -> None:
         rec = store[key]
         labels = rec.get("labels") or []
         rec["severity"] = github.derive_severity(
-            labels, rec.get("reactions", 0), rec.get("comments", 0))
+            labels, rec.get("reactions", 0), rec.get("comments", 0),
+            rec.get("priority_provenance"))
         rec["category"] = github.categorize(
             rec.get("created_at", ""), labels, bool(rec.get("affects_version")),
             rec.get("impact") or "low", release_date, rec.get("title", ""))
@@ -214,6 +220,9 @@ def display_known_issues(accumulated: list) -> list:
             "affects_version": bool(it.get("affects_version")),
             "version_match": it.get("version_match") or ("series" if it.get("affects_version") else "none"),
             "weight": int(it.get("weight") or github.importance_weight(it)),
+            # Disclosed so the page/API can tell a human-triaged P0 from a bot guess
+            # (severity already reflects the discount — see github.derive_severity).
+            "priority_provenance": it.get("priority_provenance"),
             "first_seen": it.get("first_seen"),
             "is_new": bool(it.get("is_new")),
         })
