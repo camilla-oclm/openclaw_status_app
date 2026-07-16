@@ -8,6 +8,8 @@
 // Verifies the conservative invariants: softens by at most one notch, never harsher than the
 // global verdict, never ⏸️→✅, fresh never softens, no-stack never softens, and a version-
 // confirmed high/critical blocker that hits the stack (or is cross-cutting "all") blocks softening.
+// Plus the earned-blocker evidence gates: a bot-labeled no-traction HIGH never blocks; pinning
+// EVERY stack via "all" needs impact "high"; absent evidence fields always fail closed (pin).
 
 const path = require("path");
 const fs = require("fs");
@@ -101,6 +103,46 @@ const CASES = [
   ["⏸️ that same no-platform blocker pins a picker who selected its component",
    D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: [], components: ["auth"] })]),
    ["auth"], "⏸️"],
+  // ── earned-blocker evidence gates (Phase C) ──────────────────────────────────
+  // Gate 1 (severity trust): a bot-labeled HIGH with no community traction never blocks...
+  ["a bot-labeled low-traction HIGH on the stack does NOT block softening",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["linux"],
+                           priority_provenance: "bot", impact: "low" })]),
+   ["linux"], "⚠️"],
+  // ...but corroboration or traction restores the pin, and absent fields fail closed.
+  ["that HIGH pins when a human corroborated its priority",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["linux"],
+                           priority_provenance: "bot-corroborated", impact: "low" })]),
+   ["linux"], "⏸️"],
+  ["that HIGH pins on community traction (impact medium)",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["linux"],
+                           priority_provenance: "bot", impact: "medium" })]),
+   ["linux"], "⏸️"],
+  ["a HIGH without a provenance field pins (fail-closed legacy payload)",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["linux"],
+                           impact: "low" })]),
+   ["linux"], "⏸️"],
+  ["a bot-labeled low-traction CRITICAL still pins the stack it explicitly touches",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["linux"],
+                           priority_provenance: "bot", impact: "low" })]),
+   ["linux"], "⏸️"],
+  // Gate 2 (breadth): "all" without megathread-class engagement pins explicit tags only.
+  ["a low-traction 'all' critical does NOT pin an unrelated platform stack",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"],
+                           components: ["gateway"], priority_provenance: "bot", impact: "low" })]),
+   ["discord"], "⚠️"],
+  ["that same 'all' critical DOES pin a picker who selected its component",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"],
+                           components: ["gateway"], priority_provenance: "bot", impact: "low" })]),
+   ["gateway"], "⏸️"],
+  ["an 'all' issue with megathread traction (impact high) pins every stack",
+   D("⏸️", false, [issue({ severity: "high", affects_version: true, platforms: ["all"],
+                           priority_provenance: "bot", impact: "high" })]),
+   ["discord"], "⏸️"],
+  ["a zero-tag low-traction critical pins nobody (evidence fields present and weak)",
+   D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"],
+                           components: [], priority_provenance: "bot", impact: "low" })]),
+   ["windows"], "⚠️"],
 ];
 
 (async () => {
@@ -150,6 +192,14 @@ const CASES = [
     ["cross-cutting 'all' blocker pins EVERY component to global",
      D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"], components: ["build"] })]),
      [], ["gateway"], "⏸️"],
+    ["a low-traction 'all' critical pins its OWN component row",
+     D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"],
+                             components: ["build"], priority_provenance: "bot", impact: "low" })]),
+     [], ["build"], "⏸️"],
+    ["that same low-traction 'all' critical lets an unrelated component row soften",
+     D("⏸️", false, [issue({ severity: "critical", affects_version: true, platforms: ["all"],
+                             components: ["build"], priority_provenance: "bot", impact: "low" })]),
+     [], ["gateway"], "⚠️"],
     ["fresh release never softens a component",
      D("⏸️", true, []), [], ["gateway"], "⏸️"],
     ["global ✅ can't soften below ✅",

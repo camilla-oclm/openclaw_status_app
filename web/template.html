@@ -1353,27 +1353,66 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // ── per-setup verdict ───────────────────────────────────────────────────────
   // A CONSERVATIVE, fail-closed refinement of the global verdict for the user's stack:
   // it softens the global verdict by AT MOST one step, and ONLY when no BLOCKING issue
-  // touches them. A blocker = a high/critical issue that is confirmed for THIS version
-  // (affects_version) — or that hits every install ("all") — and that lands on a picked
-  // platform/channel/component (or is cross-cutting). Fresh releases never soften (the
-  // data is still arriving); the result is never harsher than the global verdict. Shared
-  // by the panel + the hero CTA so they can't disagree. latest.json/badge/RSS/SSR keep
-  // the canonical GLOBAL verdict — this refinement is page-only and device-local.
+  // touches them. Fresh releases never soften (the data is still arriving); the result
+  // is never harsher than the global verdict. Shared by the panel + the hero CTA so
+  // they can't disagree. latest.json/badge/RSS/SSR keep the canonical GLOBAL verdict —
+  // this refinement is page-only and device-local.
+  //
+  // What counts as a BLOCKER is calibrated (the client twin of the analyst's "a hold
+  // must be earned" rule): the repo's P labels are bot-applied at scale and the
+  // severity-seeking ledger saturates its cap with version-confirmed highs, so
+  // "high + version-confirmed" alone stopped discriminating — it pinned every stack on
+  // every mature release. Two independent evidence gates, each failing CLOSED when its
+  // field is absent (payloads predating the fields keep the old, stricter behavior):
+  //   1. severity trust — a HIGH blocks only when a human stands behind its priority
+  //      (priority_provenance other than "bot") or the community does (impact bucket
+  //      above "low"). CRITICALS always block what they demonstrably touch.
+  //   2. breadth — pinning EVERY stack (platforms "all", or the no-platform guard
+  //      class) must be earned by megathread-class engagement (impact "high"): server-
+  //      side, "all" usually records "no platform signal found", not "confirmed
+  //      everywhere". Without that, the issue pins only through its explicit tags.
   var VERDICT_ORDER = ["✅","⚠️","⏸️"];   // increasing caution
+  // Evidence-quality gates. Both fail CLOSED on absent fields.
+  function humanBacked(i){                       // someone besides the triage bot stands behind it
+    var p = i.priority_provenance;
+    if (p == null || p === "") return true;      // field absent (pre-2026-07 payload) → trust it
+    return String(p).toLowerCase() !== "bot";    // human / bot-corroborated / unknown all count
+  }
+  function impactAtLeast(i, lvl){                // community-engagement bucket check
+    var imp = i.impact;
+    if (imp == null || imp === "") return true;  // field absent → trust it (fail closed)
+    imp = String(imp).toLowerCase();
+    return lvl === "high" ? imp === "high" : imp !== "low";
+  }
+  // Like hitsKeys, but only EXPLICIT tags match — the cross-cutting "all" token doesn't.
+  function hitsExplicit(i, plats, comps){
+    var ps = issuePlatforms(i), cs = issueComponents(i);
+    for (var j=0;j<plats.length;j++){ if (ps.indexOf(plats[j]) >= 0) return true; }
+    for (var m=0;m<comps.length;m++){ if (cs.indexOf(comps[m]) >= 0) return true; }
+    return false;
+  }
   // Blocking issues for an arbitrary platform/component key set: high/critical AND
-  // version-confirmed (or fresh) AND landing on the keys or cross-cutting ("all").
+  // version-confirmed (or fresh) AND evidenced (gates above) AND landing on the keys.
   function blockersFor(plats, comps){
     var fresh = !!(DATA.freshness && DATA.freshness.fresh);
     return (DATA.known_issues || []).filter(function(i){
       var s = String(i.severity||"low").toLowerCase();
       if (s !== "high" && s !== "critical") return false;
       if (!i.affects_version && !fresh) return false;        // only version-confirmed counts
-      if (issuePlatforms(i).indexOf("all") >= 0) return true; // cross-cutting → hits everyone
-      // Fail-closed (mirrors the server's untagged->'all' guard): a version-confirmed blocker
-      // we could NOT classify to ANY platform must never "spare" a platform-only picker. If
-      // the user picked platforms but the issue resolves to no platform at all, count it.
-      // Component-only pickers (plats empty) are unaffected — they still match via hitsKeys.
-      if (plats.length && issuePlatforms(i).length === 0) return true;
+      // Gate 1 — severity trust: a bot-labeled HIGH with no community traction is the
+      // noise class the capped ledger saturates with; it never blocks.
+      if (s === "high" && !humanBacked(i) && !impactAtLeast(i, "medium")) return false;
+      // Cross-cutting = tagged "all", or the fail-closed no-platform guard class (a
+      // version-confirmed blocker with no platform must never "spare" a platform-only
+      // picker on classification failure alone — component-only pickers still match
+      // via hitsKeys/hitsExplicit below).
+      var ps = issuePlatforms(i);
+      var crossCut = ps.indexOf("all") >= 0 || (plats.length && ps.length === 0);
+      if (crossCut){
+        // Gate 2 — breadth: earned → hits everyone; not earned → explicit tags only.
+        if (impactAtLeast(i, "high")) return true;
+        return hitsExplicit(i, plats, comps);
+      }
       return hitsKeys(i, plats, comps);
     });
   }
@@ -2197,7 +2236,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     entries.forEach(function(e){
       var v = VERDICTS[e.kv.rec] || {label:String(e.kv.rec||"")};
       var why = e.kv.blockers.length
-        ? e.kv.blockers.length+" blocking issue"+(e.kv.blockers.length===1?"":"s")+" (version-confirmed high/critical, or cross-cutting) land"+(e.kv.blockers.length===1?"s":"")+" here — the global verdict applies squarely."
+        ? e.kv.blockers.length+" blocking issue"+(e.kv.blockers.length===1?"":"s")+" (version-confirmed high/critical with corroboration or community traction) land"+(e.kv.blockers.length===1?"s":"")+" here — the global verdict applies squarely."
         : (e.kv.softened
            ? "No blocking issue is confirmed to land here, so the global verdict eases one notch for this subsystem."
            : "Matches the global verdict.");
@@ -2639,9 +2678,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
            + "version-specific reports are still arriving, so we can't clear your setup yet. "
            + "Back up before updating.";
     } else if (svd.softened){
-      head = "Lower risk for your stack — none of this release's blocking issues are confirmed "
-           + "to hit what you run. The global “"+gv.label+"” verdict is driven by issues outside "
-           + "your setup, so for you it eases to “"+sv.label+".” Back up before updating anyway.";
+      head = "Lower risk for your stack — no corroborated blocking issue is confirmed to hit "
+           + "what you run. The global “"+gv.label+"” verdict is driven by issues outside your "
+           + "setup (or by reports without corroborating traction yet), so for you it eases to "
+           + "“"+sv.label+".” Back up before updating anyway.";
     } else if (svd.blockers.length){
       head = "The “"+gv.label+"” verdict applies squarely to you — "
            + svd.blockers.length+" blocking "+(svd.blockers.length===1?"issue":"issues")
@@ -2693,7 +2733,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       list.appendChild(el("div",{"class":"prow prow-all"},[
         el("span",{"class":"ppn"}, [icon("globe",13), "All platforms & channels"]),
         el("span",{"class":"pbadge imp-"+ccLvl}, (IMPACT[ccLvl]||IMPACT.none).label+" · "+crossCutting.length),
-        el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "core issues that hit every OS and channel"+(ccAffV?(" ("+ccAffV+" affect v"+(DATA.version||"")+")"):"")+" — ")].concat(issueLinks(crossCutting, 5)))
+        el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "cross-cutting reports not tied to one OS or channel"+(ccAffV?(" ("+ccAffV+" affect v"+(DATA.version||"")+")"):"")+" — ")].concat(issueLinks(crossCutting, 5)))
       ]));
     }
 

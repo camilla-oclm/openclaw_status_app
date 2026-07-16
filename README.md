@@ -196,8 +196,10 @@ guard** refuses to publish a low-confidence or invalid assessment, and an **HTML
 validates the page before it overwrites the previous one. The page leads with the decision
 (verdict — with the second model's review expandable right under it, key-metric tiles,
 **Your setup** — a conservative *per-setup verdict* that softens the global one by at most one
-step when no version-confirmed blocking issue hits your stack — reasoning, and the verdict's
-*flip conditions*) and groups the supporting detail — a per-component verdict line + Impact
+step when no credible version-confirmed blocking issue hits your stack; what counts as a blocker
+is evidence-calibrated (a bot-labeled report with no community traction never pins, and a report
+pins *every* stack only with megathread-class engagement — both gates fail closed when the
+evidence fields are absent) — reasoning, and the verdict's *flip conditions*) and groups the supporting detail — a per-component verdict line + Impact
 meters, changelog, Trends charts, the verdict *track record* and past verdicts — behind tabs,
 with the filterable Known-issues list below. A just-dropped release (published within
 `config.FRESH_RELEASE_DAYS` of the run) leads with a **fresh-release notice** and tempers the
