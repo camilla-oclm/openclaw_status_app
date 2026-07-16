@@ -337,22 +337,37 @@ def is_diamond(labels) -> bool:
     return any("diamond lobster" in str(l).lower() for l in (labels or []))
 
 
+# Pre-release suffix on a version mention ("2026.6.11-beta.2", "-rc1"). The trailing
+# (?![a-z]) lets "beta.2"/"rc1"/"rc" through but keeps unrelated hyphenations exact
+# ("2026.6.11-preinstalled" is a prose hyphen, not a build tag).
+_PRERELEASE_SUFFIX = r"-(?:alpha|beta|rc|preview|pre|dev|nightly)(?![a-z])"
+
+
 def version_match(text: str, version: str) -> str:
     """How specifically `text` pins the assessed version: "exact" (names this exact
-    version), "series" (names only its minor series, e.g. 2026.6), or "none".
+    version), "prerelease" (names only a pre-release build of it, e.g.
+    "2026.6.11-beta.2"), "series" (names only its minor series, e.g. 2026.6), or
+    "none".
 
     The distinction matters for weighting: on a mature series nearly EVERY open issue
     mentions the series somewhere, so a series match barely discriminates — while an
-    issue that names this exact release is direct confirmation it applies.
+    issue that names this exact release is direct confirmation it applies. A
+    pre-release build sits between the two: the repo runs a beta program whose issue
+    template embeds the tester's build string, so every beta-cycle report mentions
+    "X-beta.N" — evidence the bug existed during the beta, not proof it shipped in
+    the stable (it may have been fixed before the cut).
     """
     if not version:
         return "none"
     t = (text or "").lower()
     v = version.lower()
     # Exact: the full version as a number-token ("2026.6.11"/"v2026.6.11"), not a
-    # prefix of a longer version ("2026.6.11-beta.1" still counts — same version).
-    if re.search(r"(?<!\d)" + re.escape(v) + r"(?!\.?\d)", t) is not None:
+    # prefix of a longer version ("2026.6.110") and not a pre-release build tag
+    # ("2026.6.11-beta.1" is the beta cycle — its own tier below).
+    if re.search(r"(?<!\d)" + re.escape(v) + r"(?!\.?\d)(?!" + _PRERELEASE_SUFFIX + r")", t) is not None:
         return "exact"
+    if re.search(r"(?<!\d)" + re.escape(v) + _PRERELEASE_SUFFIX, t) is not None:
+        return "prerelease"
     parts = v.split(".")
     if len(parts) >= 2:
         series = ".".join(parts[:2])
@@ -470,7 +485,9 @@ _SEV_WEIGHT = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
 # importance_weight point tables. Severity anchors the scale; version specificity is
 # the next-strongest signal (an issue naming THIS exact release is direct confirmation;
-# a bare series mention barely discriminates — on a mature series almost every open
+# a pre-release-build mention is weaker — the beta-tester template embeds those strings
+# and a beta bug may have been fixed before the stable cut — but still beats a bare
+# series mention, which barely discriminates: on a mature series almost every open
 # issue carries one); a CONFIRMED regression outweighs a plain post-release report; a
 # shipped/staged fix is relief, not a current blocker. Community engagement is
 # deliberately NOT part of the weight: it breaks ties WITHIN a weight (rank_key), so a
@@ -478,7 +495,7 @@ _SEV_WEIGHT = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 # invariants (a version-relevant high above an off-version critical however loud; a
 # version-relevant low still below a genuine critical).
 _W_SEV = {"critical": 40, "high": 26, "medium": 14, "low": 5}
-_W_VER = {"exact": 26, "series": 16, "none": 0}
+_W_VER = {"exact": 26, "prerelease": 20, "series": 16, "none": 0}
 _W_CAT = {"regression": 12, "post_release": 6, "diamond_lobster": 4, "active": 0}
 
 

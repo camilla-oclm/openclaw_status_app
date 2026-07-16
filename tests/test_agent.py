@@ -1097,6 +1097,25 @@ def test_build_context_reads_issues_in_tiers(monkeypatch):
     assert "high" in tier3_line and "76" in tier3_line and "series" in tier3_line
 
 
+def test_build_context_flags_prerelease_mentions(monkeypatch):
+    # A beta-cycle report is presented as such — not as naming the stable exactly —
+    # and the header counts it separately so volume can't masquerade as confirmation.
+    monkeypatch.setattr(config, "MAX_ISSUES_IN_CONTEXT", 30)
+    monkeypatch.setattr(config, "CONTEXT_TIER_TOP", 2)
+    monkeypatch.setattr(config, "CONTEXT_TIER_MID", 2)
+    raw = _raw_with_n_issues(6)
+    for idx, it in enumerate(raw["sources"]["github_issues"]):
+        it.update(weight=80 - idx,
+                  version_match="prerelease" if idx < 5 else "exact",
+                  body="body text " * 60,
+                  url=f"https://x/{it['number']}")
+    ctx = agent.build_context(raw)
+    assert "5 name only its pre-release builds" in ctx
+    assert "names only a PRE-RELEASE build" in ctx          # tier-1 full-detail flag
+    tier3_line = next((l for l in ctx.splitlines() if l.lstrip().startswith("- #5")), "")
+    assert "prerelease" in tier3_line                        # tier-3 compact marker
+
+
 def test_prompt_pins_tiered_weighting():
     # Rule 9: the analyst must weigh by rank/tier, not treat issues equally.
     assert "do NOT treat them as equal evidence" in agent.SYSTEM_PROMPT

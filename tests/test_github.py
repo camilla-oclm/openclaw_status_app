@@ -579,12 +579,33 @@ def test_version_match_levels():
     assert github.version_relevant("nothing relevant", v) is False
 
 
+def test_version_match_prerelease_tier():
+    # The repo's beta program auto-embeds build strings in the issue template, so a
+    # beta-cycle report must NOT count as naming the stable release "exactly".
+    v = "2026.7.1"
+    assert github.version_match("crashes on 2026.7.1-beta.6", v) == "prerelease"
+    assert github.version_match("from v2026.7.1-beta.2 to v2026.7.1-beta.5+", v) == "prerelease"
+    assert github.version_match("repro on 2026.7.1-rc1", v) == "prerelease"
+    assert github.version_match("nightly build 2026.7.1-rc", v) == "prerelease"
+    # A bare stable mention anywhere wins over the beta mentions around it.
+    assert github.version_match("upgraded 2026.7.1-beta.2 -> 2026.7.1, still broken", v) == "exact"
+    # A prose hyphen after the version is NOT a build tag.
+    assert github.version_match("the 2026.7.1-preinstalled image works", v) == "exact"
+    assert github.version_match("the 2026.7.1-related refactor", v) == "exact"
+    # A beta of a DIFFERENT patch is only a series mention, same as before.
+    assert github.version_match("seen on 2026.7.2-beta.1", v) == "series"
+    # Pre-release mentions still make the issue version-relevant (admission + the
+    # client's conservative blocker logic both key off affects_version).
+    assert github.version_relevant("crashes on 2026.7.1-beta.6", v) is True
+
+
 def test_importance_weight_discriminates_within_a_severity():
     base = {"severity": "high", "category": "post_release", "reactions": 3, "comments": 2}
     exact = github.importance_weight(dict(base, version_match="exact"))
+    prerel = github.importance_weight(dict(base, version_match="prerelease"))
     series = github.importance_weight(dict(base, version_match="series"))
     none = github.importance_weight(dict(base, version_match="none"))
-    assert exact > series > none                     # version specificity separates equals
+    assert exact > prerel > series > none            # version specificity separates equals
     regr = github.importance_weight(dict(base, version_match="series", category="regression"))
     assert regr > series                             # confirmed regression outranks post-release
     fixed = github.importance_weight(dict(base, version_match="series", fixed_in=["v9.9"]))

@@ -253,12 +253,14 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
     if issues:
         relevant = sum(1 for i in issues if i.get("affects_version"))
         exact = sum(1 for i in issues if i.get("version_match") == "exact")
+        prerel = sum(1 for i in issues if i.get("version_match") == "prerelease")
         shown = issues[:config.MAX_ISSUES_IN_CONTEXT]
         n_top = max(1, min(config.CONTEXT_TIER_TOP, len(shown)))
         n_mid = max(0, min(config.CONTEXT_TIER_MID, len(shown) - n_top))
         top, mid, tail = shown[:n_top], shown[n_top:n_top + n_mid], shown[n_top + n_mid:]
+        pre_note = f", {prerel} name only its pre-release builds" if prerel else ""
         header = (f"\n## Open Issues ({len(issues)} total, {relevant} reference this version, "
-                  f"{exact} name it exactly)\n")
+                  f"{exact} name it exactly{pre_note})\n")
         if len(shown) < len(issues):
             header += (
                 f"Showing the top {len(shown)} by rank; the remaining "
@@ -283,6 +285,9 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
             vm = i.get("version_match") or ("series" if i.get("affects_version") else "none")
             if vm == "exact":
                 return f"NAMES THIS EXACT VERSION ({version})"
+            if vm == "prerelease":
+                return (f"names only a PRE-RELEASE build of {version} "
+                        "(beta-cycle report — may have been fixed before the stable cut)")
             if vm == "series" or i.get("affects_version"):
                 return "mentions this release series"
             return ""
@@ -335,6 +340,8 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
                 vmv = i.get("version_match")
                 if vmv == "exact":
                     vm_short = ", exact"
+                elif vmv == "prerelease":
+                    vm_short = ", prerelease"
                 elif vmv == "series" or (vmv is None and i.get("affects_version")):
                     vm_short = ", series"
                 parts.append(
