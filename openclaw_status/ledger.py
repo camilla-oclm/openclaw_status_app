@@ -90,6 +90,13 @@ def _lean(it: dict, now: str, prev: dict | None) -> dict:
         # derive_severity so a bot-triaged P0 stays discounted across runs. Absent on
         # pre-migration records → None → derive_severity trusts the label (fail-closed).
         "priority_provenance": it.get("priority_provenance") or prev.get("priority_provenance"),
+        # Upstream state (scout-wins): searches only return open issues, so "closed"
+        # can only arrive via the by-number refresh — and a reopened issue heals back
+        # to open the next time any path returns it. Closed-as-completed records stay
+        # in the ledger as relief (weight discount); noise closures never reach _lean
+        # (dropped at admission).
+        "state": it.get("state") or prev.get("state") or "open",
+        "state_reason": it.get("state_reason") if "state_reason" in it else prev.get("state_reason"),
         "severity": it.get("severity") or prev.get("severity") or "medium",
         "category": it.get("category") or prev.get("category") or "active",
         "fixed_in": _merge_fixed(prev.get("fixed_in"), it.get("fixed_in")),
@@ -127,8 +134,8 @@ def _rederive_stored(store: dict, release_date: str, version: str = "") -> None:
                 vm = "series"
             rec["version_match"] = vm
         rec["weight"] = github.importance_weight(rec)
-        if not is_version_relevant(rec):
-            del store[key]   # no longer affects this release and isn't a regression
+        if not is_version_relevant(rec) or github.closed_as_noise(rec):
+            del store[key]   # irrelevant to this release, or upstream-closed as not-a-defect
 
 
 def merge_version_issues(version: str, scouted: list, now: str | None = None,
@@ -159,6 +166,12 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None,
             # mention a tightened match no longer counts) — drop the stale entry. Issues
             # we simply didn't see this run are still left untouched below (an immutable
             # release doesn't lose an open issue just because a noisier search missed it).
+            store.pop(key, None)
+            continue
+        if github.closed_as_noise(it):
+            # Upstream says it was never a real defect (not-planned / duplicate) — an
+            # explicit maintainer verdict, not a search artifact, so the never-drop
+            # principle doesn't shield it. Closed-as-COMPLETED stays (relief, not noise).
             store.pop(key, None)
             continue
         store[key] = _lean(it, now, store.get(key))
@@ -223,6 +236,9 @@ def display_known_issues(accumulated: list) -> list:
             # Disclosed so the page/API can tell a human-triaged P0 from a bot guess
             # (severity already reflects the discount — see github.derive_severity).
             "priority_provenance": it.get("priority_provenance"),
+            # "open" or "closed" (only closed-as-COMPLETED is retained — the page badges
+            # it "fix merged upstream"; noise closures are dropped at merge time).
+            "state": it.get("state", "open"),
             "first_seen": it.get("first_seen"),
             "is_new": bool(it.get("is_new")),
         })

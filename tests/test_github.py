@@ -750,3 +750,33 @@ def test_fetch_issues_by_number_empty_and_unavailable(monkeypatch):
     assert github.fetch_issues_by_number([]) == []
     monkeypatch.setattr(github, "gh_graphql", lambda *a, **k: None)
     assert github.fetch_issues_by_number([1, 2]) is None    # API down → no refresh
+
+
+# ── closed-state handling ────────────────────────────────────────────────────
+
+def test_normalize_node_captures_state_and_reason():
+    n = github.normalize_node(_node(state="CLOSED", stateReason="COMPLETED"),
+                              release_date="2026-06-03", version="2026.6.1")
+    assert n["state"] == "closed" and n["state_reason"] == "completed"
+    # search-path nodes (always open, no reason requested historically) default clean
+    n = github.normalize_node(_node(), release_date="2026-06-03", version="2026.6.1")
+    assert n["state"] == "open" and n["state_reason"] is None
+
+
+def test_closed_as_noise_only_for_not_planned_and_duplicate():
+    assert github.closed_as_noise({"state": "closed", "state_reason": "not_planned"}) is True
+    assert github.closed_as_noise({"state": "closed", "state_reason": "duplicate"}) is True
+    assert github.closed_as_noise({"state": "closed", "state_reason": "completed"}) is False
+    assert github.closed_as_noise({"state": "closed", "state_reason": None}) is False
+    assert github.closed_as_noise({"state": "open", "state_reason": "not_planned"}) is False
+    assert github.closed_as_noise({}) is False
+
+
+def test_importance_weight_closed_relief_applies_once():
+    base = {"severity": "critical", "category": "post_release", "version_match": "exact"}
+    open_w = github.importance_weight(dict(base))
+    closed_w = github.importance_weight(dict(base, state="closed"))
+    fixed_w = github.importance_weight(dict(base, fixed_in=["v9.9"]))
+    both_w = github.importance_weight(dict(base, state="closed", fixed_in=["v9.9"]))
+    assert closed_w == open_w - 25 == fixed_w
+    assert both_w == closed_w                # relief never stacks

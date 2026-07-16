@@ -303,7 +303,10 @@ def test_refresh_ledger_issues_filters_and_fails_safe(tmp_path, monkeypatch):
                             _refresh_node(5),
                         ])
     out = collector._refresh_ledger_issues("2026.7.1", [], "2026-07-13")
-    assert [i["number"] for i in out] == [5]             # closed/stale/feature parity with scout
+    # stale/feature parity with the scout; CLOSED flows through so the ledger can
+    # learn the closure (relief or drop happens at merge time)
+    assert [i["number"] for i in out] == [2, 5]
+    assert next(i for i in out if i["number"] == 2)["state"] == "closed"
     # API unavailable → nothing refreshed, nothing lost, no raise
     monkeypatch.setattr(collector.github, "fetch_issues_by_number", lambda nums, **k: None)
     assert collector._refresh_ledger_issues("2026.7.1", [], "2026-07-13") == []

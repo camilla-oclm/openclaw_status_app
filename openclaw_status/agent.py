@@ -300,6 +300,9 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
                 flags.append(vf)
             if i.get("fixed_in"):
                 flags.append(f"fixed_in={','.join(i['fixed_in'])}")
+            if str(i.get("state") or "").lower() == "closed":
+                flags.append("CLOSED upstream — fix merged for a future release "
+                             "(still present in this one; relief, not a current blocker)")
             if i.get("priority_provenance") == "bot":
                 flags.append("P-label applied by the triage bot, no human corroboration "
                              "— severity above already discounts it one level")

@@ -221,3 +221,35 @@ def test_ledger_orders_by_importance_weight(led):
         _issue(3, version_match="exact", labels=["regression"]),
     ], release_date="2026-06-30")
     assert [i["number"] for i in out] == [3, 2, 1]   # regression+exact > exact > series
+
+
+def test_closed_issue_handling(led):
+    from openclaw_status import github
+    # not-planned / duplicate closures are dropped at admission…
+    out = ledger.merge_version_issues(
+        "2026.7.1",
+        [_issue(1, labels=["P0"], state="closed", state_reason="duplicate"),
+         _issue(2, labels=["P0"], state="closed", state_reason="completed"),
+         _issue(3, labels=["P0"])],
+        release_date="2026-07-13")
+    nums = sorted(i["number"] for i in out)
+    assert nums == [2, 3]
+    # …completed-closed stays, discounted, state persisted + displayed
+    two = next(i for i in out if i["number"] == 2)
+    three = next(i for i in out if i["number"] == 3)
+    assert two["state"] == "closed" and two["state_reason"] == "completed"
+    assert two["weight"] == three["weight"] - 25
+    disp = ledger.display_known_issues(out)
+    assert {d["number"]: d["state"] for d in disp} == {2: "closed", 3: "open"}
+    # a stored record later re-learned as a noise closure is dropped on re-derive
+    # (e.g. the refresh returned it this run with the new reason)
+    out = ledger.merge_version_issues(
+        "2026.7.1", [_issue(3, labels=["P0"], state="closed", state_reason="not_planned")],
+        release_date="2026-07-13")
+    assert sorted(i["number"] for i in out) == [2]
+    # a reopened issue heals back to open via scout-wins
+    out = ledger.merge_version_issues(
+        "2026.7.1", [_issue(2, labels=["P0"], state="open", state_reason=None)],
+        release_date="2026-07-13")
+    two = next(i for i in out if i["number"] == 2)
+    assert two["state"] == "open" and two["weight"] == three["weight"]

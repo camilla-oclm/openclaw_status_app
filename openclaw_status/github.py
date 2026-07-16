@@ -24,7 +24,7 @@ from openclaw_status.lib import _retry, sanitize, load_json, save_json, parallel
 
 # One Issue's fields — shared by the search sweep and the by-number ledger refresh so
 # both paths feed normalize_node identically.
-_ISSUE_FIELDS = """number title url state createdAt updatedAt
+_ISSUE_FIELDS = """number title url state stateReason createdAt updatedAt
         author { login }
         comments { totalCount }
         reactions { totalCount }
@@ -608,6 +608,10 @@ def normalize_node(node: dict, release_date: str = "", version: str = "") -> dic
         "author": (node.get("author") or {}).get("login", ""),
         "priority": priority_of(labels),
         "priority_provenance": p_prov,
+        # Search-path nodes are always open (the queries say is:open); the ledger
+        # refresh also returns closed ones, so downstream can tell relief from noise.
+        "state": (node.get("state") or "OPEN").lower(),
+        "state_reason": (node.get("stateReason") or "").lower() or None,
         "affects_version": affects,
         "version_match": vm,
         "impact": impact,
@@ -653,9 +657,24 @@ def importance_weight(issue: dict) -> int:
     cs = issue.get("clawsweeper")
     if isinstance(cs, dict) and cs.get("decision") == "keep_open":
         pts += 4  # expert triage confirms it's real and unresolved
-    if issue.get("fixed_in"):
-        pts -= 25  # staged/shipped fix: surface as relief, don't let it drive the verdict
+    # Relief (applied once, not stacked): a staged/shipped fix OR an upstream
+    # closed-as-completed — either way the fix exists but is almost certainly NOT in
+    # this release, so the issue stays visible (and still blocks per-setup) but must
+    # not drive the verdict.
+    if issue.get("fixed_in") or str(issue.get("state") or "").lower() == "closed":
+        pts -= 25
     return max(0, min(100, pts))
+
+
+def closed_as_noise(issue: dict) -> bool:
+    """True when upstream closed the issue as NOT a real defect of this release
+    (not-planned / duplicate) — an explicit maintainer verdict, not a search artifact,
+    so the ledger's never-drop principle doesn't shield it (duplicates double-count).
+    A closed-as-COMPLETED issue is NOT noise: the fix is merged but not in this
+    release — it stays, discounted (see importance_weight)."""
+    if str(issue.get("state") or "").lower() != "closed":
+        return False
+    return str(issue.get("state_reason") or "").lower() in ("not_planned", "duplicate")
 
 
 def rank_key(issue: dict):

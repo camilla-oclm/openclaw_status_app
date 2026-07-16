@@ -1867,6 +1867,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     if (i.fixed_in){
       tags.push(el("span",{"class":"tag t-good"}, "✓ fixed in "+i.fixed_in));
+    } else if (String(i.state||"").toLowerCase()==="closed"){
+      tags.push(el("span",{"class":"tag t-good", title:"Upstream closed this as completed — the fix is merged for a future release but almost certainly NOT in this one."}, "✓ fix merged upstream"));
     } else if (i.category==="regression" || i.category==="post_release"){
       tags.push(el("span",{"class":"tag t-bad"}, "● unfixed"));
     }

@@ -43,13 +43,15 @@ def _refresh_ledger_issues(version: str, issues: list, release_date: str) -> lis
         return issues
     refreshed = []
     for node in nodes:
-        if (node.get("state") or "").upper() != "OPEN":
-            continue   # parity with the is:open searches — closed issues keep stored state
+        # Closed issues flow through too — the ledger needs to LEARN they closed
+        # (completed → relief discount; not-planned/duplicate → dropped at merge).
         labels = [l.get("name", "") for l in (node.get("labels") or {}).get("nodes", [])]
         if "stale" in labels or github.is_feature(node.get("title", ""), labels):
             continue
         refreshed.append(github.normalize_node(node, release_date, version))
-    print(f"  ♻️  Ledger refresh: {len(refreshed)}/{len(missing)} stored issues re-fetched")
+    closed = sum(1 for r in refreshed if r.get("state") == "closed")
+    print(f"  ♻️  Ledger refresh: {len(refreshed)}/{len(missing)} stored issues re-fetched"
+          f" ({closed} closed upstream)")
     return issues + refreshed
 
 
@@ -446,7 +448,8 @@ def collect(output_path=None) -> dict:
     # this version and aren't post-release regressions. The ledger doesn't track them
     # (we focus on the current release), but they're handed to the analyst as context.
     ongoing_majors = sorted(
-        (i for i in issues if not ledger.is_version_relevant(i)),
+        (i for i in issues
+         if not ledger.is_version_relevant(i) and i.get("state") != "closed"),
         key=github.rank_key,
     )[:12]
     issues = ledger.merge_version_issues(

@@ -768,6 +768,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             # Who stands behind the P label (human / bot / bot-corroborated / unknown /
             # null) — lets API consumers tell human-triaged severity from a bot guess.
             "priority_provenance": issue.get("priority_provenance", raw_i.get("priority_provenance")),
+            # "open" or "closed" (closed = fix merged upstream but almost certainly not
+            # in THIS release — kept as discounted relief; noise closures never get here).
+            "state": issue.get("state", raw_i.get("state", "open")),
             "platforms": plats,
             "components": comps,
             # How the platform/component tags were assigned (analyst | derived | untagged).
@@ -1118,6 +1121,8 @@ def _md_issue_line(i: dict) -> str:
     cat = (i.get("category") or "").strip()
     if i.get("fixed_in"):
         status = f"fixed in {i['fixed_in']}"
+    elif str(i.get("state") or "").lower() == "closed":
+        status = "fix merged upstream"
     elif cat == "regression":
         status = "unfixed"
     else:

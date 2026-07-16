@@ -1233,3 +1233,13 @@ def test_llms_txt_offers_report_a_problem(tmp_path, monkeypatch):
     txt = (tmp_path / "llms.txt").read_text()
     assert f"{config.APP_REPO_URL}/issues/new" in txt
     assert "Report a problem" in txt
+
+
+def test_md_issue_line_shows_upstream_closure():
+    line = render._md_issue_line({"number": 7, "severity": "high", "category": "post_release",
+                                  "state": "closed", "title": "gateway crash"})
+    assert "fix merged upstream" in line
+    # fixed_in (a released/staged fix) outranks the generic closed status
+    line = render._md_issue_line({"number": 7, "severity": "high", "category": "post_release",
+                                  "state": "closed", "fixed_in": "v2", "title": "gateway crash"})
+    assert "fixed in v2" in line
