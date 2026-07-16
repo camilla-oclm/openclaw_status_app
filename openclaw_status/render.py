@@ -830,6 +830,14 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         # count pins at the cap while the composition churns). Display surfaces render the
         # count as "60+" so a saturated window doesn't read as "nothing new".
         "issues_capped": len(known_issues) >= config.LEDGER_MAX_ISSUES_PER_VERSION,
+        # Prevalence/velocity context (collect-time, deterministic): install base +
+        # how much of what we ever tracked upstream already fixed. Lets the page frame
+        # the severity-seeking top-60 honestly. Absent fields → the page omits the line.
+        "calibration": {
+            "npm_weekly_downloads": ((raw or {}).get("calibration") or {}).get("npm_weekly_downloads"),
+            "tracked_total": (((raw or {}).get("calibration") or {}).get("closures") or {}).get("tracked_total"),
+            "closed_completed": (((raw or {}).get("calibration") or {}).get("closures") or {}).get("closed_completed"),
+        },
         "changes": a.get("changes", {"breaking": [], "fixes": [], "features": []}),
         # Concrete, checkable events that would move the verdict (analyst-stated, evidence-
         # cited) — the page's "what would change this verdict" tripwires. Absent on
@@ -1163,6 +1171,15 @@ def _llms_txt(data: dict) -> str:
     ]
     if data.get("headline"):
         L.append(f"- Summary: {data['headline'].strip()}")
+    cal = data.get("calibration") or {}
+    cal_bits = []
+    if cal.get("npm_weekly_downloads"):
+        cal_bits.append(f"~{cal['npm_weekly_downloads']:,} npm downloads last week")
+    if cal.get("tracked_total") and cal.get("closed_completed") is not None:
+        cal_bits.append(f"{cal['closed_completed']} of {cal['tracked_total']} issues ever "
+                        "tracked for this release already fixed upstream")
+    if cal_bits:
+        L.append(f"- Context: {'; '.join(cal_bits)}.")
     fr = data.get("freshness") or {}
     if fr.get("fresh"):
         spec = fr.get("version_specific_issues") or 0

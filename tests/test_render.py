@@ -1243,3 +1243,26 @@ def test_md_issue_line_shows_upstream_closure():
     line = render._md_issue_line({"number": 7, "severity": "high", "category": "post_release",
                                   "state": "closed", "fixed_in": "v2", "title": "gateway crash"})
     assert "fixed in v2" in line
+
+
+def test_calibration_threads_to_page_data_and_llms():
+    raw = {"calibration": {"npm_weekly_downloads": 1956582,
+                           "closures": {"tracked_total": 91, "closed_completed": 31,
+                                        "closed_noise": 4}}}
+    # threading: page/latest.json payload carries the three page-relevant numbers
+    a = {"assessment": {"recommendation": "⚠️", "confidence": "high", "headline": "h",
+                        "thesis": "t" * 120, "known_issues": [],
+                        "evidence": {"for_updating": [], "against_updating": [], "neutral": []},
+                        "sentiment_summary": "s"}}
+    data = render._build_assessment_data(a, raw)
+    assert data["calibration"] == {"npm_weekly_downloads": 1956582,
+                                   "tracked_total": 91, "closed_completed": 31}
+    # llms.txt renders the context line from the same payload
+    txt = render._llms_txt(data)
+    assert "- Context: ~1,956,582 npm downloads last week; 31 of 91 issues ever tracked " \
+           "for this release already fixed upstream." in txt
+    # degraded: no calibration in raw → nulls in payload, NO context line
+    data2 = render._build_assessment_data(a, {})
+    assert data2["calibration"] == {"npm_weekly_downloads": None,
+                                    "tracked_total": None, "closed_completed": None}
+    assert "- Context:" not in render._llms_txt(data2)

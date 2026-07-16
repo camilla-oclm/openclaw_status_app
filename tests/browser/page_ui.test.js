@@ -342,6 +342,20 @@ const DATA = {
     !!capped.tile && capped.tile.v === "4+" && capped.secCount === "4+" &&
     /All \(4\)/.test(capped.allTab || ""));
   delete DATA.issues_capped;
+
+  // Calibration note: prevalence + upstream-velocity line under the issues head when the
+  // payload carries calibration; absent payload → no node at all (old assessments).
+  DATA.calibration = { npm_weekly_downloads: 1956582, tracked_total: 91, closed_completed: 31 };
+  await page.goto(base + "/", { waitUntil: "networkidle0" });
+  const calNote = await page.evaluate(
+    () => (document.querySelector("#issues .cal-note") || {}).textContent || "");
+  t("calibration note shows install base + upstream fix velocity",
+    calNote.includes("~2.0M weekly npm installs") &&
+    calNote.includes("31 of 91 issues ever tracked for this release already fixed upstream"));
+  delete DATA.calibration;
+  await page.goto(base + "/", { waitUntil: "networkidle0" });
+  const noCal = await page.evaluate(() => document.querySelector("#issues .cal-note"));
+  t("calibration note absent when the payload has no calibration", noCal === null);
   server.close();
 
   t("no page errors", errs.length === 0);

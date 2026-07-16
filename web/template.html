@@ -313,6 +313,7 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .sec-title{font-family:var(--display); font-size:var(--fs-lg); font-weight:700; letter-spacing:-.02em; text-wrap:balance}
 .sec-count{font-family:var(--mono); --p-fg:var(--accent); --p-fw:700; --p-pad:.1rem .5rem; --p-bg:var(--card); --p-bd:var(--border2)}
 .sec-note{font-size:var(--fs-xs); color:var(--muted); margin-left:auto; font-weight:500}
+.cal-note{font-size:var(--fs-xs); color:var(--faint); margin:-.2rem 0 var(--sp-4)}
 
 /* permalinks: anchorable section headers + deep-link target highlight */
 .sec-head{position:relative}
@@ -1944,6 +1945,18 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     s.appendChild(sectionHead("Known issues", ki.length+(DATA.issues_capped?"+":""),
       (newCount ? ("🆕 "+newCount+" new since last run · ") : "")
       +(DATA.issues_capped ? "highest-ranked · " : "")+"critical first"));
+    // Prevalence/velocity context: the list above is the severity-seeking top-N of a very
+    // large install base — say so, and show how fast upstream resolves what we track.
+    var cal = DATA.calibration || {};
+    var calBits = [];
+    if (cal.npm_weekly_downloads){
+      var dl = cal.npm_weekly_downloads;
+      calBits.push("tracked against ~"+(dl>=1e6 ? (dl/1e6).toFixed(1)+"M" : dl.toLocaleString())+" weekly npm installs");
+    }
+    if (cal.tracked_total && cal.closed_completed != null){
+      calBits.push(cal.closed_completed+" of "+cal.tracked_total+" issues ever tracked for this release already fixed upstream");
+    }
+    if (calBits.length) s.appendChild(el("p",{"class":"cal-note"}, calBits.join(" · ")));
 
     var cats = {};
     ki.forEach(function(i){ if(i.category) cats[i.category]=(cats[i.category]||0)+1; });
