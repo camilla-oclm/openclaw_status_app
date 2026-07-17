@@ -121,7 +121,10 @@ Each issue is then scored from the repo's real labels:
 - **Severity** comes from the maintainer **priority labels** `P0…P4`, bumped one level for
   a breakage label (`regression`/`crash`/`data-loss`) and floored at *high* for a serious
   harm area (`impact:security` / `data-loss` / `crash-loop` / `message-loss` /
-  `session-state` / `auth-provider`).
+  `session-state` / `auth-provider`). Because the repo's triage bot now hands out P labels
+  at scale, a **bot-applied** priority counts one level lower unless a human stands behind
+  it (tracked as `priority_provenance`) — and never below what community engagement alone
+  would justify.
   *(The `issue-rating: 🦞 diamond lobster` label is a quality rating — it appears on feature
   requests too — so it is **not** treated as a severity.)*
 - **Impact** = a bucket from 👍 reactions + comment volume.
@@ -137,7 +140,11 @@ assessed version **exactly** outweighs one that merely mentions its minor series
 mature series nearly every open issue name-drops the series, so a bare series mention
 barely discriminates) — then confirmed-regression status and triage signals (Clawsweeper's
 keep-open verdict bumps an issue; a staged fix sharply demotes it — relief on the way, not
-a current blocker). Community engagement (👍 + comments) breaks ties *within* a weight but
+a current blocker). Upstream closures are learned the same way: an issue closed as
+**completed** stays listed with a "fix merged upstream" badge but sheds weight like a
+staged fix (the merged fix usually isn't in the assessed release yet), while one closed as
+*not-planned* or *duplicate* is dropped outright — an explicit maintainer verdict, not a
+search artifact. Community engagement (👍 + comments) breaks ties *within* a weight but
 can never lift a loud issue across a severity/version tier. The documented invariants hold:
 an issue confirmed in the assessed version outranks a critical about some *other* version,
 but a trivial version mention can't outrank a real critical. Feature requests and
@@ -156,15 +163,22 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    individually weighed and cited), the mid-ranked compactly, the tail as one-liners
    that may not flip the verdict by volume — so the model's attention follows the
    importance weight instead of treating 30 uniform blocks as equal evidence. The
-   output budget is widened (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't
-   truncate on busy releases.
+   prompt also carries a deterministic **Calibration** block — install base (~2M npm
+   downloads/week), engagement totals, upstream fix velocity, the prior release's
+   baseline — and a rubric that makes caution *earned*: a ⏸️ needs a concrete trigger
+   (a widespread breaker with real engagement, unfixed security/data-loss confirmed for
+   this version, an unpatched upgrade-breakage cluster), because a severity-seeking
+   scout always fills the issue list and raw counts alone say nothing. The output
+   budget is widened (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on
+   busy releases.
 2. **Validator** (`qwen/qwen3.7-plus`) — a *different* provider from the analyst, so it's
    an independent second opinion, not the model checking its own work. It re-derives each
    top issue's severity / category (regression vs post-release) / platform from the raw data
    rather than trusting the analyst's labels, and flags missed issues, **mis-categorizations**,
    and unsupported claims — including whether the verdict actually **rests on the top-ranked
    evidence** (a thesis leaning on tail items while a top blocker goes unaddressed gets
-   flagged). A *material* mis-categorization forces a refinement pass even if the
+   flagged) and whether it is **calibrated in both directions** (an unearned hold is flagged
+   exactly like an ignored trigger). A *material* mis-categorization forces a refinement pass even if the
    validator otherwise agrees — so the analyst's first answer is never taken as correct by
    default. Material means the flag could actually move a published surface: it touches a
    verdict-driving top-ranked issue, a high/critical issue (whose platform tags pin the
@@ -196,12 +210,13 @@ guard** refuses to publish a low-confidence or invalid assessment, and an **HTML
 validates the page before it overwrites the previous one. The page leads with the decision
 (verdict — with the second model's review expandable right under it, key-metric tiles,
 **Your setup** — a conservative *per-setup verdict* that softens the global one by at most one
-step when no credible version-confirmed blocking issue hits your stack; what counts as a blocker
-is evidence-calibrated (a bot-labeled report with no community traction never pins, and a report
-pins *every* stack only with megathread-class engagement — both gates fail closed when the
-evidence fields are absent) — reasoning, and the verdict's *flip conditions*) and groups the supporting detail — a per-component verdict line + Impact
-meters, changelog, Trends charts, the verdict *track record* and past verdicts — behind tabs,
-with the filterable Known-issues list below. A just-dropped release (published within
+step when no credible version-confirmed blocking issue hits your stack — reasoning, and the
+verdict's *flip conditions*) and groups the supporting detail — a per-component verdict line +
+Impact meters, changelog, Trends charts, the verdict *track record* and past verdicts — behind
+tabs, with the filterable Known-issues list below. What counts as a blocker for *your* stack is
+evidence-calibrated: a bot-labeled report with no community traction never pins a setup, and a
+report pins *every* stack only with megathread-class engagement — both gates fail closed when
+the evidence fields are absent. A just-dropped release (published within
 `config.FRESH_RELEASE_DAYS` of the run) leads with a **fresh-release notice** and tempers the
 "cleared / complete" copy until version-specific reports accrue.
 
@@ -230,7 +245,11 @@ Caddy):
 > that intentionally diverge, so filter on `severity` for "how bad is it". **`weight`** is the
 > composite importance score the ranking uses (severity + version specificity + category +
 > triage signals), and **`version_match`** says how specifically the report pins the assessed
-> version (`exact` / `series` / `none`). **`platforms`** uses the tokens
+> version (`exact` / `prerelease` — it names only the version's beta/RC builds — / `series` /
+> `none`). **`priority_provenance`** says who stands behind the P label the severity keys off
+> (`human` / `bot` / `bot-corroborated`), and **`state`** is the upstream issue state — an
+> issue closed as *completed* stays listed at reduced weight because the merged fix usually
+> isn't in the assessed release. **`platforms`** uses the tokens
 > `windows / macos / linux / ios / android / web / discord / slack / telegram / whatsapp /
 > other-channel`, or `all` for a cross-cutting issue. The `known_issues` list is capped at the
 > highest-ranked 60 per version, so on a mature release the count saturates there — the top-level
