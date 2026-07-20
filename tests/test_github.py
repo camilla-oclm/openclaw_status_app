@@ -706,6 +706,16 @@ def test_label_drift_known_families_and_members_pass():
     assert github.label_drift(issues) == {}
 
 
+def test_label_drift_adjudicated_impact_member_stays_quiet():
+    # impact:* is member-exact, but impact:ux-friction was adjudicated benign after
+    # the 2026-07-18 ping (bot-applied breadth label, no severity meaning) — trending
+    # again must NOT re-ping, while a genuinely new impact:* member still does.
+    issues = _drift_issues(24, ["P2", "impact:ux-friction"]) + _drift_issues(6, ["P2"])
+    assert github.label_drift(issues) == {}
+    # …and it must never have gained severity meaning on the way in.
+    assert "impact:ux-friction" not in github._SERIOUS_IMPACT
+
+
 def test_label_drift_thresholds():
     # Below the share floor → quiet (3/30 = 10% < 15%)…
     issues = _drift_issues(3, ["mystery:label"]) + _drift_issues(27, ["bug"])

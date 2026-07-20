@@ -365,7 +365,12 @@ _KNOWN_LABELS = frozenset(
     | {"regression", "bug:crash", "bug", "stale",
        # GitHub housekeeping defaults — carry no severity meaning.
        "duplicate", "question", "documentation", "wontfix", "invalid",
-       "help wanted", "good first issue", "needs-triage", "upstream", "dependencies"}
+       "help wanted", "good first issue", "needs-triage", "upstream", "dependencies",
+       # Adjudicated benign after the 2026-07-18 drift ping: bot-applied breadth
+       # label ("adds avoidable confusion ... without fully blocking progress" —
+       # 428 open, on features and defects alike). Deliberately NO severity
+       # meaning; NOT a _SERIOUS_IMPACT candidate by its own definition.
+       "impact:ux-friction"}
 )
 _KNOWN_LABEL_FAMILIES = ("clawsweeper:", "issue-rating:", "channel:", "app:", "platform:")
 
