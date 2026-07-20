@@ -395,6 +395,7 @@ def test_issue_count_shows_plus_when_ledger_cap_saturates(monkeypatch):
     capped = render._build_assessment_data(
         {"assessment": {"known_issues": issues}, "version": "2.0"}, {"sources": {}})
     assert capped["issues_capped"] is True
+    assert capped["issues_cap"] == 3   # cap VALUE fed to the client (chart saturation mark)
     assert render._issue_count_label(capped) == "3+"
     assert "## Known issues (3+)" in render._llms_full_md(capped)
     assert "Known issues (3+)" in render._seo_body(capped)
@@ -402,6 +403,7 @@ def test_issue_count_shows_plus_when_ledger_cap_saturates(monkeypatch):
     below = render._build_assessment_data(
         {"assessment": {"known_issues": issues[:2]}, "version": "2.0"}, {"sources": {}})
     assert below["issues_capped"] is False
+    assert below["issues_cap"] == 3    # value is always present; the boolean carries state
     assert render._issue_count_label(below) == "2"
     assert "## Known issues (2)" in render._llms_full_md(below)
 

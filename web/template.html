@@ -2796,20 +2796,39 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function tEmpty(){ return el("div",{"class":"tc-empty"}, "Collecting — fills in as runs accumulate"); }
   function wrapChart(c,legend){ return el("div",null,[ el("div",{"class":"chartwrap"}, c.svg), legend ]); }
   function maxOf(a){ return a.reduce(function(m,v){ return v>m?v:m; }, 0); }
+  // The ledger tracks at most DATA.issues_cap issues per version (server-fed; older
+  // payloads carry only the boolean, where the current list length IS the cap). A count
+  // series pinned there is SATURATION, not a real plateau — the headline counters say
+  // "60+", so the charts must not read as a precise flat 60.
+  function issuesCap(){
+    if (DATA.issues_cap) return DATA.issues_cap;
+    return DATA.issues_capped ? (DATA.known_issues||[]).length : 0;
+  }
+  function capLine(c, capv, vmax){
+    var y = py(c,capv,vmax);
+    c.svg.appendChild(svgEl("line",{x1:c.l, x2:c.r, y1:y, y2:y,
+      stroke:"var(--faint)", "stroke-width":1, "stroke-dasharray":"5 4", opacity:"0.9"}));
+    var lab = svgEl("text",{"class":"taxis2 tcap", x:c.l+4, y:y-4});
+    lab.textContent = "tracking cap ("+capv+")";
+    c.svg.appendChild(lab);
+  }
 
   function issuePressureChart(tl){
     var p=tl.filter(function(r){ return !(r.approx && !r.issues); });
     if (p.length<2) return tEmpty();
     var iss=p.map(function(r){return r.issues||0;}), reg=p.map(function(r){return r.regressions||0;});
     var vmax=Math.max(maxOf(iss.concat(reg))*1.15, 4), c=chartSVG(), n=p.length;
+    var cap=issuesCap(), atCap=cap && iss[n-1]>=cap;
     gridY(c,vmax,3); plotLine(c,iss,vmax,n,"var(--accent)",2.5,true); plotLine(c,reg,vmax,n,"var(--orange)",2);
-    return wrapChart(c, tLegend([["known issues","var(--accent)"],["regressions","var(--orange)"]]));
+    if (cap && maxOf(iss)>=cap) capLine(c,cap,vmax);
+    return wrapChart(c, tLegend([["known issues"+(atCap?" — "+cap+"+ at cap":""),"var(--accent)"],["regressions","var(--orange)"]]));
   }
   function severityChart(tl){
     var p=tl.filter(function(r){ return !(r.approx && !r.issues); });
     if (p.length<2) return tEmpty();
     var n=p.length, bands=[["low","var(--gray)"],["medium","var(--warn)"],["high","var(--orange)"],["critical","var(--bad)"]];
-    var vmax=Math.max(maxOf(p.map(function(r){ return r.issues || (r.critical+r.high+r.medium+r.low); }))*1.1, 4);
+    var tot=p.map(function(r){ return r.issues || (r.critical+r.high+r.medium+r.low); });
+    var vmax=Math.max(maxOf(tot)*1.1, 4);
     var c=chartSVG(); gridY(c,vmax,3);
     var cum=p.map(function(){return 0;});
     bands.forEach(function(band){
@@ -2819,6 +2838,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       c.svg.appendChild(svgEl("polygon",{points:up.concat(dn).join(" "), fill:band[1], opacity:"0.55"}));
       cum=top;
     });
+    var cap=issuesCap();
+    if (cap && maxOf(tot)>=cap) capLine(c,cap,vmax);
     return wrapChart(c, tLegend([["critical","var(--bad)"],["high","var(--orange)"],["medium","var(--warn)"],["low","var(--gray)"]]));
   }
   function verdictChart(tl){

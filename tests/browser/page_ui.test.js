@@ -356,6 +356,36 @@ const DATA = {
   await page.goto(base + "/", { waitUntil: "networkidle0" });
   const noCal = await page.evaluate(() => document.querySelector("#issues .cal-note"));
   t("calibration note absent when the payload has no calibration", noCal === null);
+
+  // Trends cap annotation: an issue-count series pinned at the ledger cap is SATURATION
+  // (the headline counters say "60+") — the pressure + severity charts must mark it with
+  // the dashed tracking-cap line, and the pressure legend must read "60+ at cap".
+  DATA.issues_cap = 60;
+  DATA.timeline = [
+    { t: "2026-06-05T00:00:00Z", version: "2026.6.1", recommendation: "⚠️",
+      issues: 60, regressions: 3, critical: 12, high: 48, medium: 0, low: 0 },
+    { t: "2026-06-06T00:00:00Z", version: "2026.6.1", recommendation: "⚠️",
+      issues: 60, regressions: 4, critical: 12, high: 48, medium: 0, low: 0 },
+    { t: "2026-06-07T00:00:00Z", version: "2026.6.1", recommendation: "⚠️",
+      issues: 60, regressions: 4, critical: 12, high: 48, medium: 0, low: 0 },
+  ];
+  await page.goto(base + "/", { waitUntil: "networkidle0" });
+  const trendCap = await page.evaluate(() => ({
+    caps: Array.from(document.querySelectorAll("#trends .tcap")).map((x) => x.textContent),
+    legend: (document.querySelector("#trends .tcard .tc-legend") || {}).textContent || "",
+  }));
+  t("capped timeline: tracking-cap line in pressure+severity charts, legend reads 60+ at cap",
+    trendCap.caps.length === 2 && trendCap.caps.every((s) => s === "tracking cap (60)") &&
+    trendCap.legend.includes("60+ at cap"));
+  DATA.timeline = DATA.timeline.map((r, i) => ({ ...r, issues: 20 + i, critical: 2, high: 18 + i }));
+  await page.goto(base + "/", { waitUntil: "networkidle0" });
+  const belowCap = await page.evaluate(() => ({
+    caps: document.querySelectorAll("#trends .tcap").length,
+    legend: (document.querySelector("#trends .tcard .tc-legend") || {}).textContent || "",
+  }));
+  t("below-cap timeline: no cap annotation anywhere",
+    belowCap.caps === 0 && !belowCap.legend.includes("at cap"));
+  delete DATA.timeline; delete DATA.issues_cap;
   server.close();
 
   t("no page errors", errs.length === 0);

@@ -254,7 +254,9 @@ Caddy):
 > other-channel`, or `all` for a cross-cutting issue. The `known_issues` list is capped at the
 > highest-ranked 60 per version, so on a mature release the count saturates there — the top-level
 > **`issues_capped`** is `true` when that's the case (read the count as "60+"; a new severe issue
-> still enters by displacing the lowest-ranked one).
+> still enters by displacing the lowest-ranked one), and **`issues_cap`** carries the cap value
+> itself — the page's trend charts use it to mark a series pinned there as saturation ("tracking
+> cap") rather than a real flat count.
 
 ### Gate your own updates on the verdict
 

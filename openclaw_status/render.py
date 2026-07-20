@@ -830,6 +830,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         # count pins at the cap while the composition churns). Display surfaces render the
         # count as "60+" so a saturated window doesn't read as "nothing new".
         "issues_capped": len(known_issues) >= config.LEDGER_MAX_ISSUES_PER_VERSION,
+        # The cap VALUE itself (additive, like issues_capped): the client charts need it
+        # to mark a series pinned at the cap as saturation rather than a real plateau.
+        "issues_cap": config.LEDGER_MAX_ISSUES_PER_VERSION,
         # Prevalence/velocity context (collect-time, deterministic): install base +
         # how much of what we ever tracked upstream already fixed. Lets the page frame
         # the severity-seeking top-60 honestly. Absent fields → the page omits the line.
