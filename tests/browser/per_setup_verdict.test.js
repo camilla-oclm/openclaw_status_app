@@ -15,8 +15,10 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 
-// CI sets PUPPETEER_PATH/CHROME_PATH; local runs discover the toolchain under $HOME
-// (an npx-cached puppeteer + its downloaded Chrome) so no machine path is hardcoded.
+// CI sets PUPPETEER_PATH/CHROME_PATH; local runs discover the toolchain so no
+// machine path is hardcoded. Two shapes are supported: an npx-cached `puppeteer`
+// with its own downloaded Chrome, and a repo-local `puppeteer-core` driving a
+// system Chromium (the usual arrangement on a Linux box that already has one).
 function firstUnder(base, sub) {
   try {
     for (const d of fs.readdirSync(base)) {
@@ -26,12 +28,21 @@ function firstUnder(base, sub) {
   } catch {}
   return null;
 }
+function firstExisting(candidates) {
+  return candidates.find((p) => p && fs.existsSync(p)) || null;
+}
+const REPO_ROOT = path.join(__dirname, "..", "..");
 const puppeteer = require(process.env.PUPPETEER_PATH ||
   firstUnder(path.join(os.homedir(), ".npm", "_npx"), path.join("node_modules", "puppeteer")) ||
+  firstExisting([path.join(REPO_ROOT, "node_modules", "puppeteer"),
+                 path.join(REPO_ROOT, "node_modules", "puppeteer-core")]) ||
   "puppeteer");
+// puppeteer-core ships no browser, so a system Chromium is the required partner.
 const CHROME = process.env.CHROME_PATH ||
   firstUnder(path.join(os.homedir(), ".cache", "puppeteer", "chrome"),
-             path.join("chrome-linux64", "chrome"));
+             path.join("chrome-linux64", "chrome")) ||
+  firstExisting(["/usr/bin/chromium", "/usr/bin/chromium-browser",
+                 "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"]);
 
 const TEMPLATE = fs.readFileSync(path.join(__dirname, "..", "..", "web", "template.html"), "utf8");
 const ORDER = ["✅", "⚠️", "⏸️"];
