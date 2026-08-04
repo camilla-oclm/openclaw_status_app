@@ -45,10 +45,13 @@ NPM_PACKAGE = "openclaw"
 REPO_PATH = f"{REPO_OWNER}-{REPO_NAME}"
 
 # ── Model config ────────────────────────────────────────────────────────────
-# All models are served through OpenRouter. The analyst role uses deepseek-v4-pro
-# (the strong sibling of the flash model this project was built on — same prompt,
-# reasoning param, and JSON behaviour, a clear quality step up, still ~$0.009/run).
-PRIMARY_MODEL = "deepseek/deepseek-v4-pro"
+# All models are served through OpenRouter. The analyst seat moved to the V4 Flash
+# ROLLING alias (user call, 2026-08-04): the leading "~" is literally part of the
+# slug, and OpenRouter resolves it to the newest V4 Flash revision (0731 today) —
+# so the analyst model can change under us when DeepSeek ships the next flash.
+# Provenance for future evals: v4-pro (49B-active) remained on the catalog at ~5×
+# the price; flash is the 13B-active sibling — same prompt/reasoning/JSON behaviour.
+PRIMARY_MODEL = "~deepseek/deepseek-v4-flash-latest"
 # One shared reasoning config for every role (analyst / validator / fallback). Effort is
 # a parked cost lever — dropping a single role to "medium" means rebinding that role's name.
 _REASONING_HIGH = {"effort": "high", "exclude": False}
@@ -86,7 +89,7 @@ MONTHLY_COST_LIMIT = 10.0    # USD
 # past the 4k default and truncates mid-JSON → "Failed to parse JSON." Crucially,
 # OpenRouter counts reasoning tokens against this cap too: a high-effort run burns
 # ~4–6k tokens *just thinking* before any JSON, so the budget must cover reasoning
-# + the full document. 16k clears both with margin (deepseek-v4-pro allows 384k
+# + the full document. 16k clears both with margin (deepseek v4-flash allows 65k
 # output, qwen3.7-plus 65k). The validator reasons too, so _step_validator passes
 # it this same budget (its JSON would otherwise truncate behind the reasoning tokens).
 ASSESSMENT_MAX_TOKENS = 16000

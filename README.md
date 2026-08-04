@@ -156,7 +156,7 @@ issue is marked **fixed** only if the release/pre-release body explicitly closes
 
 A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 
-1. **Analyst** (`deepseek/deepseek-v4-pro`, high reasoning) produces a structured
+1. **Analyst** (`~deepseek/deepseek-v4-flash-latest`, high reasoning) produces a structured
    assessment from the collected data. Only the top-N issues by rank are fed to the
    prompt (`config.MAX_ISSUES_IN_CONTEXT`), and they arrive in **reading tiers** that
    mirror the ranking — the top blockers in full detail (these must drive the verdict,
