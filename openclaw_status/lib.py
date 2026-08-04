@@ -30,9 +30,10 @@ from openclaw_status import config
 #  Retry helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _retry(func, *args, retries=None, **kwargs):
+def _retry(func, *args, retries=None, bail_on=(), **kwargs):
     """Call func with retries and exponential backoff. Returns (result, attempts).
-    `retries` defaults to config.MAX_RETRIES (resolved at call time)."""
+    `retries` defaults to config.MAX_RETRIES (resolved at call time). Exception
+    types in `bail_on` re-raise immediately, skipping the remaining attempts."""
     if retries is None:
         retries = config.MAX_RETRIES
     last_err = None
@@ -41,6 +42,8 @@ def _retry(func, *args, retries=None, **kwargs):
             result = func(*args, **kwargs)
             return result, attempt + 1
         except Exception as e:
+            if isinstance(e, bail_on):
+                raise
             last_err = e
             if attempt < retries:
                 wait = config.RETRY_BACKOFF[min(attempt, len(config.RETRY_BACKOFF) - 1)]
@@ -94,9 +97,11 @@ def openrouter_call(
     """Single call to OpenRouter. Returns {success, parsed, model, usage, error?}.
 
     `deadline` (an absolute time.time() epoch, optional) hard-bounds each attempt to the
-    time remaining before it, so a trickling/hung response can't blow past the run's
-    wall-clock budget (see _call_with_wallclock). Once the deadline passes, the remaining
-    retries fail fast and the call returns success=False — callers degrade from there."""
+    time remaining before it AND to config.LLM_CALL_CAP_S, so a trickling/hung response
+    can't blow past the run's wall-clock budget or starve the attempts behind it (see
+    _call_with_wallclock). A wall-clock kill skips the remaining same-model retries; once
+    the deadline passes, attempts fail fast — either way the call returns success=False
+    and callers degrade from there."""
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
@@ -146,15 +151,20 @@ def openrouter_call(
         }
 
     def _attempt():
-        # Bound each attempt to the time left in the pipeline budget. urllib's own
+        # Bound each attempt to the time left in the pipeline budget, and never let a
+        # single attempt take more than LLM_CALL_CAP_S of it — a runaway must leave the
+        # attempts behind it (the fallback model above all) real headroom. urllib's own
         # timeout=180 is a per-read idle timeout, not a total deadline, so it can't
         # catch a slow-trickle response on its own — _call_with_wallclock is the hard cap.
         if deadline is None:
             return _call()
-        return _call_with_wallclock(_call, deadline - time.time())
+        return _call_with_wallclock(_call, min(deadline - time.time(), config.LLM_CALL_CAP_S))
 
     try:
-        result, attempts = _retry(_attempt, retries=retries)
+        # A wall-clock kill means the model is trickling/runaway right now — a same-model
+        # retry on a smaller slice is a near-certain repeat, so bail to the caller's
+        # fallback while there is still budget to spend on it.
+        result, attempts = _retry(_attempt, retries=retries, bail_on=(TimeoutError,))
         if attempts > 1:
             print(f"  ✓ {model_id} succeeded after {attempts} attempts", file=sys.stderr)
         return result
@@ -175,6 +185,11 @@ def extract_json(content: str) -> dict:
     Handles: markdown fences, reasoning tokens, trailing text, nested JSON.
     Strategy: find the outermost { ... } block and parse it.
     """
+    # A reasoning model that burns its whole max_tokens thinking finishes with
+    # content=None (deepseek, 2026-08-04) — degrade to the standard error dict the
+    # callers' fallback paths already handle, and the billed usage stays recorded.
+    if not content or not content.strip():
+        return {"error": "empty model response (no content)"}
     text = content.strip()
 
     # Remove opening fence (including ```json etc.)

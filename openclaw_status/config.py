@@ -109,6 +109,15 @@ COLLECT_TIMEOUT_S = 480
 # With 480 + 900 + ~60 ≈ 1440 the unit's TimeoutStartSec is set to 1800 (deploy/*.service).
 PIPELINE_BUDGET_S = 900
 
+# Cap on any SINGLE budgeted LLM attempt, as a fraction of the whole budget. Without
+# it one runaway attempt can legally eat nearly the full PIPELINE_BUDGET_S and leave
+# every later attempt — including the entire fallback model — dead on arrival with
+# "budget already exhausted" (2026-08-04: a deepseek reasoning burn ran 555s, its
+# retry got the 344s remainder, minimax got 0, run failed). Half the budget keeps a
+# healthy call's normal 2–5 min completely untouched while guaranteeing whatever
+# comes after a runaway at least the same slice it had.
+LLM_CALL_CAP_S = PIPELINE_BUDGET_S // 2
+
 # Cap on how many issues are fed into the LLM prompt. The collector persists the
 # full ranked set to raw-data.json; only the top-N by rank go to the model, which
 # bounds both the input context (~1k chars/issue) and the known_issues output.

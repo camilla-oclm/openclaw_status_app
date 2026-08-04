@@ -28,6 +28,14 @@ def test_extract_json_nested_after_reasoning():
     assert out == {"a": {"b": 2}}
 
 
+def test_extract_json_none_and_empty_content():
+    # Reasoning burn (2026-08-04): a model that spends its whole max_tokens thinking
+    # completes with content=None — standard error dict, not AttributeError on .strip().
+    assert "error" in lib.extract_json(None)
+    assert "error" in lib.extract_json("")
+    assert "error" in lib.extract_json("   \n")
+
+
 def test_extract_json_failure_returns_error_dict():
     out = lib.extract_json("there is no json here at all")
     assert "error" in out
@@ -353,6 +361,98 @@ def test_openrouter_call_past_deadline_fails_fast_without_network(monkeypatch):
     )
     assert out["success"] is False
     assert "wall-clock" in out["error"]
+
+
+def test_retry_bails_immediately_on_listed_exception():
+    calls = []
+
+    def f():
+        calls.append(1)
+        raise TimeoutError("budget gone")
+
+    with pytest.raises(TimeoutError):
+        lib._retry(f, retries=2, bail_on=(TimeoutError,))
+    assert len(calls) == 1  # a wall-clock kill must not trigger same-model re-attempts
+
+
+def test_retry_still_retries_other_errors(monkeypatch):
+    monkeypatch.setattr(lib.time, "sleep", lambda s: None)  # skip real backoff waits
+    calls = []
+
+    def f():
+        calls.append(1)
+        raise ValueError("transient")
+
+    with pytest.raises(ValueError):
+        lib._retry(f, retries=2, bail_on=(TimeoutError,))
+    assert len(calls) == 3
+
+
+class _ORResp:
+    """Context-managed fake of urlopen's response for openrouter_call tests."""
+
+    def __init__(self, payload):
+        self._body = json.dumps(payload).encode()
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _or_body(content, tokens_out=16000):
+    return {
+        "choices": [{"message": {"content": content}, "finish_reason": "length"}],
+        "usage": {"prompt_tokens": 10861, "completion_tokens": tokens_out, "cost": 0.05},
+    }
+
+
+def test_openrouter_call_null_content_degrades_with_usage(monkeypatch):
+    # The 2026-08-04 failure: deepseek reasoned for 9 min, hit max_tokens, returned
+    # content=None → AttributeError → blind same-model retries burned the whole budget.
+    # A null-content response must come back success=True with the parse-fail shape
+    # ({"error": ...} → caller falls straight to its fallback model) and keep the
+    # billed usage on the record.
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(lib.urllib.request, "urlopen",
+                        lambda req, timeout=None: _ORResp(_or_body(None)))
+    out = lib.openrouter_call("x/y", "sys", "user", retries=2)
+    assert out["success"] is True
+    assert "error" in out["parsed"]
+    assert out["usage"]["tokens_out"] == 16000
+
+
+def test_openrouter_call_caps_each_attempt_wallclock(monkeypatch):
+    seen = {}
+
+    def spy(func, wall_clock):
+        seen["wall"] = wall_clock
+        return func()
+
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(lib, "_call_with_wallclock", spy)
+    monkeypatch.setattr(lib.urllib.request, "urlopen",
+                        lambda req, timeout=None: _ORResp(_or_body('{"a": 1}')))
+
+    # Plenty of budget left → the per-attempt cap is the binding bound…
+    out = lib.openrouter_call("x/y", "s", "u", retries=0,
+                              deadline=time.time() + config.PIPELINE_BUDGET_S)
+    assert out["success"] is True
+    assert seen["wall"] <= config.LLM_CALL_CAP_S
+
+    # …little budget left → the remaining time is.
+    lib.openrouter_call("x/y", "s", "u", retries=0, deadline=time.time() + 5)
+    assert seen["wall"] <= 5
+
+
+def test_llm_call_cap_leaves_headroom_for_the_fallback():
+    # The cap only guarantees anything if a capped runaway leaves at least its own
+    # slice unspent (2026-08-04: the fallback inherited 0s and the run died).
+    assert config.LLM_CALL_CAP_S * 2 <= config.PIPELINE_BUDGET_S
 
 
 # ── parallel_fetch (D32: position-aligned, duplicate-safe) ───────────────────
