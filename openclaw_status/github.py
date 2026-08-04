@@ -274,6 +274,36 @@ def list_releases(limit: int = 30) -> list[dict]:
     return [r for r in (_norm_release(d) for d in data) if r]
 
 
+_HOTFIX_TAG_RE = re.compile(r"^(?P<base>.+)-(?P<n>\d+)$")
+
+
+def hotfix_chain(release: dict | None, releases: list[dict]) -> list[dict]:
+    """The same-base stacked-hotfix chain ending at `release`, oldest first.
+
+    OpenClaw occasionally re-releases a stable as `<base>-1`, `<base>-2`, … (first seen
+    2026-08-04: v2026.7.1-1 and -2, published one second apart). Each such tag carries
+    only its own sliver of notes, so the chain — every stable `<base>-k` with k ≤ the
+    target's — is what an updater from `<base>` actually receives. Only strictly numeric
+    suffixes count: `-beta.7` is a prerelease, not a chain member; the base release
+    itself is not a member either (its notes are the original release, not the patch).
+    Returns [] when `release` isn't a stacked hotfix; otherwise the target is always
+    the last member (the passed dict itself, even if absent from `releases`).
+    """
+    m = _HOTFIX_TAG_RE.match((release or {}).get("version") or "")
+    if not m:
+        return []
+    base, n = m.group("base"), int(m.group("n"))
+    chain = {}
+    for r in releases or []:
+        if r.get("prerelease") or r.get("draft"):
+            continue
+        rm = _HOTFIX_TAG_RE.match(r.get("version") or "")
+        if rm and rm.group("base") == base and int(rm.group("n")) <= n:
+            chain[int(rm.group("n"))] = r
+    chain[n] = release
+    return [chain[k] for k in sorted(chain)]
+
+
 def _release_base_nums(tag: str) -> tuple:
     """The numeric (major, minor, patch, …) of a release tag, ignoring any
     ``-prerelease`` suffix: ``v2026.6.8-beta.2`` → ``(2026, 6, 8)``. Non-numeric

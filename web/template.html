@@ -1801,7 +1801,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var tiles = [
       {v:ki.length+(DATA.issues_capped?"+":""), l:"Known issues", s:severe+" high/critical", c:"var(--accent)"},
       {v:regs, l:"Regressions", s:"since release", c:regs?"var(--bad)":"var(--good)"},
-      {v:fixes, l:"Fixes shipped", s:"in this release", c:"var(--good)"},
+      {v:fixes, l:"Fixes shipped", s:(DATA.hotfix_chain||[]).length>1?"across "+DATA.hotfix_chain.length+" stacked hotfixes":"in this release", c:"var(--good)"},
       {v:feats, l:"Highlights", s:(ch.breaking||[]).length+" breaking", c:"var(--accent)"}
     ];
     var grid = el("div",{"class":"stats"});

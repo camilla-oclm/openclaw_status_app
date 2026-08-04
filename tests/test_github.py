@@ -790,3 +790,35 @@ def test_importance_weight_closed_relief_applies_once():
     both_w = github.importance_weight(dict(base, state="closed", fixed_in=["v9.9"]))
     assert closed_w == open_w - 25 == fixed_w
     assert both_w == closed_w                # relief never stacks
+
+
+# ── hotfix_chain (stacked same-base stable re-releases) ─────────────────────
+
+def test_hotfix_chain_collects_same_base_stables_oldest_first():
+    rel = {"version": "2026.7.1-2", "prerelease": False}
+    releases = [
+        {"version": "2026.7.2-beta.7", "prerelease": True},   # beta ≠ hotfix suffix
+        {"version": "2026.7.1-1", "prerelease": False},
+        {"version": "2026.7.1", "prerelease": False},         # the base is not a member
+        {"version": "2026.6.9", "prerelease": False},
+    ]
+    chain = github.hotfix_chain(rel, releases)
+    assert [r["version"] for r in chain] == ["2026.7.1-1", "2026.7.1-2"]
+    assert chain[-1] is rel      # the target itself, even though absent from the list
+
+
+def test_hotfix_chain_empty_for_plain_release_and_beta_target():
+    assert github.hotfix_chain({"version": "2026.7.1"}, []) == []
+    # "-beta.7" is a prerelease suffix, not a numeric hotfix suffix
+    assert github.hotfix_chain({"version": "2026.7.2-beta.7"}, []) == []
+    assert github.hotfix_chain(None, []) == []
+
+
+def test_hotfix_chain_ignores_newer_draft_and_prerelease_siblings():
+    rel = {"version": "2026.7.1-1", "prerelease": False}
+    releases = [
+        {"version": "2026.7.1-2", "prerelease": False},               # newer than target
+        {"version": "2026.7.1-3", "prerelease": False, "draft": True},
+        {"version": "2026.7.1-1-beta.1", "prerelease": True},
+    ]
+    assert [r["version"] for r in github.hotfix_chain(rel, releases)] == ["2026.7.1-1"]

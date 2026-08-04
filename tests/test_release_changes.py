@@ -276,3 +276,23 @@ def test_full_changelog_tail_is_not_curated():
     curated = rc.curated_changelog(body)
     assert "a feature" in curated
     assert "Full Changelog" not in curated
+
+
+def test_merge_changes_preserves_order_and_dedupes_across_chain():
+    """Stacked-hotfix fold (2026-08-04): oldest release's bullets first, a sibling's
+    restated bullet (even case-shifted) counted once, buckets kept separate."""
+    older = {"breaking": [], "features": [],
+             "fixes": [{"title": "Codex progress replies", "verified": True}]}
+    newer = {"breaking": [],
+             "features": [{"title": "New thing", "value": "v"}],
+             "fixes": [{"title": "npm plugin updates", "verified": True},
+                       {"title": "codex progress replies", "verified": True}]}
+    merged = rc.merge_changes([older, newer])
+    assert [f["title"] for f in merged["fixes"]] == ["Codex progress replies", "npm plugin updates"]
+    assert [f["title"] for f in merged["features"]] == ["New thing"]
+    assert merged["breaking"] == []
+
+
+def test_merge_changes_tolerates_junk_members():
+    merged = rc.merge_changes([None, {}, {"fixes": [{"title": "only real one", "verified": True}]}])
+    assert [f["title"] for f in merged["fixes"]] == ["only real one"]

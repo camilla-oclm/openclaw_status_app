@@ -326,3 +326,34 @@ def test_fetch_npm_downloads(monkeypatch):
         raise OSError("network down")
     monkeypatch.setattr(collector.urllib.request, "urlopen", boom)
     assert collector.fetch_npm_downloads() is None            # fail-soft, never gates
+
+
+# ── _fold_hotfix_chain (stacked same-base hotfixes → one assessed release) ───
+
+def test_fold_hotfix_chain_merges_counts_refs_and_body():
+    release = {"version": "2026.7.1-2", "prerelease": False,
+               "body": "### Fixes\n- **npm plugin updates:** accept singleton-array metadata. (#108336)",
+               "changes": {"breaking": [], "features": [],
+                           "fixes": [{"title": "npm plugin updates", "verified": True}]},
+               "closing_refs": ["108336"]}
+    sibling = {"version": "2026.7.1-1", "prerelease": False,
+               "body": "### Fixes\n- **Codex progress replies:** keep turns running. (#106961)",
+               "closing_refs": ["106961"]}
+    base = {"version": "2026.7.1", "prerelease": False,
+            "body": "### Highlights\n- big launch feature"}
+    versions = collector._fold_hotfix_chain(release, [release, sibling, base])
+    assert versions == ["2026.7.1-1", "2026.7.1-2"] == release["hotfix_chain"]
+    # chain order (oldest first), and the base's Highlights must NOT fold in
+    assert [f["title"] for f in release["changes"]["fixes"]] == [
+        "Codex progress replies", "npm plugin updates"]
+    assert release["changes"]["features"] == []
+    assert release["closing_refs"] == ["106961", "108336"]
+    assert "Codex progress replies" in release["body"] and "npm plugin updates" in release["body"]
+
+
+def test_fold_hotfix_chain_noop_for_plain_release():
+    release = {"version": "2026.7.1",
+               "changes": {"breaking": [], "fixes": [], "features": []}, "body": "### Fixes\n- x"}
+    assert collector._fold_hotfix_chain(release, [release]) == []
+    assert "hotfix_chain" not in release
+    assert [f["title"] for f in release["changes"]["fixes"]] == []   # untouched

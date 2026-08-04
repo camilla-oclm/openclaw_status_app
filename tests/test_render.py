@@ -1268,3 +1268,16 @@ def test_calibration_threads_to_page_data_and_llms():
     assert data2["calibration"] == {"npm_weekly_downloads": None,
                                     "tracked_total": None, "closed_completed": None}
     assert "- Context:" not in render._llms_txt(data2)
+
+
+def test_build_data_carries_hotfix_chain_from_assessment():
+    """The chain is stamped into the assessment beside `changes` (same collect, same
+    fold) — the payload must carry it so the page can scope the counts, and default
+    to [] on pre-fold assessments."""
+    data = render._build_assessment_data(
+        {"assessment": {"hotfix_chain": ["2026.7.1-1", "2026.7.1-2"]},
+         "version": "2026.7.1-2"},
+        {"sources": {}})
+    assert data["hotfix_chain"] == ["2026.7.1-1", "2026.7.1-2"]
+    assert render._build_assessment_data(
+        {"assessment": {}, "version": "2026.6.6"}, {"sources": {}})["hotfix_chain"] == []

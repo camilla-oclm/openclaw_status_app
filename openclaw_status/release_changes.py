@@ -179,6 +179,23 @@ def changes_for_release(body: str, fallback=None, parsed=None) -> dict:
     return reparsed if not is_empty(reparsed) else _norm(fallback)
 
 
+def merge_changes(parsed_list: list) -> dict:
+    """Fold several releases' parsed {breaking, fixes, features} into one, preserving the
+    given order and deduplicating repeated titles per bucket (a hotfix body sometimes
+    restates a sibling's bullet). For a stacked-hotfix chain, pass oldest → newest."""
+    out = {k: [] for k in _KEYS}
+    seen = set()
+    for parsed in parsed_list or []:
+        n = _norm(parsed)
+        for k in _KEYS:
+            for item in n[k]:
+                key = (k, (item.get("title") or "").strip().lower())
+                if key[1] and key not in seen:
+                    seen.add(key)
+                    out[k].append(item)
+    return out
+
+
 # The curated sections — the part of a release body worth keeping (the rest is the long
 # contributor list / full PR log): everything that buckets (incl. the Highlights subtree)
 # plus the literal "### Changes" catch-all.

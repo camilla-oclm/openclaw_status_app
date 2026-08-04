@@ -842,6 +842,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "closed_completed": (((raw or {}).get("calibration") or {}).get("closures") or {}).get("closed_completed"),
         },
         "changes": a.get("changes", {"breaking": [], "fixes": [], "features": []}),
+        # Stacked same-base hotfixes whose notes were folded into `changes` at collect
+        # time (v2026.7.1-1 + -2, 2026-08-04) — the page scopes the counts with it.
+        "hotfix_chain": a.get("hotfix_chain") or [],
         # Concrete, checkable events that would move the verdict (analyst-stated, evidence-
         # cited) — the page's "what would change this verdict" tripwires. Absent on
         # assessments made before the field existed; the page then skips the section.

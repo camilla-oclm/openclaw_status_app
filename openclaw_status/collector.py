@@ -9,7 +9,7 @@ import re
 import sys
 import urllib.request
 
-from openclaw_status import config, github
+from openclaw_status import config, github, release_changes
 from openclaw_status.lib import (
     sanitize, save_json, load_json_or, notify, now_iso, version_from_release,
     parallel_fetch, PipelineTimer,
@@ -299,6 +299,25 @@ def fetch_github_issues(release_body: str = "", prerelease_body: str = "", relea
 #  Main collection entry point
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _fold_hotfix_chain(release: dict, all_releases: list) -> list[str]:
+    """Fold a stacked same-base hotfix chain (github.hotfix_chain) into the assessed
+    release IN PLACE: merged fix/feature/breaking buckets, the union of closing refs,
+    and the joined changelog bodies the analyst reads — the newest tag's own notes are
+    only a sliver of what an updater from the base actually receives. Returns the chain
+    versions, [] when the release isn't a stacked hotfix (release then untouched)."""
+    chain = github.hotfix_chain(release, all_releases)
+    if len(chain) < 2:
+        return []
+    release["hotfix_chain"] = [r.get("version", "") for r in chain]
+    release["changes"] = release_changes.merge_changes([
+        r.get("changes") or release_changes.parse_changelog(r.get("body") or "")
+        for r in chain])
+    release["closing_refs"] = sorted({ref for r in chain for ref in r.get("closing_refs") or []})
+    release["body"] = "\n\n".join(
+        (r.get("body") or "").strip() for r in chain).strip()[:20000]
+    return release["hotfix_chain"]
+
+
 def collect(output_path=None) -> dict:
     """Run the full collection pipeline. Returns the raw data dict and saves to disk.
 
@@ -337,6 +356,10 @@ def collect(output_path=None) -> dict:
         release = github.latest_release()
         source_status.record("github_release", "ok" if release else "failed",
                              release.get("tag", "?") if release else "")
+        chain_versions = _fold_hotfix_chain(release, all_releases) if release else []
+        if chain_versions:
+            print(f"  🔗 Stacked hotfix chain: {' + '.join(chain_versions)} — "
+                  f"{len(release['changes']['fixes'])} fixes across the chain")
         if timer.check():
             return _save_partial(output_path, source_status, now, "timeout after release")
 

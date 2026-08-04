@@ -397,6 +397,22 @@ const DATA = {
   t("below-cap timeline: no cap annotation anywhere",
     belowCap.caps === 0 && !belowCap.legend.includes("at cap"));
   delete DATA.timeline; delete DATA.issues_cap;
+
+  // Stacked hotfix chain (v2026.7.1-1 + -2, 2026-08-04): the Fixes tile's scope line
+  // must widen to the chain, and revert to "in this release" without one.
+  const fixesTileSub = () => page.evaluate(() => {
+    const tile = Array.from(document.querySelectorAll(".stat"))
+      .find((s) => s.querySelector(".l").textContent === "Fixes shipped");
+    return tile ? tile.querySelector(".s").textContent : "";
+  });
+  DATA.hotfix_chain = ["2026.7.1-1", "2026.7.1-2"];
+  await page.goto(base + "/", { waitUntil: "networkidle0" });
+  t("hotfix chain: Fixes tile scoped 'across 2 stacked hotfixes'",
+    (await fixesTileSub()) === "across 2 stacked hotfixes");
+  delete DATA.hotfix_chain;
+  await page.goto(base + "/", { waitUntil: "networkidle0" });
+  t("no chain: Fixes tile scope stays 'in this release'",
+    (await fixesTileSub()) === "in this release");
   server.close();
 
   t("no page errors", errs.length === 0);

@@ -1310,6 +1310,10 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     final_assessment["changes"] = release_changes.changes_for_release(
         release.get("body") or "", fallback=final_assessment.get("changes"),
         parsed=release.get("changes"))
+    # Stamped alongside `changes` (same collect, same fold) so the page can scope the
+    # counts honestly — reading it from raw-data at render time could pair a fresh
+    # chain with a pre-fold assessment.
+    final_assessment["hotfix_chain"] = release.get("hotfix_chain") or []
 
     # Final safety net: collapse any retired 🔄 the model still emitted (primary &
     # refined are already normalized above; this covers the agree-no-refine path).
