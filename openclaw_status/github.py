@@ -400,7 +400,12 @@ _KNOWN_LABELS = frozenset(
        # label ("adds avoidable confusion ... without fully blocking progress" —
        # 428 open, on features and defects alike). Deliberately NO severity
        # meaning; NOT a _SERIOUS_IMPACT candidate by its own definition.
-       "impact:ux-friction"}
+       "impact:ux-friction",
+       # Adjudicated benign after the 2026-08-05 drift ping: the family's declared
+       # catch-all ("meaningful maintainer-visible impact outside the owned
+       # taxonomy" — bot-applied, 483 open, on features and defects alike). By its
+       # own definition it names NO specific harm → no severity meaning.
+       "impact:other"}
 )
 _KNOWN_LABEL_FAMILIES = ("clawsweeper:", "issue-rating:", "channel:", "app:", "platform:")
 
