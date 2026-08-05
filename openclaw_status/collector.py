@@ -12,7 +12,7 @@ import urllib.request
 from openclaw_status import config, github, release_changes
 from openclaw_status.lib import (
     sanitize, save_json, load_json_or, notify, now_iso, version_from_release,
-    parallel_fetch, PipelineTimer,
+    PipelineTimer,
 )
 
 
@@ -77,6 +77,52 @@ def _label_drift_alert(issues: list, now: str) -> dict:
         return drift
     except Exception as e:   # never let observability break the collect
         print(f"  ⚠ label-drift check failed: {e}", file=sys.stderr)
+        return {}
+
+
+# Sources where "empty" is a normal state of the world, not a health signal — no
+# staged prerelease is business as usual, so an empty streak there means nothing.
+_EMPTY_IS_NORMAL = ("prerelease",)
+
+
+def _source_empty_alert(status, now: str) -> dict:
+    """Ping Discord (once per streak, remembered in SOURCE_EMPTY_FILE) when a source
+    returns no data for SOURCE_EMPTY_RUNS consecutive completed collects.
+
+    "failed" surfaces loudly, but "empty" is indistinguishable run-to-run from a
+    legitimately quiet source — when clawsweeper moved records/** off its git state
+    branch (2026-07-29) every fetch 404'd for a week without a peep. A streak of
+    empties on a source that normally has data means the upstream path or format
+    drifted. Recovery ("ok") drops the entry, so a later new streak re-pings once.
+    Observability only — never raises into the collect."""
+    try:
+        state = load_json_or(config.SOURCE_EMPTY_FILE, {})
+        new_state, pinged = {}, []
+        for name, info in status.results.items():
+            if name in _EMPTY_IS_NORMAL or info.get("status") != "empty":
+                continue   # non-empty (or excluded) → entry drops, streak resets
+            prev = state.get(name) or {}
+            streak = int(prev.get("streak") or 0) + 1
+            alerted = bool(prev.get("alerted"))
+            if streak >= config.SOURCE_EMPTY_RUNS and not alerted:
+                pinged.append(f'"{sanitize(name, 60)}" ({streak} collects)')
+                alerted = True
+            new_state[name] = {"streak": streak, "alerted": alerted,
+                               "since": prev.get("since") or now}
+        if pinged:
+            notify("📡 OpenClaw Status: source(s) with no data for "
+                   f"{config.SOURCE_EMPTY_RUNS}+ consecutive collects — {', '.join(pinged)}. "
+                   "A normally-populated source going quiet usually means its upstream "
+                   "path or format moved. One-time note; re-arms if the source recovers.")
+        if new_state != state:
+            save_json(config.SOURCE_EMPTY_FILE, new_state)
+        if new_state:
+            print("  📡 Empty-source streaks: "
+                  + ", ".join(f"{n}×{v['streak']}" for n, v in new_state.items())
+                  + (f" ({len(pinged)} newly alerted)" if pinged else ""))
+        return new_state
+    except Exception as e:   # never let observability break the collect
+        print(f"  ⚠ empty-source check failed: {e}", file=sys.stderr)
         return {}
 
 
@@ -183,41 +229,14 @@ def fetch_clawsweeper_state() -> dict:
     return result
 
 
-def fetch_clawsweeper_records(issue_numbers: list[int],
-                              status: "SourceStatus | None" = None) -> dict:
-    """Fetch per-issue clawsweeper records (decision, fixed_release) in parallel."""
-    import time as _time
-    t0 = _time.time()
-    print(f"  📋 Fetching {len(issue_numbers)} clawsweeper records (parallel)...")
-
-    def _fetch_one(num):
-        for folder in ("items", "closed"):
-            md = github.fetch_raw(
-                "openclaw", "clawsweeper-state", "state",
-                f"records/{config.REPO_PATH}/{folder}/{num}.md",
-            )
-            if not md or md.startswith("404"):
-                continue
-            meta = {}
-            for line in md.split("\n"):
-                if ":" in line and not line.startswith("#") and not line.startswith("---"):
-                    key, _, val = line.partition(":")
-                    meta[key.strip()] = val.strip()
-            if meta.get("number"):
-                return meta
-        return None
-
-    raw_results = parallel_fetch(_fetch_one, issue_numbers, max_workers=6)
-    # parallel_fetch returns results position-aligned with issue_numbers; key each record by
-    # its issue number (a re-run with a duplicate number simply overwrites, which is fine).
-    records = {num: meta for num, meta in zip(issue_numbers, raw_results) if meta}
-
-    elapsed = _time.time() - t0
-    if status is not None:
-        status.record("clawsweeper_records", "ok" if records else "empty",
-                      f"{len(records)}/{len(issue_numbers)} records", elapsed)
-    print(f"    Got {len(records)} records in {elapsed:.1f}s")
-    return records
+# Per-issue clawsweeper records (decision, fixed_release) — RETIRED 2026-08-05.
+# Clawsweeper moved records/** off its git state branch into a private Cloudflare
+# record store ("never checked out or written" — clawsweeper docs/state-storage.md;
+# the legacy git projection was removed 2026-07-29), so the raw fetch 404'd on every
+# issue. The ledger carries forward records collected before the cutover (decision /
+# fixed_release keep rendering and weighting); new issues honestly show decision
+# "unknown". NOTE: the results/<org>/issue-*.md files in that repo are repair-run
+# ledgers, NOT review records — repointing at them would invent meaning.
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -414,31 +433,9 @@ def collect(output_path=None) -> dict:
             prerelease_closing_refs=prerelease.get("closing_refs") if prerelease else None,
         )
 
-        # 7. Enrich issues with clawsweeper records (decision, fixed_release)
-        if issues:
-            cs_records = fetch_clawsweeper_records([i["number"] for i in issues], status=source_status)
-            clawsweeper["item_records"] = cs_records
-            for item in issues:
-                rec = cs_records.get(item["number"])
-                if rec:
-                    # Sanitize every clawsweeper field (D10): these come from a SEPARATE repo's
-                    # markdown and, unlike issue title/body, previously entered build_context (and
-                    # the fixed_in demotion) un-stripped — a prompt-injection + false-staged-fix vector.
-                    item["clawsweeper"] = {
-                        "decision": sanitize(rec.get("decision", "unknown"), 80),
-                        "fixed_release": sanitize(rec.get("fixed_release", "unknown"), 80),
-                        "fixed_pr_url": sanitize(rec.get("fixed_pr_url", "unknown"), 200),
-                        "fixed_at": sanitize(rec.get("fixed_at", "unknown"), 40),
-                        "latest_release": sanitize(rec.get("latest_release", "unknown"), 80),
-                        "review_status": sanitize(rec.get("review_status", "unknown"), 80),
-                    }
-                    fixed_rel = item["clawsweeper"]["fixed_release"]
-                    if fixed_rel != "unknown":
-                        existing = item.get("fixed_in") if isinstance(item.get("fixed_in"), list) else []
-                        if fixed_rel not in existing:
-                            item["fixed_in"] = existing + [fixed_rel]   # order-preserving (deterministic)
-                else:
-                    item["clawsweeper"] = None
+        # 7. (retired) Per-issue clawsweeper record enrichment — see the retirement
+        # note in the clawsweeper-state section. Scouted issues no longer carry a
+        # "clawsweeper" key; the ledger merge keeps any dict collected pre-cutover.
     finally:
         timer.__exit__(None, None, None)
 
@@ -538,6 +535,10 @@ def collect(output_path=None) -> dict:
         },
         "source_status": source_status.results,
     }
+
+    # Source-health tripwire runs only on a COMPLETED collect — aborted/partial
+    # runs return earlier, and a timeout is not evidence a source is dead.
+    _source_empty_alert(source_status, now)
 
     print(f"\n{'='*60}")
     print("Collection complete:")

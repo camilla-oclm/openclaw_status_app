@@ -149,7 +149,8 @@ def _wire_collect(monkeypatch, tmp_path, *, npm, release):
     monkeypatch.setattr(collector.github, "scout_issues", lambda *a, **k: [])
     monkeypatch.setattr(collector, "fetch_clawsweeper_state",
                         lambda: {"work_candidates": [], "recently_closed": [], "item_records": {}})
-    monkeypatch.setattr(collector, "fetch_clawsweeper_records", lambda nums, status=None: {})
+    # hermetic: the empty-source tripwire must not touch the real data/ state file
+    monkeypatch.setattr(config, "SOURCE_EMPTY_FILE", tmp_path / "source-empty.json")
 
 
 def test_collect_proceeds_when_release_ok(tmp_path, monkeypatch):
@@ -191,14 +192,6 @@ def test_fetch_npm_version_returns_none_on_error(monkeypatch):
         raise OSError("network down")
     monkeypatch.setattr(collector.urllib.request, "urlopen", boom)
     assert collector.fetch_npm_version() is None
-
-
-def test_fetch_clawsweeper_records_parses_metadata(monkeypatch):
-    md = "# Record\nnumber: 42\ndecision: keep-open\nfixed_release: v2026.6.12\n"
-    monkeypatch.setattr(collector.github, "fetch_raw", lambda *a, **k: md)
-    recs = collector.fetch_clawsweeper_records([42])
-    assert recs[42]["decision"] == "keep-open"
-    assert recs[42]["fixed_release"] == "v2026.6.12"
 
 
 def test_fetch_clawsweeper_state_parses_readme_tables(monkeypatch):
@@ -249,6 +242,71 @@ def test_label_drift_alert_never_raises_into_collect(tmp_path, monkeypatch):
                         lambda text: (_ for _ in ()).throw(RuntimeError("webhook down")))
     # a broken webhook (or any internal error) must degrade to a stderr note, not a raise
     assert collector._label_drift_alert(_drift_scout(10, 10), "2026-07-16T00:00:00+00:00") == {}
+
+
+# ── empty-source tripwire wiring ─────────────────────────────────────────────
+
+def _empty_status(**sources):
+    st = collector.SourceStatus()
+    for name, status in sources.items():
+        st.record(name, status)
+    return st
+
+
+def test_source_empty_alert_pings_once_per_streak_then_rearms(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SOURCE_EMPTY_FILE", tmp_path / "source-empty.json")
+    monkeypatch.setattr(config, "SOURCE_EMPTY_RUNS", 3)
+    sent = []
+    monkeypatch.setattr(collector, "notify", lambda text: sent.append(text) or True)
+    # two empty collects: the streak builds silently
+    for i in range(2):
+        state = collector._source_empty_alert(_empty_status(clawsweeper="empty"), f"t{i}")
+        assert sent == []
+    assert state["clawsweeper"]["streak"] == 2
+    # third consecutive empty → exactly one ping, remembered across further empties
+    collector._source_empty_alert(_empty_status(clawsweeper="empty"), "t2")
+    assert len(sent) == 1 and "clawsweeper" in sent[0]
+    collector._source_empty_alert(_empty_status(clawsweeper="empty"), "t3")
+    assert len(sent) == 1
+    # recovery drops the entry entirely…
+    state = collector._source_empty_alert(_empty_status(clawsweeper="ok"), "t4")
+    assert state == {}
+    # …so a NEW death streak re-pings once
+    for i in range(3):
+        collector._source_empty_alert(_empty_status(clawsweeper="empty"), f"t{5 + i}")
+    assert len(sent) == 2
+
+
+def test_source_empty_alert_ignores_normal_empty_sources(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SOURCE_EMPTY_FILE", tmp_path / "source-empty.json")
+    monkeypatch.setattr(config, "SOURCE_EMPTY_RUNS", 3)
+    sent = []
+    monkeypatch.setattr(collector, "notify", lambda text: sent.append(text) or True)
+    # no staged prerelease is a normal state of the world, never a health signal
+    for i in range(5):
+        state = collector._source_empty_alert(_empty_status(prerelease="empty"), f"t{i}")
+    assert sent == [] and state == {}
+
+
+def test_source_empty_alert_prunes_vanished_sources(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SOURCE_EMPTY_FILE", tmp_path / "source-empty.json")
+    sent = []
+    monkeypatch.setattr(collector, "notify", lambda text: sent.append(text) or True)
+    # a zombie entry for a source that no longer exists (e.g. the retired
+    # clawsweeper_records) must drop out instead of lingering forever
+    (tmp_path / "source-empty.json").write_text(
+        json.dumps({"clawsweeper_records": {"streak": 99, "alerted": False, "since": "t0"}}))
+    state = collector._source_empty_alert(_empty_status(npm="ok"), "t1")
+    assert state == {} and sent == []
+    assert json.loads((tmp_path / "source-empty.json").read_text()) == {}
+
+
+def test_source_empty_alert_never_raises_into_collect(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SOURCE_EMPTY_FILE", tmp_path / "source-empty.json")
+    monkeypatch.setattr(config, "SOURCE_EMPTY_RUNS", 1)
+    monkeypatch.setattr(collector, "notify",
+                        lambda text: (_ for _ in ()).throw(RuntimeError("webhook down")))
+    assert collector._source_empty_alert(_empty_status(npm="empty"), "t0") == {}
 
 
 # ── ledger refresh (stored issues the searches can't reach) ──────────────────

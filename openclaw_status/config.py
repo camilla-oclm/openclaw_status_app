@@ -169,6 +169,8 @@ LEDGER_KEEP_VERSIONS = 12            # prune the ledger to the most-recently-see
 LABEL_DRIFT_FILE = DATA_DIR / "label-drift.json"
 LABEL_DRIFT_MIN_SHARE = 0.15   # unknown label must sit on ≥15% of this run's scout…
 LABEL_DRIFT_MIN_COUNT = 5      # …and on at least this many issues (small-scout noise guard)
+SOURCE_EMPTY_FILE = DATA_DIR / "source-empty.json"
+SOURCE_EMPTY_RUNS = 3          # consecutive completed collects a source may be empty before the one-time ping
 
 # ── API endpoints ───────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
