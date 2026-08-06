@@ -45,15 +45,17 @@ NPM_PACKAGE = "openclaw"
 REPO_PATH = f"{REPO_OWNER}-{REPO_NAME}"
 
 # ── Model config ────────────────────────────────────────────────────────────
-# All models are served through OpenRouter. The analyst seat is the PINNED V4 Flash
-# revision (user call, 2026-08-06): the "~…-latest" ROLLING alias (tried 08-04→06)
-# failed 5 of 6 live analysis calls — empty responses, 450s wall-clock runaways,
-# unparseable JSON — while the concrete slug's ~23 providers reported healthy, so
-# the pin trades the alias's redirect layer for OpenRouter's normal health-ranked
-# provider routing. Bump the pin deliberately when DeepSeek ships the next flash.
-# Provenance for future evals: v4-pro (49B-active) remains on the catalog at ~5×
-# the price; flash is the 13B-active sibling — same prompt/reasoning/JSON behaviour.
-PRIMARY_MODEL = "deepseek/deepseek-v4-flash-0731"
+# All models are served through OpenRouter. The analyst seat is back on V4 Pro —
+# the config the 2026-07-22 and 07-31 evals both said KEEP — after the 08-04
+# flash-for-cost experiment failed operationally (user call, 2026-08-06): flash
+# could not finish this workload in ANY tested shape — the "~…-latest" rolling
+# alias failed 5 of 6 live analysis calls 08-04→06, the pinned 0731 slug failed
+# identically (empty responses; a refine pass that burned the full 16k output
+# budget reasoning), and effort=medium still hit the 450s wall-clock — every
+# failed run published via the minimax fallback. Flash (13B-active, ~5× cheaper)
+# is fine on small prompts; it just can't reason through the ~10k-token analysis
+# context, so don't seat it again without an eval proving otherwise.
+PRIMARY_MODEL = "deepseek/deepseek-v4-pro"
 # One shared reasoning config for every role (analyst / validator / fallback). Effort is
 # a parked cost lever — dropping a single role to "medium" means rebinding that role's name.
 _REASONING_HIGH = {"effort": "high", "exclude": False}
