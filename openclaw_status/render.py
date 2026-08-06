@@ -1206,8 +1206,11 @@ def _llms_txt(data: dict) -> str:
                      "independent second model challenged the first analyst's reasoning.")
         elif rv.get("agreed"):
             L.append("- Review: an independent second model reviewed and concurred with this verdict.")
-        else:
+        elif rv.get("refined"):
             L.append("- Review: an independent second model flagged details; the verdict held after re-check.")
+        else:
+            L.append("- Review: an independent second model flagged details; the analyst's re-check "
+                     "pass failed this run, so this is the analyst's original read.")
     L.append("- Your setup: the web page refines this global verdict for your own stack — it can "
              "soften the verdict by one step when none of the blocking, version-confirmed issues "
              "touch your selected platforms, channels, or components (each issue's platforms, "

@@ -1643,9 +1643,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       } else if (rv.agreed){
         rvText = "2nd model agreed";
         rvTip = "An independent second model reviewed this verdict and concurred.";
-      } else {
+      } else if (rv.refined){
         rvText = "2nd model flagged; held";
         rvTip = "An independent second model flagged details, but the verdict held after re-check.";
+      } else {
+        // Flagged but the refinement pass never completed — "held after re-check" would
+        // claim a re-check that didn't happen, so name what the reader is actually seeing.
+        rvText = "2nd model flagged; re-check failed";
+        rvTip = "An independent second model flagged details, but the analyst's re-check pass failed this run — shown is the analyst's original read.";
       }
       rvPanel = reviewDetail(rv);
       var rvBtn = el("button",{"class":"chip", type:"button", title:rvTip+" Click for what it said.",
@@ -1702,7 +1707,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     else if (rv.agreed)
       status = "An independent second model re-derived the top issues' severity, category and platforms from the raw data and concurred with this verdict.";
     else
-      status = "An independent second model disagreed with details of this verdict; shown is the analyst's final read.";
+      status = "An independent second model disagreed with details of this verdict; the analyst's re-check pass failed to complete this run, so shown is the analyst's original read.";
     kids.push(el("p",{"class":"rvd-status"}, status));
     var crit = String((d.critique || rv.critique || "")).trim();
     if (crit) kids.push(el("blockquote",{"class":"rvd-quote"}, "“"+crit+"”"));

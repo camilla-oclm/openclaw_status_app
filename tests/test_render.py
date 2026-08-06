@@ -1281,3 +1281,34 @@ def test_build_data_carries_hotfix_chain_from_assessment():
     assert data["hotfix_chain"] == ["2026.7.1-1", "2026.7.1-2"]
     assert render._build_assessment_data(
         {"assessment": {}, "version": "2026.6.6"}, {"sources": {}})["hotfix_chain"] == []
+
+
+def test_llms_txt_review_line_distinguishes_failed_recheck():
+    """The llms.txt Review line must not claim a completed re-check when the
+    refinement pass died: agreed=False + refined=False is the failed-re-check
+    state (the page's ⚖︎ chip draws the same distinction)."""
+    base = {
+        "version": "2.0", "recommendation": "⚠️", "confidence": "medium",
+        "assessed_at": "2026-08-06T00:00:00+00:00",
+        "headline": "h", "thesis": "t",
+        "evidence": {}, "known_issues": [], "changes": {},
+        "platform_impact": {}, "sentiment_summary": "",
+    }
+
+    def review_line(review):
+        txt = render._llms_txt({**base, "review": review})
+        return next((l for l in txt.splitlines() if l.startswith("- Review:")), "")
+
+    held = review_line({"validated": True, "agreed": False, "refined": True})
+    assert "held after re-check" in held
+
+    failed = review_line({"validated": True, "agreed": False, "refined": False})
+    assert "failed" in failed and "original read" in failed
+    assert "held after re-check" not in failed
+
+    agreed = review_line({"validated": True, "agreed": True, "refined": False})
+    assert "concurred" in agreed
+
+    revised = review_line({"validated": True, "agreed": False, "refined": True,
+                           "primary_recommendation": "✅"})
+    assert "revised from ✅ to ⚠️" in revised
