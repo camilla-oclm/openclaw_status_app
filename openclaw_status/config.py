@@ -45,13 +45,15 @@ NPM_PACKAGE = "openclaw"
 REPO_PATH = f"{REPO_OWNER}-{REPO_NAME}"
 
 # ── Model config ────────────────────────────────────────────────────────────
-# All models are served through OpenRouter. The analyst seat moved to the V4 Flash
-# ROLLING alias (user call, 2026-08-04): the leading "~" is literally part of the
-# slug, and OpenRouter resolves it to the newest V4 Flash revision (0731 today) —
-# so the analyst model can change under us when DeepSeek ships the next flash.
-# Provenance for future evals: v4-pro (49B-active) remained on the catalog at ~5×
+# All models are served through OpenRouter. The analyst seat is the PINNED V4 Flash
+# revision (user call, 2026-08-06): the "~…-latest" ROLLING alias (tried 08-04→06)
+# failed 5 of 6 live analysis calls — empty responses, 450s wall-clock runaways,
+# unparseable JSON — while the concrete slug's ~23 providers reported healthy, so
+# the pin trades the alias's redirect layer for OpenRouter's normal health-ranked
+# provider routing. Bump the pin deliberately when DeepSeek ships the next flash.
+# Provenance for future evals: v4-pro (49B-active) remains on the catalog at ~5×
 # the price; flash is the 13B-active sibling — same prompt/reasoning/JSON behaviour.
-PRIMARY_MODEL = "~deepseek/deepseek-v4-flash-latest"
+PRIMARY_MODEL = "deepseek/deepseek-v4-flash-0731"
 # One shared reasoning config for every role (analyst / validator / fallback). Effort is
 # a parked cost lever — dropping a single role to "medium" means rebinding that role's name.
 _REASONING_HIGH = {"effort": "high", "exclude": False}
