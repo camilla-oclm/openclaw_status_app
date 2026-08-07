@@ -156,7 +156,7 @@ issue is marked **fixed** only if the release/pre-release body explicitly closes
 
 A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 
-1. **Analyst** (`~deepseek/deepseek-v4-flash-latest`, high reasoning) produces a structured
+1. **Analyst** (`deepseek/deepseek-v4-pro`, high reasoning) produces a structured
    assessment from the collected data. Only the top-N issues by rank are fed to the
    prompt (`config.MAX_ISSUES_IN_CONTEXT`), and they arrive in **reading tiers** that
    mirror the ranking — the top blockers in full detail (these must drive the verdict,
@@ -189,7 +189,9 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 
 If the analyst call fails, it falls back to `minimax/minimax-m3` — a third distinct provider,
 so a single-vendor outage doesn't sink the run (and the analyst and validator stay on
-different models). All models are served via OpenRouter.
+different models). All models are served via OpenRouter; the analyst/refine calls carry a
+provider-routing preference for the model's first-party endpoint (`config.PRIMARY_PROVIDER`),
+which ended a run of wall-clock runaways traced to degraded third-party hosts in the pool.
 
 The output is schema- and XSS-validated, appended to `data/history.json`, and cost/latency
 is logged to `data/usage.json` (with daily/monthly budget alerts, plus a latency watch that
@@ -334,7 +336,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 432 tests, hermetic (no network)
+python3 -m pytest        # 435 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
