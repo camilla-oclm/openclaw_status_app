@@ -93,6 +93,7 @@ def openrouter_call(
     temperature: float = 0.1,
     retries: int | None = None,
     deadline: float | None = None,
+    provider: dict = None,
 ) -> dict:
     """Single call to OpenRouter. Returns {success, parsed, model, usage, error?}.
 
@@ -116,6 +117,10 @@ def openrouter_call(
     if reasoning:
         payload_dict["reasoning"] = reasoning
         payload_dict["include_reasoning"] = True
+    if provider:
+        # OpenRouter provider-routing preferences (e.g. config.PRIMARY_PROVIDER).
+        # Omitted entirely when not given so default routing is untouched.
+        payload_dict["provider"] = provider
 
     payload = json.dumps(payload_dict).encode()
 

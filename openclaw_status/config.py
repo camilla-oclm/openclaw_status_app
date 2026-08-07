@@ -60,6 +60,16 @@ PRIMARY_MODEL = "deepseek/deepseek-v4-pro"
 # a parked cost lever — dropping a single role to "medium" means rebinding that role's name.
 _REASONING_HIGH = {"effort": "high", "exclude": False}
 PRIMARY_REASONING = _REASONING_HIGH
+# OpenRouter provider routing for the two deepseek seats (analyst + refine). The
+# pro pool is ~18 hosts and OpenRouter load-balances across them, so every call is
+# a provider lottery — degraded hosts (Venice at 44% uptime on 08-07; Sail Research
+# and Fireworks the day before, on flash) serve the trickling/empty responses behind
+# our wall-clock kills and empty-content bails. First-party DeepSeek is the
+# reference endpoint — 99.9%+ uptime AND the pool's cheapest completion price — so
+# prefer it; allow_fallbacks keeps the rest of the pool behind it for a genuine
+# DeepSeek outage, and the minimax fallback model still backstops the whole run.
+# Deliberately NOT applied to the validator/fallback seats: different pools.
+PRIMARY_PROVIDER = {"order": ["deepseek"], "allow_fallbacks": True}
 # Independent reviewer — deliberately a *different* model from the analyst, so it
 # catches the primary's blind spots instead of rubber-stamping its own reasoning.
 # qwen3.7-plus reasons, so the validator call gets the wide token budget too

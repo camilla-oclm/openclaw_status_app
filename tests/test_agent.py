@@ -1164,3 +1164,36 @@ def test_prompts_pin_earned_hold_calibration():
     assert "does not block ✅" in agent.SYSTEM_PROMPT
     assert "CHECK THE VERDICT IS CALIBRATED" in agent.VALIDATOR_PROMPT
     assert "both directions are" in agent.VALIDATOR_PROMPT
+
+
+def test_provider_prefs_ride_deepseek_seats_only(monkeypatch):
+    """config.PRIMARY_PROVIDER (the OpenRouter provider-routing pin) must ride ONLY
+    the deepseek seats — the analyst and refine calls. The minimax fallback and the
+    validator keep default routing: their provider pools are different entirely."""
+    calls = []
+    valid = _valid_assessment()
+
+    def fake_call(model, system, user, **kw):
+        calls.append((model, kw.get("provider")))
+        if model == config.PRIMARY_MODEL:
+            return {"success": False, "parsed": {}, "model": model, "usage": {},
+                    "error": "boom"}
+        return {"success": True, "parsed": valid, "model": model,
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.01,
+                          "latency_ms": 1}}
+
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    agent._step_primary("ctx")
+    assert calls[0] == (config.PRIMARY_MODEL, config.PRIMARY_PROVIDER)
+    assert calls[1][0] == config.FALLBACK_MODELS[0]["model"]
+    assert calls[1][1] is None                       # fallback: default routing
+
+    calls.clear()
+    agent._step_validator("ctx", valid)
+    assert calls[0][0] == config.VALIDATOR_MODEL
+    assert calls[0][1] is None                       # validator: default routing
+
+    calls.clear()
+    agent._step_refinement("ctx", valid, {"agrees": False})
+    assert calls[0] == (config.PRIMARY_MODEL, config.PRIMARY_PROVIDER)

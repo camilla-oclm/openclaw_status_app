@@ -683,6 +683,7 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
         max_tokens=config.ASSESSMENT_MAX_TOKENS,
         reasoning=config.PRIMARY_REASONING,
         deadline=deadline,
+        provider=config.PRIMARY_PROVIDER,
     )
     attempts.append({"model": config.PRIMARY_MODEL, "usage": result.get("usage") or {}})
 
@@ -916,6 +917,7 @@ def _step_refinement(context: str, primary_assessment: dict, validator_review: d
         max_tokens=config.ASSESSMENT_MAX_TOKENS,
         reasoning=config.PRIMARY_REASONING,
         deadline=deadline,
+        provider=config.PRIMARY_PROVIDER,
     )
 
     if result["success"]:

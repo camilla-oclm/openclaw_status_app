@@ -489,3 +489,22 @@ def test_parallel_fetch_duplicate_items_do_not_collapse():
     out = lib.parallel_fetch(f, ["dup", "dup"], max_workers=2)
     assert len(out) == 2                       # two slots — a value-keyed dict would collapse to 1
     assert sorted(out, key=str) == [None, "ok"]  # BOTH per-call outcomes survive (one fail, one ok)
+
+
+def test_openrouter_call_carries_provider_prefs(monkeypatch):
+    """provider= must land in the request payload verbatim (the OpenRouter
+    provider-routing pin); when absent the key is omitted entirely so default
+    routing is untouched."""
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "test-key")
+    seen = []
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(json.loads(req.data))
+        return _ORResp(_or_body('{"ok": 1}', tokens_out=5))
+
+    monkeypatch.setattr(lib.urllib.request, "urlopen", fake_urlopen)
+    prefs = {"order": ["deepseek"], "allow_fallbacks": True}
+    lib.openrouter_call("x/y", "s", "u", retries=0, provider=prefs)
+    lib.openrouter_call("x/y", "s", "u", retries=0)
+    assert seen[0]["provider"] == prefs
+    assert "provider" not in seen[1]
