@@ -55,19 +55,32 @@ REPO_PATH = f"{REPO_OWNER}-{REPO_NAME}"
 # failed run published via the minimax fallback. Flash (13B-active, ~5× cheaper)
 # is fine on small prompts; it just can't reason through the ~10k-token analysis
 # context, so don't seat it again without an eval proving otherwise.
-PRIMARY_MODEL = "deepseek/deepseek-v4-pro"
+#
+# 2026-08-13: seat moved to the dated 0813 snapshot (the V4 Pro GA release,
+# 2026-08-12). The un-dated slug started failing the day 0813 GA'd, but the root
+# cause was NOT the slug: the GA weights reason much longer than the July pro on
+# this workload, and the old 16k ASSESSMENT_MAX_TOKENS starved them — a verified
+# 16,000-token pure-reasoning burn with zero content (0813, first-party, 310s),
+# the same all-reasoning "empty model response" on the un-dated slug, and a 16k
+# mid-JSON truncation from minimax the same morning. Fixed by the budget raise at
+# ASSESSMENT_MAX_TOKENS below. The dated pin stays right on its own merits: the
+# un-dated pool lost first-party routing at GA and prices ~2.7× above the
+# snapshot ($1.17/$2.34 vs $0.435/$0.87), and — same lesson as the flash
+# "-latest" alias above — rolling slugs shift under you; pin the dated snapshot.
+PRIMARY_MODEL = "deepseek/deepseek-v4-pro-0813"
 # One shared reasoning config for every role (analyst / validator / fallback). Effort is
 # a parked cost lever — dropping a single role to "medium" means rebinding that role's name.
 _REASONING_HIGH = {"effort": "high", "exclude": False}
 PRIMARY_REASONING = _REASONING_HIGH
 # OpenRouter provider routing for the two deepseek seats (analyst + refine). The
-# pro pool is ~18 hosts and OpenRouter load-balances across them, so every call is
-# a provider lottery — degraded hosts (Venice at 44% uptime on 08-07; Sail Research
-# and Fireworks the day before, on flash) serve the trickling/empty responses behind
-# our wall-clock kills and empty-content bails. First-party DeepSeek is the
-# reference endpoint — 99.9%+ uptime AND the pool's cheapest completion price — so
-# prefer it; allow_fallbacks keeps the rest of the pool behind it for a genuine
-# DeepSeek outage, and the minimax fallback model still backstops the whole run.
+# un-dated pro pool was ~18 hosts with OpenRouter load-balancing across them, so
+# every call was a provider lottery — degraded hosts (Venice at 44% uptime on
+# 08-07; Sail Research and Fireworks the day before, on flash) served the
+# trickling/empty responses behind our wall-clock kills and empty-content bails.
+# The 0813 snapshot is single-provider (first-party) as of 2026-08-13, which makes
+# the pin a no-op today — kept deliberately: if resellers join the snapshot's pool
+# later, first-party stays preferred; allow_fallbacks keeps any future pool behind
+# it, and the minimax fallback model still backstops the whole run.
 # Deliberately NOT applied to the validator/fallback seats: different pools.
 PRIMARY_PROVIDER = {"order": ["deepseek"], "allow_fallbacks": True}
 # Independent reviewer — deliberately a *different* model from the analyst, so it
@@ -101,12 +114,17 @@ MONTHLY_COST_LIMIT = 10.0    # USD
 # Assessment output budget. The analyst/refine steps emit a full JSON document
 # (thesis + evidence + one known_issues entry per issue + changes), which blows
 # past the 4k default and truncates mid-JSON → "Failed to parse JSON." Crucially,
-# OpenRouter counts reasoning tokens against this cap too: a high-effort run burns
-# ~4–6k tokens *just thinking* before any JSON, so the budget must cover reasoning
-# + the full document. 16k clears both with margin (deepseek v4-flash allows 65k
-# output, qwen3.7-plus 65k). The validator reasons too, so _step_validator passes
-# it this same budget (its JSON would otherwise truncate behind the reasoning tokens).
-ASSESSMENT_MAX_TOKENS = 16000
+# OpenRouter counts reasoning tokens against this cap too, so the budget must
+# cover reasoning + the full document. 16k cleared that for the July models
+# (~4–6k reasoning burn), but the V4 Pro GA weights (0813) think 16k+ on this
+# workload: on 2026-08-13 the analyst burned the entire 16k budget on reasoning
+# and returned zero content, and minimax truncated mid-JSON at the same cap.
+# 32k = the observed burn ×2, still far under every seat's output ceiling
+# (0813 384k, minimax 512k, qwen3.7-plus 131k) and worth < $0.03/call at these
+# prices. Time is the real cost of a bigger cap — see PIPELINE_BUDGET_S, sized
+# with it. The validator reasons too, so _step_validator passes it this same
+# budget (its JSON would otherwise truncate behind the reasoning tokens).
+ASSESSMENT_MAX_TOKENS = 32000
 
 # Cooperative wall-clock budget for the COLLECT phase (PipelineTimer, checked between
 # fetches). Collection is normally seconds, but the issue scout now runs ~11 searches each
@@ -123,8 +141,12 @@ COLLECT_TIMEOUT_S = 480
 #   COLLECT_TIMEOUT_S + PIPELINE_BUDGET_S + render margin  <  unit TimeoutStartSec
 # so the in-process budgets always bow out gracefully (validator → "unreviewed" → publish
 # primary, keep last good page) BEFORE systemd SIGKILLs the run with nothing published.
-# With 480 + 900 + ~60 ≈ 1440 the unit's TimeoutStartSec is set to 1800 (deploy/*.service).
-PIPELINE_BUDGET_S = 900
+# With 480 + 1200 + ~60 ≈ 1740 the unit's TimeoutStartSec of 1800 still clears
+# (deploy/*.service; comment there updated, value unchanged — no reprovision needed).
+# 1200 was sized with the 32k token budget: the 0813 analyst generates ~50 tok/s,
+# so a full 32k response needs up to ~10 min — the derived 600s per-call cap below
+# covers it, and 2×600 fits primary + fallback inside one budget as before.
+PIPELINE_BUDGET_S = 1200
 
 # Cap on any SINGLE budgeted LLM attempt, as a fraction of the whole budget. Without
 # it one runaway attempt can legally eat nearly the full PIPELINE_BUDGET_S and leave
@@ -145,11 +167,13 @@ CONTEXT_TIER_TOP = 8
 CONTEXT_TIER_MID = 12
 
 # Latency watch: a single LLM call at/over this many seconds gets flagged (log +
-# webhook ping). High-reasoning analyst/validator calls normally run ~2–3 min;
-# a call pushing past 5 min is drifting toward the PIPELINE_BUDGET_S wall, where
-# runs start silently degrading (validator skipped → "unreviewed" single-model
-# pages) long before anything errors. A heads-up only — never blocks the run.
-SLOW_CALL_WARN_S = 300
+# webhook ping). The 0813-era analyst legitimately runs ~4–7 min at high effort
+# (~50 tok/s against the 32k budget), so the old 300s threshold would ping on
+# healthy runs; a call pushing past 8 min is genuinely drifting toward the 600s
+# per-call cap, where runs start silently degrading (validator skipped →
+# "unreviewed" single-model pages) long before anything errors. A heads-up only —
+# never blocks the run.
+SLOW_CALL_WARN_S = 480
 
 # ── Data files ──────────────────────────────────────────────────────────────
 RAW_DATA_FILE = DATA_DIR / "raw-data.json"

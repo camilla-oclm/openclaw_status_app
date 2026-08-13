@@ -1017,22 +1017,24 @@ def test_pipeline_validator_review_none_in_single_call(tmp_path, monkeypatch):
 
 def test_latency_watch_quiet_under_threshold():
     steps = [{"step": "primary", "model": "m1", "usage": {"latency_ms": 150_000}},
-             {"step": "validator", "model": "m2", "usage": {"latency_ms": 299_999}}]
+             {"step": "validator", "model": "m2",
+              "usage": {"latency_ms": config.SLOW_CALL_WARN_S * 1000 - 1}}]
     assert agent._latency_watch(steps) is None
     assert agent._latency_watch([]) is None
     assert agent._latency_watch(None) is None
 
 
 def test_latency_watch_flags_slow_steps_with_names():
+    warn_s = config.SLOW_CALL_WARN_S
     steps = [{"step": "primary", "model": "deepseek/deepseek-v4-pro",
-              "usage": {"latency_ms": 301_000}},
+              "usage": {"latency_ms": (warn_s + 1) * 1000}},
              {"step": "validator", "model": "qwen/qwen3.7-plus",
               "usage": {"latency_ms": 5_000}},
              {"step": "refinement", "model": "deepseek/deepseek-v4-pro",
-              "usage": {"latency_ms": 412_000}}]
+              "usage": {"latency_ms": (warn_s + 112) * 1000}}]
     msg = agent._latency_watch(steps)
-    assert "primary (deepseek/deepseek-v4-pro) took 301s" in msg
-    assert "refinement" in msg and "412s" in msg
+    assert f"primary (deepseek/deepseek-v4-pro) took {warn_s + 1}s" in msg
+    assert "refinement" in msg and f"{warn_s + 112}s" in msg
     assert "validator" not in msg                       # the fast step isn't named
     assert "slow model calls" in msg                    # plural form
     assert f"≥{config.SLOW_CALL_WARN_S}s" in msg
