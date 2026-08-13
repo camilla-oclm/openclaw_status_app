@@ -327,9 +327,9 @@ python3 run.py full                # collect → assess → render-assessment (c
 python3 run.py notify-test ["msg"] # send a test alert to ALERT_WEBHOOK_URL (verify the webhook)
 ```
 
-A full run takes **several minutes** end-to-end — usually ~5 min, up to ~10+ when the validator
+A full run takes **several minutes** end-to-end — usually ~5–10 min, up to ~15+ when the validator
 disagrees and the analyst refines — almost all of it the analyst/validator LLM reasoning; collect
-and render are seconds. Cost is a few cents/run typically, up to ~$0.08 on a refinement run.
+and render are seconds. Cost is a few cents/run typically, up to ~$0.10 on a refinement run.
 
 To preview the page, open `web/index.html` in a browser.
 
