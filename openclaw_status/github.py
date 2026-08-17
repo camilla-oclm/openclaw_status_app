@@ -466,11 +466,26 @@ def is_diamond(labels) -> bool:
 _PRERELEASE_SUFFIX = r"-(?:alpha|beta|rc|preview|pre|dev|nightly)(?![a-z])"
 
 
+def _series_build_key(patch: str | None, suffix: str | None) -> tuple:
+    """Order key for a same-series version token, from its captured patch segment
+    (".2", ".1.1", …) and hyphen suffix: (patch numbers, build stage, re-release N).
+    A pre-release build sorts BELOW its bare version and a strictly-numeric "-N"
+    hotfix re-release ABOVE it (same convention as hotfix_chain); an unrecognized
+    hyphenation ("-preinstalled") is prose, not a build tag → ranks as the bare
+    version."""
+    nums = tuple(int(p) for p in patch.strip(".").split(".")) if patch else ()
+    if suffix and re.match(_PRERELEASE_SUFFIX, suffix):
+        return (nums, 0, 0)
+    if suffix and suffix[1:].isdigit():
+        return (nums, 2, int(suffix[1:]))
+    return (nums, 1, 0)
+
+
 def version_match(text: str, version: str) -> str:
     """How specifically `text` pins the assessed version: "exact" (names this exact
     version), "prerelease" (names only a pre-release build of it, e.g.
-    "2026.6.11-beta.2"), "series" (names only its minor series, e.g. 2026.6), or
-    "none".
+    "2026.6.11-beta.2"), "series" (names only its minor series — bare, or via this
+    or an OLDER same-series version), or "none".
 
     The distinction matters for weighting: on a mature series nearly EVERY open issue
     mentions the series somewhere, so a series match barely discriminates — while an
@@ -479,6 +494,13 @@ def version_match(text: str, version: str) -> str:
     template embeds the tester's build string, so every beta-cycle report mentions
     "X-beta.N" — evidence the bug existed during the beta, not proof it shipped in
     the stable (it may have been fixed before the cut).
+
+    Direction matters for the series tier: a bug seen in an OLDER same-series version
+    may well persist into this one, but a mention of a strictly NEWER version
+    ("repro on 2026.7.2-beta.2" while assessing 2026.7.1) is about the NEXT release's
+    line and is no evidence against the assessed one. Counting those made beta-only
+    reports read as stable blockers — they polluted the analyst context AND pinned
+    per-setup verdicts (the 2026-07-31 eval's finding 3, seen live 2026-08-17).
     """
     if not version:
         return "none"
@@ -498,10 +520,18 @@ def version_match(text: str, version: str) -> str:
             return "none"
         # Match the minor series as a whole number-token so "2026.6" doesn't also
         # swallow "2026.60" / "2026.66" (different series) or digits inside a larger
-        # number. A same-series patch ("2026.6.1") still matches — a regression in the
-        # series may persist in this release — but a different series no longer does.
-        if re.search(r"(?<!\d)" + re.escape(series) + r"(?!\d)", t) is not None:
-            return "series"
+        # number. A bare series mention ("the 2026.6 line") counts, and so does a
+        # same-series version AT OR BELOW the assessed one — but a strictly newer
+        # one pins nothing (see the docstring).
+        assessed = re.fullmatch(r"((?:\.\d+)+)?(-[0-9a-z][0-9a-z.]*)?", v[len(series):])
+        mention = re.compile(r"(?<!\d)" + re.escape(series) +
+                             r"((?:\.\d+)+)?(?!\d)(-[0-9a-z][0-9a-z.]*)?")
+        for m in mention.finditer(t):
+            if not m.group(1):
+                return "series"          # bare series mention
+            if assessed is None or (_series_build_key(m.group(1), m.group(2))
+                                    <= _series_build_key(assessed.group(1), assessed.group(2))):
+                return "series"          # the assessed version's family, or older
     return "none"
 
 

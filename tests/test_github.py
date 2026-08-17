@@ -619,9 +619,10 @@ def test_version_match_levels():
     assert github.version_match("broken on v2026.6.11 at boot", v) == "exact"
     assert github.version_match("started in 2026.6.9, still broken", v) == "series"
     assert github.version_match("no versions mentioned here", v) == "none"
-    # token boundaries: a longer patch number isn't THIS version (but is its series);
+    # token boundaries: a longer patch number isn't THIS version — and since .110 is
+    # a NEWER same-series patch, it pins nothing here (the direction rule below);
     # a different series ("2026.60") isn't relevant at all
-    assert github.version_match("seen on 2026.6.110", v) == "series"
+    assert github.version_match("seen on 2026.6.110", v) == "none"
     assert github.version_match("this is about 2026.60 only", v) == "none"
     assert github.version_match("regressed in v2026.6.1", v) == "series"
     assert github.version_relevant("the 2026.6 series has this bug", v) is True
@@ -641,11 +642,47 @@ def test_version_match_prerelease_tier():
     # A prose hyphen after the version is NOT a build tag.
     assert github.version_match("the 2026.7.1-preinstalled image works", v) == "exact"
     assert github.version_match("the 2026.7.1-related refactor", v) == "exact"
-    # A beta of a DIFFERENT patch is only a series mention, same as before.
-    assert github.version_match("seen on 2026.7.2-beta.1", v) == "series"
+    # A beta of a NEWER patch is the next release's line — no match at all (the
+    # direction rule: see test_version_match_newer_series_versions_pin_nothing).
+    assert github.version_match("seen on 2026.7.2-beta.1", v) == "none"
     # Pre-release mentions still make the issue version-relevant (admission + the
     # client's conservative blocker logic both key off affects_version).
     assert github.version_relevant("crashes on 2026.7.1-beta.6", v) is True
+
+
+def test_version_match_newer_series_versions_pin_nothing():
+    # Finding 3 of the 2026-07-31 eval, confirmed live 2026-08-17: a mention of a
+    # strictly NEWER same-series version ("v2026.7.2", "2026.7.2-beta.2") is about
+    # the NEXT release's line — it must not make the issue read as affecting the
+    # assessed one. Beta-only reports were entering the ledger as affects_version
+    # via exactly this path, polluting the analyst context (burning refine passes)
+    # and falsely pinning per-setup verdicts.
+    v = "2026.7.1"
+    assert github.version_match("v2026.7.2 STRICT migration fails", v) == "none"
+    assert github.version_match("repro on 2026.7.2-beta.2", v) == "none"
+    assert github.version_match("the 2026.7.10 nightly shows it too", v) == "none"
+    assert github.version_relevant("repro on 2026.7.2-beta.2", v) is False
+    # …but an OLDER same-series mention still counts (a regression seen earlier in
+    # the series may persist into this release)…
+    assert github.version_match("broke in 2026.7.0, still broken", v) == "series"
+    # …one older mention qualifies even with newer ones alongside…
+    assert github.version_match("broke in 2026.7.0, still in 2026.7.2-beta.1", v) == "series"
+    # …and a bare series mention stays a series match.
+    assert github.version_match("everything since 2026.7 does this", v) == "series"
+
+
+def test_version_match_hotfix_chain_ordering():
+    # Assessing a "-N" hotfix re-release (the folded chain): the chain's base and
+    # earlier twins are OLDER builds of this version family (series), its own betas
+    # rank below the stables (series), but a later twin or the next patch is newer —
+    # no match. Strictly-numeric "-N" = hotfix, same convention as hotfix_chain.
+    v = "2026.7.1-2"
+    assert github.version_match("crash on 2026.7.1-2 exactly", v) == "exact"
+    assert github.version_match("seen on 2026.7.1", v) == "series"
+    assert github.version_match("seen on 2026.7.1-1", v) == "series"
+    assert github.version_match("seen in 2026.7.1-beta.5", v) == "series"
+    assert github.version_match("only on 2026.7.1-3", v) == "none"
+    assert github.version_match("fails on 2026.7.2-beta.2", v) == "none"
 
 
 def test_importance_weight_discriminates_within_a_severity():

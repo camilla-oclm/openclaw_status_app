@@ -247,8 +247,9 @@ Caddy):
 > that intentionally diverge, so filter on `severity` for "how bad is it". **`weight`** is the
 > composite importance score the ranking uses (severity + version specificity + category +
 > triage signals), and **`version_match`** says how specifically the report pins the assessed
-> version (`exact` / `prerelease` — it names only the version's beta/RC builds — / `series` /
-> `none`). **`priority_provenance`** says who stands behind the P label the severity keys off
+> version (`exact` / `prerelease` — it names only the version's beta/RC builds — / `series` —
+> a bare series mention, or this or an *older* same-series version; a strictly **newer** one,
+> e.g. the next release's beta line, pins nothing — / `none`). **`priority_provenance`** says who stands behind the P label the severity keys off
 > (`human` / `bot` / `bot-corroborated`), and **`state`** is the upstream issue state — an
 > issue closed as *completed* stays listed at reduced weight because the merged fix usually
 > isn't in the assessed release. **`platforms`** uses the tokens
@@ -336,7 +337,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 435 tests, hermetic (no network)
+python3 -m pytest        # 437 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
