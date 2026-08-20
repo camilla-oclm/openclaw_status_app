@@ -9,7 +9,7 @@ import re
 import time
 from datetime import datetime, timezone
 
-from openclaw_status import config, release_changes
+from openclaw_status import config, github, release_changes
 from openclaw_status.lib import (
     openrouter_call, load_json, load_json_or, save_json, log_usage,
     check_cost_thresholds, notify, norm_rec,
@@ -338,13 +338,29 @@ def build_context(raw: dict, prev_verdict: dict | None = None) -> str:
         def _ver_flag(i):
             vm = i.get("version_match") or ("series" if i.get("affects_version") else "none")
             if vm == "exact":
-                return f"NAMES THIS EXACT VERSION ({version})"
-            if vm == "prerelease":
-                return (f"names only a PRE-RELEASE build of {version} "
+                flag = f"NAMES THIS EXACT VERSION ({version})"
+            elif vm == "prerelease":
+                flag = (f"names only a PRE-RELEASE build of {version} "
                         "(beta-cycle report — may have been fixed before the stable cut)")
-            if vm == "series" or i.get("affects_version"):
-                return "mentions this release series"
-            return ""
+            elif vm == "series" or i.get("affects_version"):
+                flag = "mentions this release series (this or an older same-series build)"
+            else:
+                return ""
+            # The match is a token match, direction-aware but blind to prose: an issue
+            # matched via a genuine older mention may still pin its actual repro on the
+            # NEXT line's builds, and "not in stable <v>" matches <v> exactly. When the
+            # body also names strictly-newer builds, say so — otherwise the flag itself
+            # reads as confirmation and the analyst files beta-line defects against this
+            # stable (the recurring validator-disagree → refine class).
+            newer = github.newer_mentions(
+                f"{i.get('title') or ''} {i.get('body') or ''}", version)
+            if newer:
+                flag += (f" — but it ALSO names newer build(s) {', '.join(newer)}: check "
+                         f"the body for which build the defect is actually reported on "
+                         f"(a comparison against, or explicit exclusion from, {version} "
+                         "matches too); a defect present only on a newer build belongs to "
+                         "the NEXT release's evidence, not this one's")
+            return flag
 
         parts.append(header)
         for rank, i in enumerate(shown, start=1):

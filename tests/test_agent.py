@@ -1118,6 +1118,32 @@ def test_build_context_flags_prerelease_mentions(monkeypatch):
     assert "prerelease" in tier3_line                        # tier-3 compact marker
 
 
+def test_build_context_captions_newer_build_mentions(monkeypatch):
+    # An issue matched via an older/at-level mention but whose body ALSO names
+    # strictly-newer builds gets the direction caption ("check which build the
+    # defect is actually reported on") — the recurring class where a beta-line
+    # repro or a "not in stable X" negation read as confirmation and the analyst
+    # filed next-line defects against this stable, burning a refine every run.
+    # A clean match stays uncaptioned so genuine exact evidence isn't diluted.
+    monkeypatch.setattr(config, "MAX_ISSUES_IN_CONTEXT", 30)
+    monkeypatch.setattr(config, "CONTEXT_TIER_TOP", 2)
+    monkeypatch.setattr(config, "CONTEXT_TIER_MID", 2)
+    raw = _raw_with_n_issues(3)                              # target 2026.6.1
+    beta_repro, negation, clean = raw["sources"]["github_issues"]
+    beta_repro.update(weight=80, version_match="series",
+                      body="After upgrading to 2026.6.2-beta.2 the gateway fails; "
+                           "was fine on 2026.6.1-beta.1.")
+    negation.update(weight=79, version_match="exact",
+                    body="Present in 2026.7.1-beta.1, not in stable 2026.6.1.")
+    clean.update(weight=78, version_match="exact",
+                 body="Crashes on 2026.6.1 at boot, every time.")
+    ctx = agent.build_context(raw)
+    assert "ALSO names newer build(s) 2026.6.2-beta.2" in ctx
+    assert "ALSO names newer build(s) 2026.7.1-beta.1" in ctx
+    assert ctx.count("ALSO names newer build") == 2          # the clean match: no caption
+    assert "which build the defect is actually reported on" in ctx
+
+
 def test_prompt_pins_tiered_weighting():
     # Rule 9: the analyst must weigh by rank/tier, not treat issues equally.
     assert "do NOT treat them as equal evidence" in agent.SYSTEM_PROMPT

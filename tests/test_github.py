@@ -685,6 +685,34 @@ def test_version_match_hotfix_chain_ordering():
     assert github.version_match("fails on 2026.7.2-beta.2", v) == "none"
 
 
+def test_newer_mentions_inventories_strictly_newer_builds():
+    # The direction facts version_match() collapses away: every concrete token
+    # STRICTLY newer than the assessed version — the next patch and its betas, a
+    # later "-N" twin, a later series — in first-seen order, deduped. At-or-below
+    # mentions (the assessed version itself, its betas, older builds, the bare
+    # series) never appear: they're what legitimately matched.
+    v = "2026.7.1-2"
+    txt = ("Regression: present in 2026.8.1-beta.1 and 2026.7.2-beta.7, not in "
+           "stable 2026.7.1-2; was fine on 2026.7.1 / 2026.7.1-beta.9 / 2026.6.11; "
+           "the 2026.7 line; again 2026.7.2-beta.7")
+    assert github.newer_mentions(txt, v) == ["2026.8.1-beta.1", "2026.7.2-beta.7"]
+    assert github.newer_mentions("2026.7.1-2 or 2026.7.1-beta.9 or 2026.7", v) == []
+    assert github.newer_mentions("fixed by the 2026.7.1-3 re-release", v) == ["2026.7.1-3"]
+    assert github.newer_mentions("v2026.7.2 STRICT migration fails", v) == ["2026.7.2"]
+
+
+def test_newer_mentions_ignores_dates_junk_and_unparseable_versions():
+    v = "2026.7.1"
+    # A dotted DATE zero-pads its month — must not read as a 2026.8.x build.
+    assert github.newer_mentions("logged on 2026.08.17 during startup", v) == []
+    assert github.newer_mentions("node 24.15.0 required; port 19999; no builds", v) == []
+    assert github.newer_mentions("anything at all", "") == []
+    assert github.newer_mentions("", v) == []
+    # The inventory is a caption, not a dump — capped at 4 distinct tokens.
+    many = " ".join(f"2026.7.{p}" for p in range(2, 9))
+    assert len(github.newer_mentions(many, v)) == 4
+
+
 def test_importance_weight_discriminates_within_a_severity():
     base = {"severity": "high", "category": "post_release", "reactions": 3, "comments": 2}
     exact = github.importance_weight(dict(base, version_match="exact"))

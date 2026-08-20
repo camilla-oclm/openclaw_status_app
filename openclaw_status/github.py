@@ -535,6 +535,40 @@ def version_match(text: str, version: str) -> str:
     return "none"
 
 
+# Any concrete calver token ("2026.7", "2026.7.1-2", "2026.8.1-beta.1"). The minor
+# segment rejects a leading zero so a dotted DATE ("2026.08.17") is not read as the
+# (nonexistent) 2026.8.17 build — upstream never zero-pads the month.
+_VERSION_TOKEN = re.compile(
+    r"(?<!\d)(20\d\d)\.([1-9]\d?)((?:\.\d+)+)?(-[0-9a-z][0-9a-z.]*)?(?!\d)")
+
+
+def newer_mentions(text: str, version: str) -> list[str]:
+    """Concrete version tokens in `text` that are STRICTLY NEWER than the assessed
+    `version` — the same-series builds the series tier deliberately refuses to match
+    (next patch, its betas, a later "-N" twin) plus anything from a later series
+    ("2026.8.1-beta.1" while assessing 2026.7.x). First-seen order, deduped, capped.
+
+    version_match() collapses direction into a single tier, so an issue matched via a
+    genuine older mention still LOOKS fully version-relevant even when its body pins
+    the actual repro on the next line's beta ("upgrading to 2026.7.2-beta.2 …"), and a
+    token match can sit inside a negation ("not in stable 2026.7.1-2"). This inventory
+    lets the analyst context caption those flags with the direction facts instead of
+    leaving the model to re-derive them from a truncated body excerpt — the recurring
+    validator-disagree → refine class of 2026-08."""
+    va = _VERSION_TOKEN.fullmatch((version or "").lower())
+    if va is None:
+        return []
+    a_key = ((int(va.group(1)), int(va.group(2))),
+             _series_build_key(va.group(3), va.group(4)))
+    out = []
+    for m in _VERSION_TOKEN.finditer((text or "").lower()):
+        key = ((int(m.group(1)), int(m.group(2))),
+               _series_build_key(m.group(3), m.group(4)))
+        if key > a_key and m.group(0) not in out:
+            out.append(m.group(0))
+    return out[:4]
+
+
 def version_relevant(text: str, version: str) -> bool:
     """True if `text` mentions the assessed version or its minor series (e.g. 2026.6)."""
     return version_match(text, version) != "none"
