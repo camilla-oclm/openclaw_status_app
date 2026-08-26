@@ -645,7 +645,7 @@ def _release_freshness(version: str, assessed_at: str, latest_release: dict,
     early data is a community-reporting lag, not a model error).
 
     Whichever gate trips first retires the banner. The run-count gate is the real
-    signal of "enough data in hand": by the 4th run (~24h at the 6h cadence) the
+    signal of "enough data in hand": by the 4th run (~24h at the 8h fresh tier) the
     community has filed version-specific bugs, so the banner hides even though the
     publish date is still < 2 days old. `run_count` = times this version has been
     assessed so far (incl. this run); 0 = unknown, so it never retires the banner."""

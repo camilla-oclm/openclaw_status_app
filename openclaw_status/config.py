@@ -270,9 +270,24 @@ FRESH_RELEASE_MAX_RUNS = 3
 # final (None, …) tier is the floor. The 48h first boundary matches FRESH_RELEASE_DAYS.
 # Intervals are tuned for cost: a NEW release is still caught within the hour by the
 # tick (cheap, no LLM), so these only govern how often an ALREADY-seen release is
-# re-assessed — its verdict is stable, so a fresh release gets ~3 reads/day and an aged
-# one ~1/day. (Was 6/8/12; relaxed to 8/12/24 to keep monthly LLM spend in the $5–10 band.)
-ASSESS_CADENCE_TIERS = [(48, 8), (96, 12), (None, 24)]
+# re-assessed — its verdict is stable, so a fresh release gets ~3 reads/day and one
+# that's been out a fortnight gets one every other day. (Was 6/8/12, then 8/12/24 to
+# keep monthly LLM spend in the $5–10 band.)
+#
+# The two tail tiers were added 2026-08-26: past the first week the assessment stops
+# moving — the ledger has saturated, the verdict has held for days, and each run re-pays
+# the full analyst+validator+refine cost to restate it. So the decay continues instead of
+# flooring at a day: 24h through week one, 36h in week two, 48h from then on. A genuinely
+# new release resets the age clock to the 8h tier, so responsiveness where it matters is
+# untouched — only the stale tail gets cheaper.
+#
+# ⚠️ COUPLED to the external watchdog: it alerts when latest.json's `assessed_at` is older
+# than its --stale-hours, so that threshold must clear the SLOWEST tier here plus a run's
+# own duration (48h + the 0.5h grace + hourly tick granularity + ~15min of run ≈ 48.75h
+# worst case while perfectly healthy). deploy/watchdog.py defaults to 56h for exactly this
+# reason — raising the floor here means raising it there AND in the live cron line, or
+# every aged release trips a false STALE alert.
+ASSESS_CADENCE_TIERS = [(48, 8), (96, 12), (168, 24), (336, 36), (None, 48)]
 # Fire a touch early so an hourly tick never drifts a full slot late (timer jitter).
 SCHEDULE_GRACE_H = 0.5
 # New-release retry backoff. A new release fires an immediate assessment, but if that assess

@@ -337,7 +337,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 440 tests, hermetic (no network)
+python3 -m pytest        # 445 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
@@ -367,8 +367,9 @@ sudo -u openclaw /opt/openclaw_status_app/.venv/bin/python run.py full   # seed 
 
 Point the domain's DNS A-record at the box and open ports 80/443 — Caddy issues the TLS cert
 automatically. After that, the timer ticks hourly — picking up a new release within the hour and
-otherwise reassessing on an adaptive cadence (every 8h while a release is fresh, then 12h, then 24h;
-see `config.ASSESS_CADENCE_TIERS`), so shipping a change is just `git push`. Useful on-box commands: `journalctl -u openclaw-status.service -f`
+otherwise reassessing on an adaptive cadence that decays as the release ages and its verdict stops
+moving (every 8h while it's fresh, then 12h, then 24h for the rest of the first week, 36h in the
+second, and 48h from then on; see `config.ASSESS_CADENCE_TIERS`), so shipping a change is just `git push`. Useful on-box commands: `journalctl -u openclaw-status.service -f`
 (logs), `systemctl list-timers openclaw-status.timer` (schedule), `sudo systemctl start
 openclaw-status.service` (runs a tick now — gates; use `run.py full` to force a full assessment).
 Changes under `deploy/` need a re-run of `provision.sh`
@@ -377,8 +378,10 @@ to reinstall the `/etc` copies.
 **External watchdog** — the box's own Discord alerts die with the box, so
 [`deploy/watchdog.py`](deploy/watchdog.py) (stdlib-only, runs anywhere with Python 3.10+)
 watches from a *separate always-on host*: it checks the live page (HTTP 200 + the rendered-page
-marker) and `latest.json` freshness (`assessed_at` under 30h — catches a silently-dead pipeline
-behind a live web server), and pings a Slack/Discord webhook on state changes only — down,
+marker) and `latest.json` freshness (`assessed_at` under `--stale-hours`, default 56h — sized to
+clear the cadence's slowest tier, so it catches a silently-dead pipeline behind a live web server
+without false-alarming on an aged release that is simply due less often), and pings a
+Slack/Discord webhook on state changes only — down,
 periodic still-down heartbeats, and recovery — remembering the prior state in a local JSON
 file. One cron line on any second machine:
 

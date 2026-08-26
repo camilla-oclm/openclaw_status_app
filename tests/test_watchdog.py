@@ -75,6 +75,24 @@ def test_check_site_staleness_boundary():
     assert ok is False and "STALE" in reason
 
 
+def test_stale_hours_default_clears_the_slowest_assessment_cadence():
+    """The staleness limit and the assessment cadence are coupled — pin them together.
+
+    An aged release is only re-assessed every ASSESS_CADENCE_TIERS-floor hours, so the
+    newest assessed_at legitimately reaches that age just before the next run lands. Let
+    the watchdog's default slip under that and a perfectly healthy pipeline trips a false
+    STALE alert every cycle; let it drift far above and a wholly dead one goes unnoticed.
+    """
+    from openclaw_status import config      # the test bridges the two; watchdog.py stays standalone
+
+    floor_h = config.ASSESS_CADENCE_TIERS[-1][1]
+    # Worst case while healthy: the run fires a grace early, but the tick only looks
+    # hourly, and the assessment itself takes a slice of an hour to land.
+    worst_case_healthy_h = floor_h - config.SCHEDULE_GRACE_H + 1 + 0.25
+    assert watchdog.DEFAULT_STALE_HOURS > worst_case_healthy_h
+    assert watchdog.DEFAULT_STALE_HOURS < 2 * floor_h    # a missed cycle must still surface
+
+
 def test_check_with_retry_recovers_on_blip(monkeypatch):
     calls = {"n": 0}
     good = _fetcher()

@@ -19,7 +19,22 @@ def test_cadence_tiers_decay_with_age():
     assert scheduler.cadence_hours(48) == 12       # boundary rolls into the next tier
     assert scheduler.cadence_hours(95) == 12
     assert scheduler.cadence_hours(96) == 24
-    assert scheduler.cadence_hours(10_000) == 24   # floor tier (upper is None)
+    assert scheduler.cadence_hours(167) == 24      # daily through the release's first week
+    assert scheduler.cadence_hours(168) == 36      # week two — the verdict has stopped moving
+    assert scheduler.cadence_hours(335) == 36
+    assert scheduler.cadence_hours(336) == 48      # a fortnight on, every other day
+    assert scheduler.cadence_hours(10_000) == 48   # floor tier (upper is None)
+
+
+def test_cadence_decays_monotonically():
+    # The whole point of the ladder is that it only ever slows down with age. A tier that
+    # sped back up (or a bound out of order, which `first match wins` would silently
+    # swallow) would re-spend on the releases that need it least.
+    bounds = [u for u, _ in config.ASSESS_CADENCE_TIERS[:-1]]
+    intervals = [i for _, i in config.ASSESS_CADENCE_TIERS]
+    assert config.ASSESS_CADENCE_TIERS[-1][0] is None      # exactly one floor tier, last
+    assert bounds == sorted(bounds) and len(set(bounds)) == len(bounds)
+    assert intervals == sorted(intervals)
 
 
 def test_first_tier_matches_fresh_release_window():
@@ -62,9 +77,28 @@ def test_mid_window_paces_at_12h():
 
 
 def test_old_window_paces_at_24h():
-    # release age 200h → 24h cadence
-    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(23))[0] is False
-    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(24))[0] is True
+    # release age 120h (5 days — still inside the first week) → 24h cadence
+    assert scheduler.should_run(NOW, ago(120), "x", "x", ago(23))[0] is False
+    assert scheduler.should_run(NOW, ago(120), "x", "x", ago(24))[0] is True
+
+
+def test_second_week_paces_at_36h():
+    # release age 200h (8+ days) → 36h cadence
+    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(35))[0] is False
+    assert scheduler.should_run(NOW, ago(200), "x", "x", ago(36))[0] is True
+
+
+def test_fortnight_old_release_paces_at_48h():
+    # release age 400h (2+ weeks) → the 48h floor
+    assert scheduler.should_run(NOW, ago(400), "x", "x", ago(47))[0] is False
+    assert scheduler.should_run(NOW, ago(400), "x", "x", ago(48))[0] is True
+
+
+def test_a_new_release_still_resets_an_aged_clock_to_the_fast_tier():
+    # The tail tiers must never make a NEW release sluggish: a fortnight-old assessed
+    # version with a just-published successor assesses on the next tick, not in 48h.
+    run, why = scheduler.should_run(NOW, ago(0.5), "2026.9.0", "2026.7.1-2", ago(20))
+    assert run is True and "new release" in why
 
 
 def test_grace_fires_a_touch_early():
@@ -74,9 +108,9 @@ def test_grace_fires_a_touch_early():
 
 
 def test_unknown_publish_date_uses_floor_cadence():
-    # No publish date → treat as old → 24h floor (conservative, avoids over-running).
-    assert scheduler.should_run(NOW, None, "x", "x", ago(23))[0] is False
-    assert scheduler.should_run(NOW, None, "x", "x", ago(24))[0] is True
+    # No publish date → treat as old → the 48h floor (conservative, avoids over-running).
+    assert scheduler.should_run(NOW, None, "x", "x", ago(47))[0] is False
+    assert scheduler.should_run(NOW, None, "x", "x", ago(48))[0] is True
 
 
 # ── cmd_tick wiring ──────────────────────────────────────────────────────────

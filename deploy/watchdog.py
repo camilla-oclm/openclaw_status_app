@@ -10,8 +10,11 @@ Checks, in order (any failure = DOWN, with one retry to ride out blips):
                         (the data-inject contract — proves a *rendered* page, not
                         a default vhost or an error page that happens to be 200).
   2. GET /latest.json → HTTP 200, valid JSON, a non-empty recommendation, and an
-                        assessed_at younger than --stale-hours (default 30h: the
-                        slowest healthy cadence is 24h + refine/latency margin).
+                        assessed_at younger than --stale-hours (default 56h: the
+                        slowest healthy cadence is the 48h floor of
+                        config.ASSESS_CADENCE_TIERS, plus the scheduler's grace,
+                        the hourly tick's granularity and a refine run's own
+                        duration — keep these two in step).
                         A stale page with a live box means runs are silently
                         failing — exactly the state an outside watcher must catch.
 
@@ -42,6 +45,14 @@ import urllib.request
 from datetime import datetime, timezone
 
 DEFAULT_URL = "https://clawstat.us"
+# How old latest.json's assessed_at may get before the pipeline counts as silently dead.
+# COUPLED to config.ASSESS_CADENCE_TIERS: it must clear that list's floor tier (48h for a
+# release older than a fortnight) plus the scheduler's grace, the hourly tick's
+# granularity and a refine run's own duration — ~48.75h is the worst case while perfectly
+# healthy. 56h leaves margin there and still catches a wholly missed cycle within ~8h.
+# A test pins the relationship; raise this whenever that floor is raised (and update the
+# live cron line, which passes --stale-hours explicitly).
+DEFAULT_STALE_HOURS = 56.0
 PAGE_MARKER = 'id="assessment-data"'
 UA = "clawstat-watchdog/1 (+https://github.com/camilla-oclm/openclaw_status_app)"
 
@@ -183,7 +194,7 @@ def send_webhook(url: str, message: str) -> bool:
 def main(argv=None, now=None) -> int:
     p = argparse.ArgumentParser(description="External uptime watchdog for clawstat.us")
     p.add_argument("--url", default=DEFAULT_URL)
-    p.add_argument("--stale-hours", type=float, default=30.0)
+    p.add_argument("--stale-hours", type=float, default=DEFAULT_STALE_HOURS)
     p.add_argument("--history", default="",
                    help="prior completed run conclusions, newest first, comma-separated")
     p.add_argument("--state-file", default="",
