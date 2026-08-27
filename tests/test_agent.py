@@ -1194,10 +1194,11 @@ def test_prompts_pin_earned_hold_calibration():
     assert "both directions are" in agent.VALIDATOR_PROMPT
 
 
-def test_provider_prefs_ride_deepseek_seats_only(monkeypatch):
-    """config.PRIMARY_PROVIDER (the OpenRouter provider-routing pin) must ride ONLY
-    the deepseek seats — the analyst and refine calls. The minimax fallback and the
-    validator keep default routing: their provider pools are different entirely."""
+def test_provider_prefs_ride_primary_seats_only(monkeypatch):
+    """config.PRIMARY_PROVIDER (the OpenRouter provider-routing pin — None today, no
+    reliability history yet for the seated analyst) must ride ONLY the two PRIMARY_MODEL
+    call sites: analyst and refine. The minimax fallback and the validator keep default
+    routing regardless — their provider pools are different entirely."""
     calls = []
     valid = _valid_assessment()
 

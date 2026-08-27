@@ -67,22 +67,49 @@ REPO_PATH = f"{REPO_OWNER}-{REPO_NAME}"
 # un-dated pool lost first-party routing at GA and prices ~2.7× above the
 # snapshot ($1.17/$2.34 vs $0.435/$0.87), and — same lesson as the flash
 # "-latest" alias above — rolling slugs shift under you; pin the dated snapshot.
-PRIMARY_MODEL = "deepseek/deepseek-v4-pro-0813"
+#
+# 2026-08-27: seat moved to z-ai/glm-5.3-flash (user request, cost-triggered — the
+# 08-20 DeepSeek re-pricing had pushed 0813 to ~$0.18/run). NOT the same situation
+# as the deepseek-flash disqualification above: that was a different provider's
+# lighter tier failing to finish the workload at all (empty responses, wall-clock
+# runaways). Before seating this one, it was run through the same real-context
+# eval method documented in the project's auto-memory: 3 independent analyst-only
+# calls on today's real collected context, plus one full validator+refine cycle
+# through the REAL qwen validator and a real refine call. Findings: schema-valid
+# every time, zero hallucinated issue numbers (checked against the full context,
+# not just the top-60 ledger), full tier-1 (top-8) coverage every time, verdict
+# matched the deepseek baseline (⚠️ medium) on 2/3 runs. The 3rd run surfaced a
+# real defect worth remembering: glm systematically under-reports severity by one
+# tier vs the raw data's own explicit label (critical→high, high→medium, 15/15
+# flagged issues, reproduced in run 1 too) — enough to flip that run's INITIAL
+# verdict to an unearned ⏸️. The validator caught it in full and the refine pass
+# (glm refining itself) corrected all 15 severities to match the raw data exactly,
+# so the existing two-model architecture absorbs this cleanly — same design intent
+# as the keep-qwen rationale below, now doing real work against the NEW seat's
+# blind spot instead of deepseek's. Expect refine to fire close to every run (same
+# as it already does with deepseek) — it's cheap enough not to matter: the 3-call
+# eval run (analyst + validator + refine) cost $0.0179 vs deepseek's typical ~$0.18,
+# roughly a 90% cut even with refine assumed universal. No first-party provider pin
+# exists yet for z-ai (PRIMARY_PROVIDER dropped to None below) — there's no
+# reliability history to justify pinning one of its two OpenRouter hosts over the
+# other; revisit if a runaway/degraded-host pattern ever shows up, the same way the
+# deepseek pin was added after the 08-07 provider-lottery incident.
+PRIMARY_MODEL = "z-ai/glm-5.3-flash"
 # One shared reasoning config for every role (analyst / validator / fallback). Effort is
 # a parked cost lever — dropping a single role to "medium" means rebinding that role's name.
 _REASONING_HIGH = {"effort": "high", "exclude": False}
 PRIMARY_REASONING = _REASONING_HIGH
-# OpenRouter provider routing for the two deepseek seats (analyst + refine). The
-# un-dated pro pool was ~18 hosts with OpenRouter load-balancing across them, so
-# every call was a provider lottery — degraded hosts (Venice at 44% uptime on
-# 08-07; Sail Research and Fireworks the day before, on flash) served the
-# trickling/empty responses behind our wall-clock kills and empty-content bails.
-# The 0813 snapshot is single-provider (first-party) as of 2026-08-13, which makes
-# the pin a no-op today — kept deliberately: if resellers join the snapshot's pool
-# later, first-party stays preferred; allow_fallbacks keeps any future pool behind
-# it, and the minimax fallback model still backstops the whole run.
+# OpenRouter provider routing for the analyst + refine calls (config.PRIMARY_MODEL's
+# two use sites). This was a deepseek-specific first-party pin (see the seat-history
+# comment above) — the un-dated pro pool was ~18 hosts with OpenRouter load-balancing
+# across them, so every call was a provider lottery, and degraded hosts served the
+# trickling/empty responses behind the wall-clock kills. That reasoning doesn't
+# transfer to z-ai/glm-5.3-flash: its OpenRouter pool is just two hosts (Z.AI direct,
+# Novita) with no reliability history yet to prefer one over the other, so this stays
+# None (default routing) until evidence says otherwise — same trigger as last time:
+# a runaway/degraded-host pattern on scheduled runs.
 # Deliberately NOT applied to the validator/fallback seats: different pools.
-PRIMARY_PROVIDER = {"order": ["deepseek"], "allow_fallbacks": True}
+PRIMARY_PROVIDER = None
 # Independent reviewer — deliberately a *different* model from the analyst, so it
 # catches the primary's blind spots instead of rubber-stamping its own reasoning.
 # qwen3.7-plus reasons, so the validator call gets the wide token budget too
@@ -91,7 +118,7 @@ VALIDATOR_MODEL = "qwen/qwen3.7-plus"
 VALIDATOR_REASONING = _REASONING_HIGH
 
 # Fallback (used if the primary fails). minimax-m3 is a third distinct provider —
-# different from both the deepseek analyst and the qwen validator — so a deepseek
+# different from both the analyst (z-ai) and the qwen validator — so a primary
 # outage neither sinks the run nor collapses analyst+validator onto the same model.
 # IDs are real OpenRouter slugs (provider/model) — a wrong slug returns HTTP 400
 # and burns a retry, so keep them in sync with https://openrouter.ai/api/v1/models.
@@ -119,11 +146,16 @@ MONTHLY_COST_LIMIT = 10.0    # USD
 # (~4–6k reasoning burn), but the V4 Pro GA weights (0813) think 16k+ on this
 # workload: on 2026-08-13 the analyst burned the entire 16k budget on reasoning
 # and returned zero content, and minimax truncated mid-JSON at the same cap.
-# 32k = the observed burn ×2, still far under every seat's output ceiling
-# (0813 384k, minimax 512k, qwen3.7-plus 131k) and worth < $0.03/call at these
-# prices. Time is the real cost of a bigger cap — see PIPELINE_BUDGET_S, sized
-# with it. The validator reasons too, so _step_validator passes it this same
-# budget (its JSON would otherwise truncate behind the reasoning tokens).
+# 32k was sized for the 0813-era deepseek reasoning burn (2× its observed 16k+
+# burn) — kept unchanged for the 2026-08-27 glm-5.3-flash seat, where it's a
+# generous ceiling rather than a tight one: eval runs used 3.7k-7.7k tokens_out
+# (18-24% of the cap), so there's no starvation risk to size against. Still far
+# under every seat's output ceiling (glm-5.3-flash 131k, minimax 512k,
+# qwen3.7-plus 131k) and worth < $0.03/call at every seat's current prices.
+# Time is the real cost of a bigger cap — see PIPELINE_BUDGET_S, sized with it
+# (that sizing, too, is now a ceiling with headroom, not a requirement). The
+# validator reasons too, so _step_validator passes it this same budget (its
+# JSON would otherwise truncate behind the reasoning tokens).
 ASSESSMENT_MAX_TOKENS = 32000
 
 # Cooperative wall-clock budget for the COLLECT phase (PipelineTimer, checked between
@@ -167,9 +199,10 @@ CONTEXT_TIER_TOP = 8
 CONTEXT_TIER_MID = 12
 
 # Latency watch: a single LLM call at/over this many seconds gets flagged (log +
-# webhook ping). The 0813-era analyst legitimately runs ~4–7 min at high effort
-# (~50 tok/s against the 32k budget), so the old 300s threshold would ping on
-# healthy runs; a call pushing past 8 min is genuinely drifting toward the 600s
+# webhook ping). Sized for the 0813-era analyst, which legitimately ran ~4–7 min
+# at high effort (~50 tok/s against the 32k budget) — kept unchanged for the
+# 2026-08-27 glm-5.3-flash seat, whose eval calls finished in ~1.7–5.4 min, well
+# under this. A call pushing past 8 min is genuinely drifting toward the 600s
 # per-call cap, where runs start silently degrading (validator skipped →
 # "unreviewed" single-model pages) long before anything errors. A heads-up only —
 # never blocks the run.

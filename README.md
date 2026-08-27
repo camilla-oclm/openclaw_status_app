@@ -36,7 +36,7 @@ providers** argue it out before anything ships.
 ### Highlights
 
 - **Independent multi-model review** — the analyst and validator are *different* providers
-  (DeepSeek + Qwen, with MiniMax as fallback), so no model rubber-stamps its own reasoning and a
+  (Z.ai + Qwen, with MiniMax as fallback), so no model rubber-stamps its own reasoning and a
   single-vendor outage can't sink a run.
 - **Evidence-ranked scouting** — issues are scored from the repo's real `P0…P4` / breakage / harm
   labels and ranked by severity *blended with whether the bug affects the assessed version*, so a
@@ -156,7 +156,7 @@ issue is marked **fixed** only if the release/pre-release body explicitly closes
 
 A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 
-1. **Analyst** (`deepseek/deepseek-v4-pro-0813`, high reasoning) produces a structured
+1. **Analyst** (`z-ai/glm-5.3-flash`, high reasoning) produces a structured
    assessment from the collected data. Only the top-N issues by rank are fed to the
    prompt (`config.MAX_ISSUES_IN_CONTEXT`), and they arrive in **reading tiers** that
    mirror the ranking — the top blockers in full detail (these must drive the verdict,
@@ -189,9 +189,11 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 
 If the analyst call fails, it falls back to `minimax/minimax-m3` — a third distinct provider,
 so a single-vendor outage doesn't sink the run (and the analyst and validator stay on
-different models). All models are served via OpenRouter; the analyst/refine calls carry a
-provider-routing preference for the model's first-party endpoint (`config.PRIMARY_PROVIDER`),
-which ended a run of wall-clock runaways traced to degraded third-party hosts in the pool.
+different models). All models are served via OpenRouter; the analyst/refine calls can carry a
+provider-routing preference for a specific host (`config.PRIMARY_PROVIDER`) — used previously to
+pin a prior analyst seat to its first-party endpoint after a run of wall-clock runaways traced
+to degraded third-party hosts in its pool, currently unset for the seated model pending its own
+reliability history.
 
 The output is schema- and XSS-validated, appended to `data/history.json`, and cost/latency
 is logged to `data/usage.json` (with daily/monthly budget alerts, plus a latency watch that
@@ -328,9 +330,9 @@ python3 run.py full                # collect → assess → render-assessment (c
 python3 run.py notify-test ["msg"] # send a test alert to ALERT_WEBHOOK_URL (verify the webhook)
 ```
 
-A full run takes **several minutes** end-to-end — usually ~5–10 min, up to ~15+ when the validator
+A full run takes a few minutes end-to-end — usually ~4–5 min, up to ~8–9 min when the validator
 disagrees and the analyst refines — almost all of it the analyst/validator LLM reasoning; collect
-and render are seconds. Cost is a few cents/run typically, up to ~$0.10 on a refinement run.
+and render are seconds. Cost is roughly **$0.02/run**, whether or not a refinement pass fires.
 
 To preview the page, open `web/index.html` in a browser.
 
