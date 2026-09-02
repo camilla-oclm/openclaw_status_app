@@ -1312,3 +1312,163 @@ def test_llms_txt_review_line_distinguishes_failed_recheck():
     revised = review_line({"validated": True, "agreed": False, "refined": True,
                            "primary_recommendation": "✅"})
     assert "revised from ✅ to ⚠️" in revised
+
+
+# ── plain-language status, evidence gate, best version to run (verdict.py surfaces) ────
+
+def _fresh_raw(published="2026-09-01T10:00:00Z", history=()):
+    return {"sources": {
+        "latest_release": {"tag": "v2026.8.2", "published_at": published,
+                           "url": "https://github.com/openclaw/openclaw/releases/tag/v2026.8.2"},
+        "release_history": list(history),
+    }}
+
+
+def _isolate_state(tmp_path, monkeypatch):
+    for name in ("HISTORY_FILE", "TIMELINE_FILE", "ISSUE_LEDGER_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+
+
+def test_build_status_is_wait_for_a_fresh_non_skip_release(tmp_path, monkeypatch):
+    _isolate_state(tmp_path, monkeypatch)
+    d = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-01T18:00:00+00:00",
+         "assessment": {"recommendation": "⚠️", "known_issues": []}}, _fresh_raw())
+    assert d["freshness"]["fresh"] is True
+    assert d["status"] == {"key": "wait", "label": "Too new to call", "recommendation": "⚠️",
+                           "early_read": "Update with care"}
+    # …and a fresh ⏸️ stays a skip (its early evidence is already negative).
+    d2 = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-01T18:00:00+00:00",
+         "assessment": {"recommendation": "⏸️", "known_issues": []}}, _fresh_raw())
+    assert d2["status"]["key"] == "skip"
+
+
+def test_build_status_after_the_fresh_window(tmp_path, monkeypatch):
+    _isolate_state(tmp_path, monkeypatch)
+    d = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-20T18:00:00+00:00",
+         "assessment": {"recommendation": "✅", "known_issues": []}}, _fresh_raw())
+    assert d["status"] == {"key": "update", "label": "Safe to update", "recommendation": "✅",
+                           "early_read": None}
+
+
+def test_build_ships_persisted_evidence_gate_compacted(tmp_path, monkeypatch):
+    _isolate_state(tmp_path, monkeypatch)
+    d = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-20T00:00:00+00:00",
+         "assessment": {"recommendation": "⏸️", "known_issues": []},
+         "evidence_gate": {"verdict": "⚠️", "blockers": [7, "8", "junk"], "widespread": [],
+                           "serious": [], "blocker_count": 2, "reason": "2 credible blocking issues…",
+                           "floor_applied": False,
+                           "departure": {"departed": True, "reason": "upgrade-path cluster #7 #8"},
+                           "internal": "dropped"}},
+        _fresh_raw())
+    eg = d["evidence_gate"]
+    assert eg["verdict"] == "⚠️" and eg["blockers"] == [7, 8] and eg["blocker_count"] == 2
+    assert eg["departure"] == {"departed": True, "reason": "upgrade-path cluster #7 #8"}
+    assert "internal" not in eg
+
+
+def test_build_recomputes_evidence_gate_for_old_assessments(tmp_path, monkeypatch):
+    """Assessments predating the field still explain themselves: the gate is re-derived
+    from the same known-issues rows the page renders."""
+    _isolate_state(tmp_path, monkeypatch)
+    raw = _fresh_raw()
+    raw["sources"]["github_issues"] = [
+        {"number": 41, "title": "crash", "severity": "critical", "affects_version": True,
+         "state": "open", "priority_provenance": "bot", "impact": "low", "labels": ["P0"]},
+        {"number": 42, "title": "meh", "severity": "high", "affects_version": True,
+         "state": "open", "priority_provenance": "bot", "impact": "low", "labels": ["P1"]},
+    ]
+    d = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-20T00:00:00+00:00",
+         "assessment": {"recommendation": "⚠️", "known_issues": [
+             {"number": 41, "title": "crash", "severity": "critical", "category": "post_release",
+              "platforms": ["macos"]},
+             {"number": 42, "title": "meh", "severity": "high", "category": "post_release",
+              "platforms": ["linux"]}]}},
+        raw)
+    eg = d["evidence_gate"]
+    assert eg["verdict"] == "⚠️" and eg["blockers"] == [41]     # the bot-only HIGH is ambient
+    assert eg["floor_applied"] is False and eg["departure"]["departed"] is False
+
+
+def test_build_recommended_version_reads_history_release_dates_and_ledger(tmp_path, monkeypatch):
+    _isolate_state(tmp_path, monkeypatch)
+    import json as _json
+    (tmp_path / "history_file.json").write_text(_json.dumps([
+        {"version": "2026.7.1-2", "recommendation": "⚠️", "assessed_at": "2026-08-29T16:20:33+00:00"},
+        {"version": "2026.8.1", "recommendation": "⏸️", "assessed_at": "2026-09-01T12:47:17+00:00"},
+        {"version": "2026.8.2", "recommendation": "⚠️", "assessed_at": "2026-09-01T18:39:30+00:00"},
+    ]))
+    (tmp_path / "issue_ledger_file.json").write_text(_json.dumps({
+        "2026.7.1-2": {"issues": {"119281": {
+            "number": 119281, "title": "Update fails during doctor checks", "severity": "critical",
+            "affects_version": True, "state": "open", "priority_provenance": "bot-corroborated",
+            "impact": "low", "reactions": 0, "labels": ["P0"]}}},
+        "2026.8.1": {"issues": {}},
+        "2026.8.2": {"issues": {}},
+    }))
+    history = [
+        {"tag": "v2026.8.2", "published_at": "2026-09-01T10:00:00Z", "prerelease": False, "body": ""},
+        {"tag": "v2026.9.1-beta.1", "published_at": "2026-08-28T00:00:00Z", "prerelease": True, "body": ""},
+        {"tag": "v2026.8.1", "published_at": "2026-08-31T10:00:00Z", "prerelease": False, "body": ""},
+        {"tag": "v2026.7.1-2", "published_at": "2026-08-04T00:41:00Z", "prerelease": False, "body": ""},
+    ]
+    d = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-02T00:00:00+00:00",
+         "assessment": {"recommendation": "⚠️", "known_issues": []}},
+        _fresh_raw(history=history))
+    rv = d["recommended_version"]
+    assert rv["version"] == "2026.7.1-2" and rv["kind"] == "settled"
+    assert rv["age_days"] == 29 and rv["recommendation"] == "⚠️" and rv["gate"] == "⚠️"
+    assert rv["blockers"][0]["number"] == 119281 and rv["blocker_count"] == 1
+    assert rv["latest"] == {"version": "2026.8.2", "age_days": 1, "recommendation": "⚠️", "settled": False}
+    # Machine surfaces say it in one line.
+    line = render._recommended_line(d)
+    assert line.startswith("v2026.7.1-2 — 29 days in the field, 1 credible known issue, none widespread")
+    assert "last verdict Update with care" in line and "The latest, v2026.8.2, came out yesterday" in line
+    llms = render._llms_txt(d)
+    assert "- Best version to run today: v2026.7.1-2" in llms
+    assert "- Status: Too new to call — early read: Update with care." in llms
+    assert "- Evidence gate: ✅ — No credible blocking issue" in llms
+    body = render._seo_body(d)
+    assert "<strong>Best version to run today:</strong> v2026.7.1-2" in body
+    assert "<h1>Should you update OpenClaw v2026.8.2? — Too new to call</h1>" in body
+    assert render._seo_title(d).startswith("Should you update OpenClaw v2026.8.2? Too new to call")
+
+
+def test_recommended_line_when_nothing_has_settled():
+    d = {"version": "2.0", "recommended_version": {"version": None, "kind": "none", "min_days": 7,
+                                                    "latest": {"version": "2.0"}}}
+    line = render._recommended_line(d)
+    assert line.startswith("No release has settled yet") and "stay put" in line
+
+
+def test_recommended_line_when_the_latest_is_the_pick():
+    d = {"version": "2.0", "recommended_version": {
+        "version": "2.0", "kind": "latest", "age_days": 12, "recommendation": "✅",
+        "blocker_count": 0, "min_days": 7, "latest": {"version": "2.0", "age_days": 12}}}
+    assert render._recommended_line(d) == ("v2.0 — the latest release, 12 days in the field, no "
+                                           "credible known issue; last verdict Safe to update.")
+
+
+def test_llms_txt_names_a_departure_from_the_gate():
+    d = {"version": "2.0", "recommendation": "⏸️", "confidence": "medium",
+         "assessed_at": "2026-09-02T00:00:00+00:00", "known_issues": [],
+         "status": {"key": "skip", "label": "Skip this one"},
+         "evidence_gate": {"verdict": "⚠️", "reason": "2 credible blocking issues confirmed for this version, none widespread.",
+                           "departure": {"departed": True, "reason": "upgrade-path cluster #1 #2"}},
+         "recommended_version": {"version": None, "kind": "none", "min_days": 7, "latest": {"version": "2.0"}}}
+    llms = render._llms_txt(d)
+    assert ("- Evidence gate: ⚠️ — 2 credible blocking issues confirmed for this version, none "
+            "widespread. The analyst chose to be more cautious than the gate: upgrade-path cluster #1 #2") in llms
+    assert "- Status:" not in llms            # only the wait-state gets a status line
+
+
+def test_care_label_is_one_name_on_every_surface():
+    assert render._VERDICT_LABEL["⚠️"] == "Update with care"
+    assert render._VERDICT_TEXT["⚠️"][0] == "update with care"
+    assert "precautions" not in render._llms_txt({"version": "1", "recommendation": "⚠️",
+                                                  "known_issues": []})

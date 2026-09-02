@@ -1226,3 +1226,114 @@ def test_provider_prefs_ride_primary_seats_only(monkeypatch):
     calls.clear()
     agent._step_refinement("ctx", valid, {"agrees": False})
     assert calls[0] == (config.PRIMARY_MODEL, config.PRIMARY_PROVIDER)
+
+
+# ── evidence gate (deterministic floor; see verdict.py) ───────────────────────
+
+def test_build_context_states_the_evidence_gate_before_the_issues():
+    raw = _raw_with_n_issues(3)
+    iss = raw["sources"]["github_issues"]
+    iss[0].update(severity="critical", affects_version=True, priority_provenance="bot", impact="low")
+    iss[1].update(severity="high", affects_version=True, priority_provenance="bot", impact="low")  # ambient
+    iss[2].update(severity="high", affects_version=True, priority_provenance="human", impact="low")
+    ctx = agent.build_context(raw)
+    assert "## Evidence gate" in ctx
+    assert "Gate verdict: ⚠️ — 2 credible blocking issues" in ctx
+    assert "Credible blockers" in ctx and "#1" in ctx and "#3" in ctx
+    assert ctx.index("## Evidence gate") < ctx.index("## Open Issues")
+    assert "never be LESS cautious than the gate" in ctx
+
+
+def test_build_context_gate_is_update_when_nothing_credible():
+    raw = _raw_with_n_issues(2)   # bot-labeled? no provenance → but affects_version absent → none
+    ctx = agent.build_context(raw)
+    assert "Gate verdict: ✅ — No credible blocking issue" in ctx
+
+
+def test_prompts_pin_the_gate_contract():
+    assert "## Evidence gate" in agent.SYSTEM_PROMPT
+    assert "gate_departure_reason" in agent.SYSTEM_PROMPT
+    assert "Gate ✅ (no credible blocker): your recommendation is ✅" in agent.SYSTEM_PROMPT
+    assert "honest default" not in agent.SYSTEM_PROMPT          # ⚠️ is no longer the default
+    assert "a page that never says so is useless" in agent.SYSTEM_PROMPT
+    assert "gate_departure_reason" in agent._OUTPUT_SCHEMA
+    assert "at most 140 characters" in agent.SYSTEM_PROMPT       # headline is the hero one-liner
+    assert 'CHECK THE VERDICT AGAINST THE "## Evidence gate"' in agent.VALIDATOR_PROMPT
+    assert "Evidence gate" in agent.REFINEMENT_PROMPT
+
+
+def test_validate_screens_departure_reason_like_other_prose():
+    errors = agent.validate_assessment(_valid_assessment(gate_departure_reason="<script>x</script>"))
+    assert any("gate_departure_reason" in e for e in errors)
+    a = _valid_assessment(gate_departure_reason=["not", "a", "string"])
+    errors = agent.validate_assessment(a)
+    assert any("gate_departure_reason must be a string" in e for e in errors)
+    assert isinstance(a["gate_departure_reason"], str)
+
+
+def _pipeline_raw(issues):
+    return {"target_version": "1.0", "sources": {
+        "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
+        "latest_prerelease": None, "github_issues": issues, "clawsweeper": {}, "release_history": [],
+    }}
+
+
+def _isolate_files(tmp_path, monkeypatch):
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE",
+                 "ISSUE_LEDGER_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+
+
+def test_pipeline_raises_a_verdict_below_the_gate_floor(tmp_path, monkeypatch):
+    """The model says ✅ while the ledger carries a credible critical → published ⚠️, the
+    record says the floor moved it, and the alert names it."""
+    _isolate_files(tmp_path, monkeypatch)
+    sent = []
+    monkeypatch.setattr(agent, "notify", lambda text: sent.append(text) or True)
+    monkeypatch.setattr(agent, "openrouter_call", lambda *a, **kw: {
+        "success": True, "parsed": _valid_assessment(recommendation="✅"), "model": "m",
+        "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}})
+    crit = {"number": 41, "title": "gateway crash-loops after upgrade", "severity": "critical",
+            "category": "post_release", "affects_version": True, "state": "open",
+            "priority_provenance": "bot", "impact": "low", "url": "https://x/41"}
+    assert agent.run_assessment_pipeline(raw=_pipeline_raw([crit]), single_call=True)["success"] is True
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["assessment"]["recommendation"] == "⚠️"
+    assert saved["evidence_gate"]["verdict"] == "⚠️"
+    assert saved["evidence_gate"]["blockers"] == [41]
+    assert saved["evidence_gate"]["floor_applied"] is True
+    assert saved["evidence_gate"]["departure"] == {"departed": False, "reason": ""}
+    assert saved["primary_recommendation"] == "✅"            # the raw model read is kept
+    assert any("raised to the evidence-gate floor" in t for t in sent)
+
+
+def test_pipeline_records_a_justified_departure_above_the_gate(tmp_path, monkeypatch):
+    _isolate_files(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent, "notify", lambda text: True)
+    a = _valid_assessment(recommendation="⏸️", gate_departure_reason="upgrade-path cluster #41 #42, no staged fix")
+    monkeypatch.setattr(agent, "openrouter_call", lambda *a_, **kw: {
+        "success": True, "parsed": a, "model": "m",
+        "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}})
+    assert agent.run_assessment_pipeline(raw=_pipeline_raw([]), single_call=True)["success"] is True
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["assessment"]["recommendation"] == "⏸️"    # more cautious is allowed…
+    assert saved["evidence_gate"]["verdict"] == "✅"
+    assert saved["evidence_gate"]["floor_applied"] is False
+    assert saved["evidence_gate"]["departure"] == {          # …and recorded with its reason
+        "departed": True, "reason": "upgrade-path cluster #41 #42, no staged fix"}
+
+
+def test_pipeline_gate_agreeing_verdict_is_untouched(tmp_path, monkeypatch):
+    _isolate_files(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent, "notify", lambda text: True)
+    monkeypatch.setattr(agent, "openrouter_call", lambda *a, **kw: {
+        "success": True, "parsed": _valid_assessment(recommendation="✅"), "model": "m",
+        "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}})
+    assert agent.run_assessment_pipeline(raw=_pipeline_raw([]), single_call=True)["success"] is True
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["assessment"]["recommendation"] == "✅"
+    assert saved["evidence_gate"] == {"verdict": "✅", "blockers": [], "widespread": [], "serious": [],
+                                      "blocker_count": 0,
+                                      "reason": "No credible blocking issue is confirmed for this version.",
+                                      "floor_applied": False,
+                                      "departure": {"departed": False, "reason": ""}}

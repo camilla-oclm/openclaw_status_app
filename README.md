@@ -9,9 +9,9 @@
 [![OpenClaw release status](https://clawstat.us/badge.svg)](https://clawstat.us)
 
 <p align="center">
-  <img src="docs/hero-dark.png" alt="The OpenClaw Status decision page: a verdict-first dashboard for the latest OpenClaw release, with key-metric tiles and an evidence-backed thesis" width="820">
+  <img src="docs/hero-dark.png" alt="The OpenClaw Status decision page: a plain-language answer for the latest OpenClaw release, a verdict per platform, and the best version to run today" width="820">
   <br>
-  <em>The generated decision page — a verdict-first dashboard backed by scored, version-relevant bug evidence (<a href="docs/hero-light.png">light theme</a>).</em>
+  <em>The generated decision page — the answer first (with a verdict per platform and channel), then the best version to run today, then the evidence (<a href="docs/hero-light.png">light theme</a>).</em>
 </p>
 
 It watches the [`openclaw/openclaw`](https://github.com/openclaw/openclaw) repo, scouts
@@ -21,9 +21,14 @@ renders a single decision page with a clear verdict:
 
 | Verdict | Meaning |
 |---------|---------|
-| ✅ Update now | No blocking issues found |
-| ⚠️ Update with precautions | Worthwhile, but back up first — real risk remains |
+| ✅ Safe to update | No credible blocking issue is confirmed for this release |
+| ⚠️ Update with care | Credible blocking issues exist for some setups — the page says which platforms should wait |
 | ⏸️ Skip this version | The open issues outweigh the benefits |
+
+Inside a release's early-read window (its first two days, or its first three assessments) the page
+shows **Too new to call** instead of a verdict word, and it always names the **best version to run today** — the newest assessed release
+that has been out at least a week, wasn't rated skip, and shows no widespread breaker in its own
+issue ledger — so there is always a concrete version to point at, not just a grade for the newest one.
 
 When a fix is already staged in a pre-release, the verdict stays ⏸️/⚠️ (the fix isn't in the
 released version yet) and the page flags the pre-release tag, so you know relief is near without
@@ -35,6 +40,15 @@ providers** argue it out before anything ships.
 
 ### Highlights
 
+- **Answer first** — a plain status word, one sentence naming which platforms should wait, a
+  verdict for every platform and channel (the strip doubles as the picker for your own setup), and
+  the best version to run today; everything else sits behind one "Show the full evidence" toggle.
+- **A deterministic evidence gate** — the verdict starts from a floor computed in code, not from a
+  model's mood: open high/critical issues confirmed for the version that a *person* or the
+  *community* stands behind (bot-applied labels with zero traction are ambient churn). ✅ is the
+  expected answer when the gate is clear; the analyst may only be *more* cautious, with a cited
+  reason, and the pipeline enforces the floor so a published verdict is never less cautious than
+  the evidence.
 - **Independent multi-model review** — the analyst and validator are *different* providers
   (Z.ai + Qwen, with MiniMax as fallback), so no model rubber-stamps its own reasoning and a
   single-vendor outage can't sink a run.
@@ -168,7 +182,12 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    baseline — and a rubric that makes caution *earned*: a ⏸️ needs a concrete trigger
    (a widespread breaker with real engagement, unfixed security/data-loss confirmed for
    this version, an unpatched upgrade-breakage cluster), because a severity-seeking
-   scout always fills the issue list and raw counts alone say nothing. The output
+   scout always fills the issue list and raw counts alone say nothing.
+   The prompt also states the deterministic **Evidence gate** (`openclaw_status/verdict.py`) —
+   the floor verdict computed from credible blockers alone (see Highlights). ✅ is the expected
+   answer when the gate is clear; being more cautious requires a cited `gate_departure_reason`,
+   and after the model answers the pipeline enforces the floor (never less cautious than the
+   gate) and records the gate + any departure in `assessment.json`. The output
    budget is widened (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on
    busy releases.
 2. **Validator** (`qwen/qwen3.7-plus`) — a *different* provider from the analyst, so it's
@@ -211,13 +230,16 @@ Injects the pipeline data into `web/template.html` (via a `<script type="applica
 block) and writes **`web/index.html`** — a zero-dependency, dark/light, mobile-responsive page
 that builds its DOM with `textContent` (XSS-safe) and no inline handlers (CSP-clean). A **deploy
 guard** refuses to publish a low-confidence or invalid assessment, and an **HTML smoke test**
-validates the page before it overwrites the previous one. The page leads with the decision
-(verdict — with the second model's review expandable right under it, key-metric tiles,
-**Your setup** — a conservative *per-setup verdict* that softens the global one by at most one
-step when no credible version-confirmed blocking issue hits your stack — reasoning, and the
-verdict's *flip conditions*) and groups the supporting detail — a per-component verdict line +
-Impact meters, changelog, Trends charts, the verdict *track record* and past verdicts — behind
-tabs, with the filterable Known-issues list below. What counts as a blocker for *your* stack is
+validates the page before it overwrites the previous one. The page leads with the answer: a plain status
+word (or *Too new to call* inside the fresh window), one sentence naming which platforms should
+wait, and a **per-platform verdict strip** — the conservative *per-setup verdict* (it softens the
+global verdict by at most one step when no credible version-confirmed blocking issue hits a surface)
+rendered for every platform and channel, which doubles as the picker for **Your setup**. Then the
+**best version to run today**, a *why* pair (the gate's credible blockers vs. what the release
+brings), and the verdict's *flip conditions*. Everything else — the analyst's full reasoning with
+the second model's review, key-metric tiles, a per-component verdict line + Impact meters,
+changelog, Trends charts, the verdict *track record*, past verdicts and the filterable Known-issues
+list — sits behind one "Show the full evidence" toggle. What counts as a blocker for *your* stack is
 evidence-calibrated: a bot-labeled report with no community traction never pins a setup, and a
 report pins *every* stack only with megathread-class engagement — both gates fail closed when
 the evidence fields are absent. A just-dropped release (published within
@@ -263,6 +285,16 @@ Caddy):
 > itself — the page's trend charts use it to mark a series pinned there as saturation ("tracking
 > cap") rather than a real flat count.
 
+> Top-level additions (additive — `schema_version` unchanged): **`status`** is the plain-language
+> answer (`key`: `update` / `care` / `skip` / `wait` plus its `label`; `wait` = "Too new to call",
+> carrying the `early_read` label it stands in for). **`evidence_gate`** is the deterministic floor
+> (`verdict`, the credible `blockers` by issue number, the `widespread` / `serious` subsets, a
+> one-line `reason`, whether `floor_applied` moved the published verdict, and the analyst's
+> `departure` reason when it chose to be more cautious). **`recommended_version`** is the best
+> version to run today (`version`, `kind`: `latest` / `settled` / `none`, `age_days`, that release's
+> last `recommendation` and `gate`, its top `blockers`, and `latest` for the newest release's own
+> state).
+
 ### Gate your own updates on the verdict
 
 `latest.json` is a stable public API, so your own update automation can defer to it — e.g. in
@@ -293,6 +325,14 @@ fi
 
 For a firmer gate, also read `.confidence`, compare `.version` against what you're running (so you
 only gate *new* updates), and skim `.flip_conditions` — the concrete events that would change the verdict.
+
+Prefer to follow the *settled* release rather than the newest one? `.recommended_version.version`
+names it (empty when nothing has settled yet — the `// empty` keeps the pin unset in that case):
+
+```bash
+pin=$(curl -fsS https://clawstat.us/latest.json | jq -r '.recommended_version.version // empty')
+[ -n "$pin" ] && npm install -g "openclaw@$pin"
+```
 
 ---
 
@@ -339,7 +379,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 445 tests, hermetic (no network)
+python3 -m pytest        # 487 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
@@ -410,6 +450,7 @@ openclaw_status_app/
 │   ├── ledger.py           per-version accumulating issue ledger
 │   ├── release_changes.py  deterministic changelog parser
 │   ├── agent.py            stage 2 — LLM assessment pipeline
+│   ├── verdict.py          deterministic evidence gate, best-version pointer, status words
 │   ├── render.py           stage 3 — public decision page
 │   ├── scheduler.py        adaptive run cadence (tick → should_run)
 │   ├── lib.py              shared utils (OpenRouter, sanitize, locks, usage, timer)

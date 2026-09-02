@@ -5,6 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-02
+
+The answer-first release. User feedback on 1.0 was blunt: too much data to navigate,
+and in nine assessed releases the page never once named a version as safe. Both are
+structural, so this release changes what the page *is*, not just how it looks.
+
+### Added
+- **Deterministic evidence gate** (`openclaw_status/verdict.py`): the verdict now starts
+  from a floor computed in code — open high/critical issues confirmed for the version
+  that a person or the community stands behind. ✅ is the expected verdict when the
+  gate is clear; the analyst may only be *more* cautious, with a cited
+  `gate_departure_reason` (new schema field), and the pipeline enforces the floor after
+  the model answers. Persisted in `assessment.json` and published as `evidence_gate`.
+- **Best version to run today** (`recommended_version` in `latest.json`, `llms.txt`, SSR
+  and the page): the newest assessed release that has been in the field ≥ 7 days,
+  wasn't rated skip, and shows no widespread breaker in its own ledger — so the site
+  always names a concrete version, with a pinned `npm install` command.
+- **Plain-language `status`** (`update` / `care` / `skip` / `wait`): "Too new to call"
+  replaces the verdict word inside a release's fresh window; the wait state carries the
+  early-read label it stands in for.
+- Tests: `tests/test_verdict.py` (26) plus gate/floor/departure coverage in the agent
+  and render suites; the page UI suite grew to 56 checks.
+
+### Changed
+- **The page.** The hero is the answer: a status word, one sentence naming which
+  platforms should wait, and a **per-platform verdict strip** (the conservative
+  per-setup verdict rendered for every surface) that doubles as the setup picker.
+  Then the best version to run today, a "why" pair (credible blockers vs. what the
+  release brings), and the flip conditions. Everything else — full reasoning, the
+  second-model review, metric tiles, Impact meters, changelog, Trends, track record,
+  past verdicts and the filterable known-issues list — sits behind one "Show the full
+  evidence" toggle. Desktop page height dropped from ~6,600 px to ~2,500 px, mobile
+  from ~10,600 px to ~4,300 px. The signal panel (gauge, platform sparkbars, risk
+  sparkline), the fresh-release banner and the old "safest version" bar are gone;
+  their facts moved into the answer.
+- **Analyst rubric.** ⚠️ is no longer "the honest default": rule 15 and the
+  recommendation guidelines now start from the Evidence gate, and the validator flags a
+  departure from it with no cited reason as a logical error. The headline is asked for
+  as one plain sentence ≤ 140 characters (it is now the hero's analyst line).
+- One name per verdict on every surface, sourced from `verdict.STATUS`: **Safe to
+  update / Update with care / Skip this version** (badge, RSS, llms, SSR, page).
+  "Update now" and "Update with precautions" are retired spellings.
+
+### Fixed
+- In single-call mode the recorded `primary_recommendation` could be rewritten by a
+  later in-place edit of the same dict; the model's first read is now captured up front.
+
 ## [1.0.0] - 2026-07-09
 
 The first stable release. OpenClaw Status watches the

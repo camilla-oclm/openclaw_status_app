@@ -12,7 +12,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from openclaw_status import config
+from openclaw_status import config, verdict
 from openclaw_status.lib import atomic_write_text, load_json, load_json_or, norm_rec, strip_md_links
 
 
@@ -790,6 +790,60 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
     lr = sources.get("latest_release", {})
     lpr = sources.get("latest_prerelease", {})
 
+    version = assessment_raw.get("version", "")
+    assessed_at = assessment_raw.get("assessed_at", "")
+    rec = _norm_rec(a.get("recommendation", "⏸️"))
+    # "Just dropped" signal: a fresh release has little version-specific evidence
+    # yet, so the page flags the early verdict as preliminary + says to back up.
+    fr = _release_freshness(
+        version, assessed_at,
+        {"tag": lr.get("tag", "") if lr else "",
+         "published_at": lr.get("published_at", "") if lr else ""},
+        known_issues, version_run_count)
+    # The plain-language answer every surface (page hero, SSR, llms.txt) uses for this
+    # verdict — "Too new to call" while a non-skip release is inside the fresh window.
+    status = verdict.status_for(rec, fr["fresh"])
+    # The deterministic evidence gate the verdict was floored by. The assess step persists
+    # it (agent.run_assessment_pipeline); for assessments predating the field it is
+    # recomputed here from the same known-issues rows so the page can always explain
+    # WHY — the blocker numbers join back onto known_issues client-side.
+    gate = assessment_raw.get("evidence_gate")
+    if not isinstance(gate, dict) or "verdict" not in gate:
+        gate = {**verdict.evidence_gate(known_issues), "floor_applied": False,
+                "departure": {"departed": False, "reason": ""}}
+    dep = gate.get("departure") if isinstance(gate.get("departure"), dict) else {}
+    evidence_gate = {
+        "verdict": _norm_rec(str(gate.get("verdict") or "")),
+        "blockers": [int(n) for n in (gate.get("blockers") or []) if str(n).lstrip("-").isdigit()],
+        "widespread": [int(n) for n in (gate.get("widespread") or []) if str(n).lstrip("-").isdigit()],
+        "serious": [int(n) for n in (gate.get("serious") or []) if str(n).lstrip("-").isdigit()],
+        "blocker_count": int(gate.get("blocker_count") or 0),
+        "reason": _truncate(str(gate.get("reason") or ""), 240),
+        "floor_applied": bool(gate.get("floor_applied")),
+        "departure": {"departed": bool(dep.get("departed")),
+                      "reason": _truncate(str(dep.get("reason") or ""), 400)},
+    }
+    # Stable-release changelog (newest first) with extracted Highlights — the
+    # "catching up from an older version" section aggregates these client-side, and
+    # the best-version pointer reads the publish dates.
+    stable_history = [
+        {
+            "tag": r.get("tag", ""),
+            "version": (r.get("tag", "") or "").lstrip("v"),
+            "published_at": (r.get("published_at", "") or "")[:10],
+            "prerelease": bool(r.get("prerelease")),
+            "highlights": _extract_highlights(r.get("body", "") or ""),
+        }
+        for r in (sources.get("release_history") or [])
+        if not r.get("prerelease")
+    ]
+    # The best version to run today — deterministic, from what this tool has actually
+    # assessed and still holds ledger evidence for (see verdict.recommended_version).
+    from openclaw_status import ledger as _ledger
+    recommended = verdict.recommended_version(
+        release_history=stable_history, version_history=version_history,
+        ledger=_ledger.load_ledger(), current_version=version, today=assessed_at or None)
+
     data = {
         # `impact` (per known-issue) is a community-engagement bucket from 👍 + comment
         # volume — NOT a second severity axis; it intentionally differs from `severity`.
@@ -797,7 +851,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "app_version": config.APP_VERSION,
         "assessed_at": assessment_raw.get("assessed_at", ""),
         "version": assessment_raw.get("version", ""),
-        "recommendation": _norm_rec(a.get("recommendation", "⏸️")),
+        "recommendation": rec,
+        # Plain-language status word for the verdict (+ the "too new to call" wait state).
+        "status": status,
         "headline": a.get("headline", ""),
         "confidence": a.get("confidence", "medium"),
         "thesis": a.get("thesis", ""),
@@ -865,19 +921,7 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         # Per-version verdict evolution from the same per-run series — the History tab's
         # accountability table ("did the first read hold?"). See _track_record.
         "track_record": _track_record(tl_rows, assessment_raw.get("version", "")),
-        # Stable-release changelog (newest first) with extracted Highlights — the
-        # "catching up from an older version" section aggregates these client-side.
-        "release_history": [
-            {
-                "tag": r.get("tag", ""),
-                "version": (r.get("tag", "") or "").lstrip("v"),
-                "published_at": (r.get("published_at", "") or "")[:10],
-                "prerelease": bool(r.get("prerelease")),
-                "highlights": _extract_highlights(r.get("body", "") or ""),
-            }
-            for r in (sources.get("release_history") or [])
-            if not r.get("prerelease")
-        ],
+        "release_history": stable_history,
         "npm": sources.get("npm", {}),
         "latest_release": {
             "tag": lr.get("tag", "") if lr else "",
@@ -895,16 +939,14 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
         "clawsweeper_closed": cw.get("recently_closed", []),
         # Versions with a browsable snapshot — history entries link to these.
         "archived_versions": _archived_versions(),
-        # "Just dropped" signal: a fresh release has little version-specific evidence
-        # yet, so the page flags the early verdict as preliminary + says to back up.
-        "freshness": _release_freshness(
-            assessment_raw.get("version", ""),
-            assessment_raw.get("assessed_at", ""),
-            {"tag": lr.get("tag", "") if lr else "",
-             "published_at": lr.get("published_at", "") if lr else ""},
-            known_issues,
-            version_run_count,
-        ),
+        "freshness": fr,
+        # The deterministic evidence gate (verdict.py) — the floor this verdict rests on,
+        # its credible blocker numbers, and whether/why the analyst was more cautious.
+        "evidence_gate": evidence_gate,
+        # The best version to run today (verdict.recommended_version) — the newest
+        # release this tool has assessed that has settled: ≥ min_days in the field, last
+        # verdict not ⏸️, no widespread breaker in its own ledger.
+        "recommended_version": recommended,
     }
     return _deep_sanitize_markdown(data)
 
@@ -972,9 +1014,9 @@ _norm_rec = norm_rec
 # (the SSR/llms/page label), differing only in case — they once diverged ("update with care"
 # vs "Update with precautions"), giving one verdict two names across surfaces.
 _VERDICT_TEXT = {
-    "✅": ("update now", "#4c1"),
-    "⚠️": ("update with precautions", "#dfb317"),
-    "⏸️": ("skip this version", "#e05d44"),
+    "✅": (verdict.STATUS["✅"]["label"].lower(), "#4c1"),
+    "⚠️": (verdict.STATUS["⚠️"]["label"].lower(), "#dfb317"),
+    "⏸️": (verdict.STATUS["⏸️"]["label"].lower(), "#e05d44"),
 }
 
 
@@ -1052,7 +1094,7 @@ def _write_feed(data: dict, output_path: str) -> None:
         "    <title>OpenClaw Status — should you update?</title>\n"
         f"    <link>{_xml_escape(site)}/</link>\n"
         "    <description>A verdict on every OpenClaw release: update now, update with "
-        "precautions, or skip this version.</description>\n"
+        "care, or skip this version.</description>\n"
         + ("\n".join(items) + "\n" if items else "")
         + "  </channel>\n</rss>\n"
     )
@@ -1112,15 +1154,54 @@ def _write_badge(data: dict, output_path: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Human-readable verdict labels (match the page's VERDICTS map).
-_VERDICT_LABEL = {
-    "✅": "Update now",
-    "⚠️": "Update with precautions",
-    "⏸️": "Skip this version",
-}
+# ONE name per verdict on every surface (page hero, SSR, llms, badge, RSS) — the words come
+# from verdict.STATUS so the client JS table (template.html VERDICTS) has a single source to
+# mirror. "Update now" / "Update with precautions" are retired spellings.
+_VERDICT_LABEL = {rec: st["label"] for rec, st in verdict.STATUS.items()}
 
 
 def _verdict_phrase(rec: str) -> str:
     return _VERDICT_LABEL.get(rec, "Assessed")
+
+
+def _status_phrase(data: dict) -> str:
+    """The plain-language answer word for the page title / SSR h1: the verdict label, or
+    "Too new to call" while a non-skip release sits in the fresh window."""
+    st = data.get("status") or {}
+    if st.get("key") == "wait" and st.get("label"):
+        return str(st["label"])
+    return _verdict_phrase(data.get("recommendation", ""))
+
+
+def _recommended_line(data: dict) -> str:
+    """One sentence on the best version to run today (shared by SSR, llms.txt, RSS)."""
+    rv = data.get("recommended_version") or {}
+    latest = rv.get("latest") or {}
+    lv = latest.get("version") or data.get("version", "")
+    if not rv.get("version"):
+        return (f"No release has settled yet — every assessed release is either under "
+                f"{rv.get('min_days', verdict.SETTLED_MIN_DAYS)} days old, rated skip, or "
+                f"carries a widespread breaker. If you are on a version that works, stay put.")
+    age = rv.get("age_days")
+    age_txt = (f"{age} days in the field" if isinstance(age, int) else "in the field")
+    n = int(rv.get("blocker_count") or 0)
+    known = (f"{n} credible known issue{'s' if n != 1 else ''}, none widespread"
+             if n else "no credible known issue")
+    if rv.get("kind") == "latest":
+        return (f"v{rv['version']} — the latest release, {age_txt}, {known}; last verdict "
+                f"{_verdict_phrase(rv.get('recommendation', ''))}.")
+    tail = ""
+    if lv and lv != rv["version"]:
+        la = latest.get("age_days")
+        lrec = latest.get("recommendation")
+        if isinstance(la, int) and la < rv.get("min_days", verdict.SETTLED_MIN_DAYS):
+            when = "today" if la == 0 else "yesterday" if la == 1 else f"{la} days ago"
+            tail = f" The latest, v{lv}, came out {when} — too new to call settled."
+        elif lrec:
+            tail = f" The latest, v{lv}, is rated {_verdict_phrase(lrec)}."
+    return (f"v{rv['version']} — {age_txt}, {known}; last verdict "
+            f"{_verdict_phrase(rv.get('recommendation', ''))}. If you are on a newer version "
+            f"that works for you, stay put.{tail}")
 
 
 def _issue_count_label(data: dict) -> str:
@@ -1175,6 +1256,19 @@ def _llms_txt(data: dict) -> str:
         f"- Confidence: {data.get('confidence', '')}",
         f"- Assessed: {(data.get('assessed_at', '') or '')[:10]}",
     ]
+    st = data.get("status") or {}
+    if st.get("key") == "wait":
+        L.append(f"- Status: {st['label']} — early read: {st.get('early_read', '')}.")
+    eg = data.get("evidence_gate") or {}
+    if eg.get("reason"):
+        line = f"- Evidence gate: {eg.get('verdict', '')} — {eg['reason']}"
+        dep = eg.get("departure") or {}
+        if dep.get("departed"):
+            line += (f" The analyst chose to be more cautious than the gate"
+                     + (f": {dep['reason']}" if dep.get("reason") else " (no reason given)."))
+        L.append(line)
+    if data.get("recommended_version") is not None:
+        L.append(f"- Best version to run today: {_recommended_line(data)}")
     if data.get("headline"):
         L.append(f"- Summary: {data['headline'].strip()}")
     cal = data.get("calibration") or {}
@@ -1257,6 +1351,14 @@ def _llms_full_md(data: dict) -> str:
           f"- Recommendation: {rec} {phrase}",
           f"- Confidence: {data.get('confidence', '')}",
           f"- Assessed at: {data.get('assessed_at', '')}"]
+    st = data.get("status") or {}
+    if st.get("key") == "wait":
+        L.append(f"- Status: {st['label']} — early read: {st.get('early_read', '')}.")
+    eg = data.get("evidence_gate") or {}
+    if eg.get("reason"):
+        L.append(f"- Evidence gate: {eg.get('verdict', '')} — {eg['reason']}")
+    if data.get("recommended_version") is not None:
+        L.append(f"- Best version to run today: {_recommended_line(data)}")
     lr = data.get("latest_release") or {}
     if lr.get("tag"):
         pub = f" (published {lr.get('published_at')})" if lr.get("published_at") else ""
@@ -1343,7 +1445,7 @@ def _seo_title(data: dict) -> str:
     ver = data.get("version", "")
     if not ver:
         return "ClawStat.us — Should you update OpenClaw?"
-    return f"Should you update OpenClaw v{ver}? {_verdict_phrase(data.get('recommendation', ''))} — ClawStat.us"
+    return f"Should you update OpenClaw v{ver}? {_status_phrase(data)} — ClawStat.us"
 
 
 def _seo_description(data: dict) -> str:
@@ -1391,7 +1493,7 @@ def _json_ld(data: dict) -> str:
                 + (f" — currently {phrase} for v{ver}" if ver else "")
                 + ". It scouts the bugs people hit after a release, scores them by severity, and has "
                 "two independent AI models weigh the evidence before giving a clear answer: update "
-                "now, update with precautions, or skip this version.")}},
+                "now, update with care, or skip this version.")}},
              {"@type": "Question", "name": "How do I know if a new OpenClaw release is safe to update to?",
               "acceptedAnswer": {"@type": "Answer", "text":
                ("Check ClawStat.us before you upgrade. For each OpenClaw release it gathers post-release "
@@ -1434,7 +1536,7 @@ def _seo_body(data: dict) -> str:
     phrase = _verdict_phrase(data.get("recommendation", ""))
     conf = data.get("confidence", "")
     assessed = (data.get("assessed_at", "") or "")[:10]
-    h1 = f"Should you update OpenClaw v{ver}? — {phrase}" if ver else "Should you update OpenClaw?"
+    h1 = f"Should you update OpenClaw v{ver}? — {_status_phrase(data)}" if ver else "Should you update OpenClaw?"
     out = ['<article class="ssr">', f"<h1>{e(h1)}</h1>"]
     verdict_line = f"<strong>Verdict:</strong> {e(phrase)}"
     if conf:
@@ -1442,6 +1544,11 @@ def _seo_body(data: dict) -> str:
     if assessed:
         verdict_line += f", assessed {e(assessed)}"
     out.append(f"<p>{verdict_line}.</p>")
+    eg = data.get("evidence_gate") or {}
+    if eg.get("reason"):
+        out.append(f"<p><strong>Evidence:</strong> {e(eg['reason'])}</p>")
+    if data.get("recommended_version"):
+        out.append(f"<p><strong>Best version to run today:</strong> {e(_recommended_line(data))}</p>")
     fr = data.get("freshness") or {}
     if fr.get("fresh"):
         spec = fr.get("version_specific_issues") or 0

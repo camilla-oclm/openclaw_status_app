@@ -163,7 +163,7 @@ html[data-theme="light"] body::after{background:radial-gradient(52% 46% at 50% -
   background:var(--sheen);
   padding:clamp(1.7rem,3vw,2.3rem); margin-bottom:var(--sp-3);
   box-shadow:var(--shadow-3);
-  display:grid; grid-template-columns:1.35fr .95fr; gap:1.4rem 1.8rem;
+  display:flex; flex-direction:column; gap:1.6rem;
 }
 .hero-main{min-width:0}
 .eyebrow{
@@ -190,14 +190,7 @@ a.verdict:hover{background:color-mix(in srgb,var(--tone) 16%,transparent); box-s
 a.chip{text-decoration:none; cursor:pointer; transition:border-color .15s var(--ease), color .15s var(--ease)}
 a.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .chip .v-ext{font-size:var(--fs-xs); opacity:.7; margin-left:.1rem}
-.verdict-blurb{margin-top:.85rem; color:var(--text); font-weight:600; font-size:var(--fs-md)}
-.hero-headline{margin-top:.5rem; color:var(--muted); font-size:var(--fs-sm); max-width:62ch}
 .conf-row{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.1rem; align-items:center}
-/* hero CTA → jump to "Your setup"; becomes a live per-setup verdict once a stack is picked */
-.setup-cta{margin-top:.95rem; display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.15rem .4rem; font:inherit; font-size:var(--fs-sm); cursor:pointer; background:transparent; border:1px dashed var(--tone-bd); color:var(--muted); padding:.4rem .85rem; border-radius:var(--r-pill); transition:.15s var(--ease)}
-.setup-cta:hover{color:var(--text); border-color:var(--tone); background:var(--tone-bg)}
-.setup-cta .sv-em{font-size:1rem; line-height:1}
-.setup-cta b{color:var(--tone); white-space:nowrap}
 /* ── unified pill recipe ────────────────────────────────────────────────
    Every chip/tag/badge species shares one base and tunes it via --p-*
    custom properties; selected state is ONE convention (accent tint on
@@ -241,40 +234,11 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .rev-detail .rvd-list li::before{content:"›"; position:absolute; left:0; color:var(--accent)}
 .rev-detail .rvd-note{margin-top:.7rem; font-size:var(--fs-xs); color:var(--faint)}
 
-/* hero right column: the "signal panel" — confidence gauge + live mini-viz */
-.signal{
-  align-self:stretch; min-width:0;
-  border:1px solid var(--border); border-radius:var(--r-lg);
-  background:var(--bg-elev);
-  padding:var(--sp-3) 1.05rem; display:flex; flex-direction:column; gap:.95rem;
-}
-.signal .sg-h{font-family:var(--mono); font-size:var(--fs-2xs); letter-spacing:.14em; text-transform:uppercase; color:var(--faint); font-weight:600}
-/* confidence gauge */
-.gauge{display:flex; flex-direction:column; gap:.4rem}
-.gauge .g-top{display:flex; align-items:baseline; justify-content:space-between}
-.gauge .g-val{font-family:var(--mono); font-weight:800; font-size:var(--fs-md); color:var(--tone)}
-.gauge .g-lab{font-size:var(--fs-xs); color:var(--muted); font-weight:600}
-.gauge .g-segs{display:flex; gap:5px}
-.gauge .g-seg{flex:1; height:8px; border-radius:var(--r-pill); background:var(--card3)}
-.gauge .g-seg.on{background:var(--tone)}
-.gauge .g-note{font-size:var(--fs-xs); color:var(--muted); line-height:1.4}
-/* signal: platform sparkbars */
-.sigplat{display:grid; grid-template-columns:1fr 1fr; gap:.55rem .9rem}
-.sigplat .sp{display:flex; align-items:center; gap:.5rem; min-width:0}
-.sigplat .sp .ico{width:1.1rem; display:inline-flex; justify-content:center; color:var(--muted)}
 /* inline icon svg — aligns in both flex pills (gap does spacing) and text flow */
 .ic-svg{flex:none; vertical-align:-.12em}
-.sigplat .sp .nm{font-size:var(--fs-xs); color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.sparkbar{display:flex; gap:2px; align-items:flex-end; height:14px}
-.sparkbar i{width:4px; border-radius:1px; background:var(--ic,var(--gray)); opacity:.3}
-.sparkbar i.on{opacity:1}
 .imp-none{--ic:var(--good)} .imp-low{--ic:var(--info)} .imp-medium{--ic:var(--warn)} .imp-high{--ic:var(--bad)}
 /* severity colour ramp (worst-severity → colour): critical≠high≠medium≠low, distinct steps */
 .sv-critical{--ic:var(--bad)} .sv-high{--ic:var(--orange)} .sv-medium{--ic:var(--warn)} .sv-low{--ic:var(--gray)} .sv-none{--ic:var(--good)}
-/* signal: risk sparkline */
-.sigtrend{display:flex; flex-direction:column; gap:.35rem}
-.sigtrend svg{width:100%; height:42px; display:block; overflow:visible}
-.sigtrend .cap{display:flex; justify-content:space-between; font-size:var(--fs-2xs); color:var(--faint); font-family:var(--mono)}
 
 /* ── low-confidence banner ─────────────────────────────────────────────── */
 .banner{
@@ -283,12 +247,6 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
   background:var(--warn-bg); border:1px solid var(--warn-bd); color:var(--text); font-size:var(--fs-base);
 }
 .banner .bi{font-size:var(--fs-md); line-height:1.3}
-/* fresh-release notice — informational (teal), distinct from the red low-conf one */
-.banner-fresh{background:var(--info-bg); border-color:var(--info-bd)}
-.banner-fresh .bi{font-size:1.25rem}
-.banner-body{display:flex; flex-direction:column; gap:.3rem; min-width:0}
-.banner-title{font-weight:700; color:var(--text)}
-.banner-body .ba strong{color:var(--accent)}
 
 /* ── signal tiles (stats) ──────────────────────────────────────────────── */
 .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.8rem; margin-bottom:var(--sp-5)}
@@ -514,11 +472,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .tl .tlr{font-size:var(--fs-sm); color:var(--muted); margin-top:.1rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .tl .tld{font-size:var(--fs-xs); color:var(--faint); margin-top:.1rem}
 
-/* ── best version ──────────────────────────────────────────────────────── */
-.bestver{display:flex; gap:.75rem; align-items:flex-start; margin:2.2rem 0 1.8rem; padding:.9rem 1.1rem; border-radius:var(--r-md); background:var(--tone-bg); border:1px solid var(--tone-bd); color:var(--text); font-size:var(--fs-base)}
-.bestver .bi{font-size:var(--fs-md); line-height:1.3}
-.bestver a.snap{color:var(--accent); text-decoration:none; font-family:var(--mono); font-weight:700}
-.bestver a.snap:hover{text-decoration:underline}
 .about{display:flex; gap:.7rem; align-items:flex-start; margin:1.1rem 0 1.4rem; padding:.85rem 1.05rem; border-radius:var(--r-md); background:var(--card); border:1px solid var(--border); color:var(--muted); font-size:var(--fs-sm)}
 .about .ai{font-size:var(--fs-md); line-height:1.4}
 .about .atxt p{margin:0; line-height:1.55}
@@ -668,10 +621,81 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   .reveal{opacity:1; transform:none}
 }
 
+/* ═══ answer-first layout ════════════════════════════════════════════════
+   The page leads with the answer (status word + one line + per-platform strip),
+   then the best version to run, then WHY in two cards; everything else sits
+   behind one "full evidence" toggle. ════════════════════════════════════════ */
+.verdict .answer-word{line-height:1.1}
+.answer-line{margin-top:.95rem; font-size:var(--fs-md); color:var(--text); max-width:70ch; line-height:1.55}
+.hero-headline{margin-top:.6rem; color:var(--muted); font-size:var(--fs-sm); max-width:70ch; line-height:1.5}
+.hero-headline .hh-k{font-family:var(--mono); font-size:var(--fs-2xs); letter-spacing:.1em; text-transform:uppercase; color:var(--faint); font-weight:700; margin-right:.3rem}
+.hero .banner{margin:.9rem 0 0}
+/* the setup strip lives inside the hero */
+.hero .setup{border-top:1px solid var(--border); padding-top:1.2rem}
+.setup-head{margin-bottom:.5rem; padding-bottom:0; border-bottom:0; flex-wrap:wrap}
+.setup-head .sec-title{font-size:var(--fs-md); text-wrap:nowrap}
+@media(max-width:600px){ .setup-head .sec-note{flex-basis:100%; margin-left:0} }
+.setup .chips{margin-bottom:.7rem}
+.pick .pv{font-size:.85em; line-height:1; margin-left:.05rem}
+.pick.pv-good{--p-fg:var(--good); --p-bd:var(--good-bd); --p-bg:var(--good-bg)}
+.pick.pv-warn{--p-fg:var(--warn); --p-bd:var(--warn-bd); --p-bg:var(--warn-bg)}
+.pick.pv-bad{--p-fg:var(--bad); --p-bd:var(--bad-bd); --p-bg:var(--bad-bg)}
+.pick.pv-good:hover,.pick.pv-warn:hover,.pick.pv-bad:hover{--p-fg:var(--text)}
+.pick[data-k][aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent); --p-fw:700}
+.pick.pv-good[aria-pressed="true"]{--p-bg:var(--good-bg); --p-fg:var(--good); --p-bd:var(--good-bd)}
+.pick.pv-warn[aria-pressed="true"]{--p-bg:var(--warn-bg); --p-fg:var(--warn); --p-bd:var(--warn-bd)}
+.pick.pv-bad[aria-pressed="true"]{--p-bg:var(--bad-bg); --p-fg:var(--bad); --p-bd:var(--bad-bd)}
+.pick-more{border-style:dashed; --p-fg:var(--faint)}
+.pick-more[aria-expanded="true"]{--p-fg:var(--text)}
+.comp-chips{margin-top:-.2rem}
+.comp-chips[hidden]{display:none}
+.setup .hint{margin-top:.2rem}
+/* best version to run today */
+.reco{margin:var(--sp-4) 0 0; padding:1.15rem 1.3rem; border-radius:var(--r-lg); background:var(--tone-bg); border:1px solid var(--tone-bd); box-shadow:var(--shadow-1)}
+.reco-k{font-family:var(--mono); font-size:var(--fs-2xs); letter-spacing:.14em; text-transform:uppercase; color:var(--tone); font-weight:700}
+.reco-v{font-family:var(--display); font-size:var(--fs-xl); font-weight:700; letter-spacing:-.02em; margin-top:.25rem; color:var(--text); text-wrap:balance}
+.reco-why{margin-top:.5rem; color:var(--text); max-width:72ch; font-size:var(--fs-base); line-height:1.55}
+.reco-chips{display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.75rem}
+.reco-chips .chip.pv-good{--p-fg:var(--good); --p-bd:var(--good-bd); --p-bg:var(--good-bg)}
+.reco-chips .chip.pv-warn{--p-fg:var(--warn); --p-bd:var(--warn-bd); --p-bg:var(--warn-bg)}
+.reco-chips .chip.pv-bad{--p-fg:var(--bad); --p-bd:var(--bad-bd); --p-bg:var(--bad-bg)}
+.reco-chips .chip.pv-good b,.reco-chips .chip.pv-warn b,.reco-chips .chip.pv-bad b{color:inherit}
+.reco-kk{margin-top:.85rem; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700}
+.reco-issues{list-style:none; margin-top:.35rem; display:flex; flex-direction:column; gap:.3rem; font-size:var(--fs-sm); color:var(--text)}
+.reco-issues li{overflow-wrap:anywhere}
+.reco-cmdrow{display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-top:.9rem}
+.reco-cmdrow .cmd-k{font-size:var(--fs-xs); color:var(--muted); font-weight:600}
+.reco-cmd{font-family:var(--mono); font-size:var(--fs-sm); background:var(--card); border:1px solid var(--border2); border-radius:var(--r-sm); padding:.4rem .7rem; color:var(--text); overflow-wrap:anywhere}
+.reco-link{display:inline-block; margin-top:.6rem; font-size:var(--fs-sm); font-weight:600; color:var(--accent); text-decoration:none}
+.reco-link:hover{text-decoration:underline}
+.reco-note{margin-top:.75rem; font-size:var(--fs-xs); color:var(--faint)}
+/* why: what's broken vs what you'd get */
+.why-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem}
+@media(max-width:680px){.why-grid{grid-template-columns:1fr}}
+.why-card{background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:1.05rem 1.2rem; box-shadow:var(--shadow-1); min-width:0}
+.why-card h3{font-family:var(--mono); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em; margin-bottom:.5rem; font-weight:700}
+.why-bad h3{color:var(--bad)} .why-good h3{color:var(--good)} .why-ok h3{color:var(--good)}
+.why-sub{font-size:var(--fs-sm); color:var(--muted); margin-bottom:.6rem; line-height:1.5}
+.why-card ul{list-style:none; display:flex; flex-direction:column; gap:.5rem}
+.why-card li{position:relative; padding-left:1.1rem; font-size:var(--fs-base); color:var(--text); overflow-wrap:anywhere}
+.why-card li::before{content:""; position:absolute; left:0; top:.55em; width:7px; height:7px; border-radius:50%}
+.why-bad li::before{background:var(--bad)} .why-good li::before{background:var(--good)} .why-ok li::before{background:var(--good)}
+.why-meta{color:var(--muted); font-size:var(--fs-sm)}
+.why-more{margin-top:.7rem; font-size:var(--fs-xs); color:var(--faint)}
+/* the full evidence, collapsed by default */
+.details{margin-top:var(--sp-6)}
+.details-toggle{position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:.2rem; width:100%; text-align:left; font:inherit; cursor:pointer; background:var(--card); border:1px solid var(--border2); border-radius:var(--r-md); padding:.9rem 2.6rem .9rem 1.2rem; color:var(--text); transition:.15s var(--ease)}
+.details-toggle:hover{border-color:var(--accent); background:var(--card2)}
+.details-toggle .dt-main{font-family:var(--display); font-weight:700; font-size:var(--fs-md)}
+.details-toggle .cx{position:absolute; right:1.1rem; top:.95rem; color:var(--muted); transition:transform .15s var(--ease)}
+.details-toggle[aria-expanded="true"] .cx{transform:rotate(180deg)}
+.details-toggle .dt-sub{font-size:var(--fs-xs); color:var(--muted)}
+.details-body[hidden]{display:none}
+.details-body > .stats{margin-top:var(--sp-4); margin-bottom:0}
+
 /* ── mobile ────────────────────────────────────────────────────────────── */
 @media(max-width:760px){
-  .hero{grid-template-columns:1fr; gap:1.1rem; padding:1.3rem 1.25rem}
-  .signal{order:2}
+  .hero{gap:1.1rem; padding:1.3rem 1.25rem}
 }
 @media(max-width:600px){
   /* Tab strips + filter chip rows become one horizontally-scrollable row instead of
@@ -683,7 +707,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 @media(max-width:480px){
   .brand .dim{display:none}
   .verdict{font-size:var(--fs-lg)}
-  .sigplat{grid-template-columns:1fr}
   /* Impact grids: 17 stacked full-width cards made the section most of the mobile
      page — compact 2-up cards halve its height without losing the meters. */
   .plat-grid{grid-template-columns:1fr 1fr; gap:.5rem}
@@ -1194,9 +1217,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
   // ── lookup tables ─────────────────────────────────────────────────────────
   var VERDICTS = {
-    "✅": {label:"Update now",              tone:"tone-good", blurb:"Safe to update — no blocking issues found in this release."},
-    "⚠️": {label:"Update with precautions", tone:"tone-warn", blurb:"Worthwhile, but back up first — some real risk remains."},
-    "⏸️": {label:"Skip this version",       tone:"tone-bad",  blurb:"Hold off — the open issues outweigh the benefits right now."}
+    // Mirrors verdict.STATUS (Python) — ONE name per verdict on every surface.
+    "✅": {label:"Safe to update",   tone:"tone-good"},
+    "⚠️": {label:"Update with care", tone:"tone-warn"},
+    "⏸️": {label:"Skip this version", tone:"tone-bad"}
   };
   // Tables carry [key, iconKey, label] — iconKey resolves via ICONS/icon() (inline
   // stroke SVGs), no longer an emoji glyph. Keys/labels are unchanged.
@@ -1475,51 +1499,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function confNote(conf){
     return ((DATA.freshness && DATA.freshness.fresh) ? CONF_DESC_FRESH : CONF_DESC)[conf] || "";
   }
-  function signalPanel(v){
-    var conf = String(DATA.confidence||"medium").toLowerCase();
-    var lit = CONF_STEP[conf] || 2;
-    var segs = el("div",{"class":"g-segs"});
-    for (var gi=1; gi<=3; gi++){ segs.appendChild(el("span",{"class":"g-seg"+(gi<=lit?" on":"")}, null)); }
-    var gauge = el("div",{"class":"gauge "+v.tone, title:confNote(conf)},[
-      el("div",{"class":"g-top"},[
-        el("span",{"class":"g-lab"},"Verdict confidence"),
-        el("span",{"class":"g-val"}, cap(conf))
-      ]),
-      segs,
-      el("div",{"class":"g-note"}, confNote(conf))
-    ]);
-    // Platform glance: bar height = issue volume, colour = worst severity (same
-    // scale as the "Platform impact" section), derived from the issue tags.
-    var ki = DATA.known_issues || [];
-    var stat = {}, maxCount = 0, rows = [];
-    PLAT.forEach(function(p){
-      var iss = platformIssues(p[0], ki);
-      if (!iss.length) return;
-      stat[p[0]] = {count:iss.length, worst:worstSeverity(iss).name};
-      if (iss.length > maxCount) maxCount = iss.length;
-      rows.push(p);
-    });
-    rows.sort(function(a,b){ return stat[b[0]].count - stat[a[0]].count; });
-    var grid = el("div",{"class":"sigplat"});
-    rows.slice(0,6).forEach(function(p){
-      var a = stat[p[0]];
-      grid.appendChild(el("div",{"class":"sp sv-"+a.worst},[
-        el("span",{"class":"ico"}, [icon(p[1], 13)]),
-        el("span",{"class":"nm"}, p[2]),
-        sparkbar(volFill(a.count, maxCount, 5))
-      ]));
-    });
-    var kids = [ el("div",{"class":"sg-h"},"Confidence"), gauge ];
-    if (rows.length){ kids.push(el("div",{"class":"sg-h"},"Platform impact")); kids.push(grid); }
-    var spark = riskSparkline();
-    if (spark){ kids.push(el("div",{"class":"sg-h"}, spark.head)); kids.push(spark.node); }
-    return el("div",{"class":"signal"}, kids);
-  }
-  function sparkbar(on){   // `on` = number of lit bars (0..5); colour inherited via --ic
-    var bar = el("span",{"class":"sparkbar"});
-    for (var i=0;i<5;i++){ bar.appendChild(el("i",{"class": i<on?"on":"", style:"height:"+(5+i*2)+"px"}, null)); }
-    return bar;
-  }
   var SVGNS = "http://www.w3.org/2000/svg";
   function svgEl(name, attrs){
     var n = document.createElementNS(SVGNS, name);
@@ -1570,129 +1549,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     s.appendChild(svgEl("path", {d: ICONS[key] || ICONS.doc}));
     return s;
   }
-  function riskSparkline(){
-    var H = (DATA.version_history||[]).slice(), vals, firstLabel, head;
-    if (H.length >= 2){
-      H.sort(function(a,b){ return String(a.assessed_at).localeCompare(String(b.assessed_at)); });
-      H = H.slice(-12);
-      vals = H.map(function(e){ return RISK[e.recommendation]||30; });
-      firstLabel = "v"+H[0].version; head = "Risk trend";
-    } else {
-      // Only one release tracked so far → no cross-version line yet. Fall back to the
-      // per-run timeline and plot issue pressure (open issues per run) — a live, moving
-      // signal — then auto-promote to the cross-version Risk trend once a 2nd version lands.
-      var tl = (DATA.timeline||[]).filter(function(r){ return !r.approx; });
-      tl.sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
-      tl = tl.slice(-12);
-      if (tl.length < 2) return null;
-      var mx = Math.max.apply(null, tl.map(function(r){ return r.issues||0; })) || 1;
-      vals = tl.map(function(r){ return Math.round(100*(r.issues||0)/mx); });
-      firstLabel = timeAgo(tl[0].t); head = "Issue trend";
-    }
-    var W=200, HT=42, n=vals.length, pad=3;
-    var xs=function(i){ return pad + (n===1?0:i*((W-2*pad)/(n-1))); };
-    var ys=function(r){ return (HT-pad) - (r/100)*(HT-2*pad); };
-    var pts = vals.map(function(v,i){ return xs(i)+","+ys(v); });
-    var svg = svgEl("svg",{viewBox:"0 0 "+W+" "+HT, preserveAspectRatio:"none"});
-    svg.appendChild(svgEl("polygon",{points: xs(0)+","+(HT-pad)+" "+pts.join(" ")+" "+xs(n-1)+","+(HT-pad), fill:"var(--tone-bg)"}));
-    svg.appendChild(svgEl("polyline",{points: pts.join(" "), fill:"none", stroke:"var(--tone)", "stroke-width":"2", "stroke-linejoin":"round", "stroke-linecap":"round"}));
-    svg.appendChild(svgEl("circle",{cx:xs(n-1), cy:ys(vals[n-1]), r:"3", fill:"var(--tone)"}));
-    var wrap = el("div",{"class":"sigtrend", role:"img", "aria-label": head + " across recent assessments"});
-    svg.setAttribute("aria-hidden","true");
-    wrap.appendChild(svg);
-    wrap.appendChild(el("div",{"class":"cap"},[ el("span",null,firstLabel), el("span",null,"now") ]));
-    return {head:head, node:wrap};
-  }
-  function hero(v){
-    var rel = DATA.latest_release || {}, npm = DATA.npm || {};
-    var sub = [];
-    if (rel.published_at) sub.push("Released " + fmtDate(rel.published_at));
-    if (npm.version) sub.push("npm " + npm.version);
-    var subNodes = [];
-    sub.forEach(function(s,i){
-      if (i) subNodes.push(el("span",{"class":"sep"},"·"));
-      subNodes.push(document.createTextNode(s));
-    });
-
-    var conf = String(DATA.confidence||"medium").toLowerCase();
-    var pre = DATA.latest_prerelease || {};
-    var chips = [
-      el("span",{"class":"chip lvl-"+conf, title:confNote(conf)},[document.createTextNode("Confidence: "), el("b",null,cap(conf))]),
-      el("span",{"class":"chip"},[document.createTextNode("Assessed "), el("b",null,timeAgo(DATA.assessed_at))])
-    ];
-    if (pre.tag){
-      var preTip = "A newer release is staged in pre-release. Until those fixes ship in a stable release, the current version still carries the issues below — so the verdict stays Skip / Update-with-care.";
-      var preKids = [el("b",null,"Fix staged: "+pre.tag),document.createTextNode(" (pre-release)")];
-      chips.push(pre.url
-        ? el("a",{"class":"chip chip-link", href:pre.url, title:"View "+pre.tag+" on GitHub. "+preTip},
-            preKids.concat(el("span",{"class":"v-ext","aria-hidden":"true"},"↗")))
-        : el("span",{"class":"chip", title:preTip}, preKids));
-    }
-    // Dual-model review outcome — the central reason to trust an automated verdict: show
-    // that a second, independent model concurred, or that the verdict was REVISED after it
-    // pushed back, rather than asking the user to take the first analyst on faith. The chip
-    // expands into the validator's actual findings (reviewDetail) — the trust claim is
-    // inspectable, not just asserted in a tooltip.
-    var rv = DATA.review || {};
-    var rvPanel = null;
-    if (rv.validated){
-      var rvText, rvTip;
-      if (rv.refined && rv.primary_recommendation && rv.primary_recommendation !== (DATA.recommendation||"")){
-        rvText = "Revised "+rv.primary_recommendation+"→"+(DATA.recommendation||"")+" on review";
-        rvTip = "The first analyst model said "+rv.primary_recommendation+"; an independent second model challenged it and the verdict was revised.";
-      } else if (rv.agreed){
-        rvText = "2nd model agreed";
-        rvTip = "An independent second model reviewed this verdict and concurred.";
-      } else if (rv.refined){
-        rvText = "2nd model flagged; held";
-        rvTip = "An independent second model flagged details, but the verdict held after re-check.";
-      } else {
-        // Flagged but the refinement pass never completed — "held after re-check" would
-        // claim a re-check that didn't happen, so name what the reader is actually seeing.
-        rvText = "2nd model flagged; re-check failed";
-        rvTip = "An independent second model flagged details, but the analyst's re-check pass failed this run — shown is the analyst's original read.";
-      }
-      rvPanel = reviewDetail(rv);
-      var rvBtn = el("button",{"class":"chip", type:"button", title:rvTip+" Click for what it said.",
-                               "aria-expanded":"false", "aria-controls":"rev-detail"},
-        [document.createTextNode("⚖︎ "), el("b",null,rvText), el("span",{"class":"cx","aria-hidden":"true"},"▾")]);
-      rvBtn.addEventListener("click", function(){
-        var open = rvBtn.getAttribute("aria-expanded")==="true";
-        rvBtn.setAttribute("aria-expanded", open?"false":"true");
-        if (open) rvPanel.setAttribute("hidden",""); else rvPanel.removeAttribute("hidden");
-      });
-      chips.push(rvBtn);
-    } else if (rv.unreviewed){
-      // The validator call failed this run — be honest that only one model looked at it,
-      // rather than dropping the chip (which would read as a plain single-call page).
-      chips.push(el("span",{"class":"chip", title:"The independent validator model was unavailable on this run, so this verdict reflects a single model — confidence is capped and you should sanity-check it against the linked issues."},
-        [document.createTextNode("⚠︎ "), el("b",null,"single-model — validator unavailable")]));
-    }
-
-    // A fresh ✅ verdict must not read "Safe to update — no blocking issues found" while the
-    // provisional fresh-release banner says the opposite directly above it — soften to an
-    // early read. (Any "complete/cleared/safe" copy must agree with DATA.freshness.fresh.)
-    var heroBlurb = v.blurb;
-    if ((DATA.freshness||{}).fresh && DATA.recommendation === "✅"){
-      heroBlurb = "No blocking issues found yet — but this is a fresh release, still firming up. Back up before you update.";
-    }
-
-    var main = el("div",{"class":"hero-main"},[
-      el("div",{"class":"eyebrow"},"Release assessment"),
-      el("h1",{"class":"hero-version"},["OpenClaw ", el("span",{"class":"vnum"},"v"+(DATA.version||"?"))]),
-      el("div",{"class":"hero-sub"}, subNodes),
-      (rel.url
-        ? el("a",{"class":"verdict "+v.tone, href:rel.url, title:"View the OpenClaw v"+(DATA.version||"")+" release on GitHub"},
-            [el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label), el("span",{"class":"v-ext","aria-hidden":"true"},"↗")])
-        : el("div",{"class":"verdict "+v.tone},[el("span",{"class":"em"},DATA.recommendation||"?"), document.createTextNode(v.label)])),
-      el("div",{"class":"verdict-blurb"}, heroBlurb),
-      DATA.headline ? el("div",{"class":"hero-headline"}, DATA.headline) : null,
-      el("div",{"class":"conf-row"}, chips),
-      rvPanel,
-      setupCta()
-    ]);
-    return el("div",{"class":"hero "+v.tone},[ main, signalPanel(v) ]);
-  }
   // What the second model actually said — expands from the ⚖︎ chip. Shows the exchange's
   // outcome, the validator's own words, and its specific findings when the pipeline
   // persisted them (review.detail; runs before the field carry only the short critique).
@@ -1727,72 +1583,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return el("div",{"class":"rev-detail", id:"rev-detail", role:"region",
                      "aria-label":"Second-model review detail", hidden:""}, kids);
   }
-  // Hero → "Your setup" CTA. Before a stack is picked it nudges; once picked it shows a
-  // live per-setup verdict mini-summary (kept in sync by applyStack()). A button (not an
-  // <a href="#setup">) so it scrolls in-page instead of opening a new tab.
-  function setupCtaLabel(){
-    if (!stackActive())
-      return [document.createTextNode("This verdict is for everyone — "), el("b",null,"check your setup →")];
-    var svd = setupVerdict(), v = VERDICTS[svd.rec] || {label:String(svd.rec||"")};
-    return [el("span",{"class":"sv-em","aria-hidden":"true"}, svd.rec),
-            document.createTextNode(" For your setup: "), el("b",null, v.label+" →")];
-  }
-  function setupCta(){
-    var b = el("button",{"class":"setup-cta", type:"button", id:"setup-cta",
-                         title:"Tailor the verdict to the platforms, channels and components you run"},
-              setupCtaLabel());
-    b.addEventListener("click", function(){
-      var t = document.getElementById("setup");
-      if (t) t.scrollIntoView({behavior:"smooth", block:"start"});
-    });
-    return b;
-  }
-
   function lowConfBanner(){
     if (String(DATA.confidence||"").toLowerCase() !== "low") return null;
     return el("div",{"class":"banner"},[
       el("span",{"class":"bi"},"⚠️"),
       el("span",null,"This assessment was made with low confidence — the underlying data may be incomplete. Treat the verdict as a weak signal and verify against the linked issues before deciding.")
-    ]);
-  }
-
-  // A just-dropped release is an early read: reports are still arriving, so the verdict
-  // will move over the next few runs. When the community hasn't filed anything against
-  // this version yet, the listed issues are carried over from earlier ones — that's a
-  // reporting lag as people upgrade, not a gap in the analysis. Either way: back up.
-  // Gated by render._release_freshness (DATA.freshness.fresh).
-  function freshBanner(){
-    var fr = DATA.freshness || {};
-    if (!fr.fresh) return null;
-    var ver = DATA.version || "?";
-    var d = fr.days_since_release;
-    var when = (d == null || d === 0) ? "today" : (d === 1 ? "yesterday" : d + " days ago");
-    var spec = fr.version_specific_issues || 0;
-    var detail = spec
-      ? ("So far " + spec + " of the issues below " + (spec === 1 ? "names" : "name") +
-         " this exact release; the rest are carried over from earlier versions.")
-      : "No issues have been filed against this exact release yet, so the list below is carried over from earlier versions — a reporting lag as people upgrade, not a gap in the analysis.";
-    // The "early read" caveat must agree with the verdict's DIRECTION. On a skip the evidence
-    // is early but already negative — "the verdict will firm up" reads as "the skip is soft and
-    // might flip," which contradicts the flat "Skip this version" above. Reports only accumulate,
-    // so the case for waiting firms; a non-skip early read genuinely could degrade.
-    var skip = (DATA.recommendation === "⏸️");
-    var tail = skip
-      ? "Bug reports keep arriving in the days after a release, so the issue list usually grows rather than shrinks — the case for waiting only gets firmer."
-      : "Bug reports keep arriving in the days after a release, so more problems may still surface; treat this as provisional and re-check over the next few runs.";
-    var baTail = skip
-      ? " and don't expect a quick reversal — more reports usually add to the problem list in the first few days, rather than clearing it."
-      : " and check back over the next few runs — confidence builds as users report in and we re-assess.";
-    return el("div",{"class":"banner banner-fresh"},[
-      el("span",{"class":"bi","aria-hidden":"true"},"🆕"),
-      el("div",{"class":"banner-body"},[
-        el("div",{"class":"banner-title"},"Fresh release — this is an early read."),
-        el("div",null,"OpenClaw v"+ver+" was published "+when+". "+detail+" "+tail),
-        el("div",{"class":"ba"},[
-          el("strong",null,"Back up before you update,"),
-          document.createTextNode(baTail)
-        ])
-      ])
     ]);
   }
 
@@ -2467,65 +2262,44 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ]);
   }
 
-  // ── best version to run (from the verdict history) ──────────────────────────
-  function bestVersion(){
-    var h = (DATA.version_history||[]).slice();
-    if (!h.length) return null;
-    h.sort(function(a,b){ return String(b.assessed_at).localeCompare(String(a.assessed_at)); });
-    var SAFE = {"✅":1,"⚠️":1};                 // "safe to run" verdicts
-    var curSafe = SAFE[DATA.recommendation];
-    var arch = {}; (DATA.archived_versions||[]).forEach(function(v){ arch[v]=1; });
-    var best = null;
-    for (var i=0;i<h.length;i++){ if (h[i].version!==DATA.version && SAFE[h[i].recommendation]){ best = h[i]; break; } }
-    var tone, bi, body;
-    if (curSafe && DATA.freshness && DATA.freshness.fresh){
-      // A freshly-dropped release is too new to call "the safest / cleared to run" — that
-      // would contradict the fresh-release note. Defer the verdict until reports accrue.
-      tone="tone-info"; bi="🆕";
-      body = [el("b",null,"v"+(DATA.version||"")+" is the latest release."),
-              document.createTextNode(" It's too new to call cleared — give it a few runs of real-world reports first (see the fresh-release note above).")];
-    } else if (curSafe && DATA.recommendation === "⚠️"){
-      // ⚠️ is "back up first — real risk remains"; don't flatly call it "cleared to run".
-      tone="tone-warn"; bi="⚠️";
-      body = [el("b",null,"v"+(DATA.version||"")+" is the latest, and the best available."),
-              document.createTextNode(" But update with care — some real risk remains (see the verdict above).")];
-    } else if (curSafe){
-      tone="tone-good"; bi="✅";
-      body = [el("b",null,"You're on the safest version."),
-              document.createTextNode(" v"+(DATA.version||"")+" is the latest and it's cleared to run.")];
-    } else if (best){
-      tone="tone-info"; bi="↩️";
-      var vl = arch[best.version]
-        ? el("a",{"class":"snap", href:"archive/"+encodeURIComponent(best.version)+".html", title:"View the verdict for v"+best.version}, "v"+best.version)
-        : el("b",null,"v"+best.version);
-      var bl = (VERDICTS[best.recommendation]||{label:""}).label.toLowerCase();
-      body = [el("b",null,"Safest version to run now: "), vl,
-              document.createTextNode(" — the most recent release that was cleared"+(bl?(" ("+bl+")"):"")+". Hold here until the latest is fixed.")];
-    } else {
-      tone="tone-warn"; bi="⏳";
-      body = [el("b",null,"No recently-cleared version."),
-              document.createTextNode(" None of the tracked releases earned an update-now verdict yet — wait for a clean one.")];
-    }
-    return el("div",{"class":"bestver "+tone},[el("span",{"class":"bi"},bi), el("div",null,body)]);
-  }
-
   // ── your setup (personalize the verdict to the user's stack) ────────────────
-  function personalize(){
-    var s = el("div",{"class":"section setup", id:"setup"});
-    s.appendChild(sectionHead("Your setup", null, "tailor the verdict to what you run"));
-    // The how-to reads BEFORE the pickers — it used to sit in dim small text below
-    // 17 unexplained chips, so mobile users met the wall of chips with no context.
+  function personalize(pvs){
+    pvs = pvs || platformVerdicts();
+    var s = el("div",{"class":"setup", id:"setup"});
+    var sm = stripSummary(pvs), fresh = isFresh(), g = DATA.recommendation;
+    var note;
+    if (fresh) note = "too new to tell platforms apart — reports are still arriving";
+    else if (g === "✅") note = "clear everywhere";
+    else if (!sm.clear.length) note = "every platform is affected";
+    else note = "clear for " + sm.clear.length + " of " + pvs.length + " platforms";
+    s.appendChild(el("div",{"class":"sec-head setup-head"},[
+      el("h2",{"class":"sec-title"},"Your setup"),
+      el("span",{"class":"sec-note", id:"strip-note"}, note)
+    ]));
+    // The how-to reads BEFORE the pickers — mobile users used to meet a wall of chips
+    // with no context.
     s.appendChild(el("div",{"class":"setup-intro"},
-      "Tap what you run — issues hitting your stack get highlighted and the verdict "+
-      "below is tuned to it (saved on this device)."));
-    function pickBtn(k, label){
-      return el("button",{"class":"pick", type:"button", "aria-pressed": STACK[k]?"true":"false", "data-k":k}, label);
+      "Each platform shows its own verdict — tap what you run and the answer below is "+
+      "tuned to your setup (saved on this device)."));
+    function pickBtn(k, ic, label, kv){
+      var v = VERDICTS[kv.rec] || {label:String(kv.rec||"")};
+      var n = kv.blockers.length;
+      var why = n ? (n+" blocking issue"+(n===1?"":"s")+" land"+(n===1?"s":"")+" here")
+        : (kv.softened ? "no blocking issue is confirmed here — eases one notch from the global verdict"
+        : (kv.fresh ? "fresh release — too new to soften" : "matches the global verdict"));
+      return el("button",{"class":"pick "+(VERDICT_TONE[kv.rec]||""), type:"button",
+                          "aria-pressed": STACK[k]?"true":"false", "data-k":k,
+                          "aria-label": label+": "+v.label,
+                          title: label+": "+v.label+" — "+why+". Tap to add it to your setup."},
+        [icon(ic,13), document.createTextNode(label), el("span",{"class":"pv","aria-hidden":"true"}, kv.rec)]);
     }
     var chips = el("div",{"class":"chips"});
     chips.appendChild(el("span",{"class":"chip-grp"}, "Platforms & channels"));
-    PLAT.forEach(function(p){ chips.appendChild(pickBtn(p[0], [icon(p[1],13), p[2]])); });
-    chips.appendChild(el("span",{"class":"chip-grp"}, "Components"));
-    COMP.forEach(function(c){ chips.appendChild(pickBtn(c[0], [icon(c[1],13), c[2]])); });
+    pvs.forEach(function(e){ chips.appendChild(pickBtn(e.key, e.ic, e.label, e.kv)); });
+    // Components sit behind a small toggle — most visitors only need the platform row.
+    var compToggle = el("button",{"class":"pick pick-more", type:"button", "aria-expanded":"false",
+                                  "aria-controls":"comp-chips", title:"Also pick the OpenClaw subsystems you rely on"}, "+ components");
+    chips.appendChild(compToggle);
     var clearBtn = el("button",{"class":"pick pick-clear", type:"button", id:"stack-clear",
                                 title:"Clear every picked platform, channel and component"}, "✕ clear all");
     if (!stackActive()) clearBtn.setAttribute("hidden","");
@@ -2537,8 +2311,19 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (!stackActive()) shareBtn.setAttribute("hidden","");
     chips.appendChild(shareBtn);
     s.appendChild(chips);
+    var compWrap = el("div",{"class":"chips comp-chips", id:"comp-chips", hidden:""});
+    compWrap.appendChild(el("span",{"class":"chip-grp"}, "Components"));
+    COMP.forEach(function(c){ compWrap.appendChild(pickBtn(c[0], c[1], c[2], keyVerdict([], [c[0]]))); });
+    if (stackComponents().length){ compToggle.setAttribute("aria-expanded","true"); compWrap.removeAttribute("hidden"); }
+    compToggle.addEventListener("click", function(){
+      var open = compToggle.getAttribute("aria-expanded")==="true";
+      compToggle.setAttribute("aria-expanded", open?"false":"true");
+      if (open) compWrap.setAttribute("hidden",""); else compWrap.removeAttribute("hidden");
+    });
+    s.appendChild(compWrap);
     s.appendChild(personalRisk());
-    chips.addEventListener("click", function(ev){
+    s.addEventListener("click", function(ev){
+      if (ev.target.closest(".pick-more")) return;   // its own listener
       if (ev.target.closest(".pick-clear")){
         for (var k0 in STACK){ if (Object.prototype.hasOwnProperty.call(STACK,k0)) delete STACK[k0]; }
         saveStack(); applyStack();
@@ -2566,7 +2351,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
         } catch(e){ fail(); }
         return;
       }
-      var b = ev.target.closest(".pick"); if(!b) return;
+      var b = ev.target.closest(".pick[data-k]"); if(!b) return;
       var k = b.getAttribute("data-k");
       if (STACK[k]) delete STACK[k]; else STACK[k]=true;
       saveStack();
@@ -2580,7 +2365,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function applyStack(){
     var setup = document.getElementById("setup");
     if (setup){
-      setup.querySelectorAll(".pick").forEach(function(b){
+      setup.querySelectorAll(".pick[data-k]").forEach(function(b){
         b.setAttribute("aria-pressed", STACK[b.getAttribute("data-k")] ? "true" : "false");
       });
       var clr = document.getElementById("stack-clear");
@@ -2615,14 +2400,6 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (oldP){ var fp = platforms(); if (fp) oldP.parentNode.replaceChild(fp, oldP); }
     var oldC = document.getElementById("components");
     if (oldC){ var fc = componentHealth(); if (fc) oldC.parentNode.replaceChild(fc, oldC); }
-    // Keep the hero CTA's live per-setup verdict mini-summary in sync with the stack.
-    var cta = document.getElementById("setup-cta");
-    if (cta){
-      cta.textContent = "";
-      setupCtaLabel().forEach(function(n){
-        cta.appendChild(typeof n === "object" ? n : document.createTextNode(String(n)));
-      });
-    }
     if (stackActive()){
       var svd = setupVerdict();
       announce("For your setup: " + ((VERDICTS[svd.rec]||{}).label || String(svd.rec)));
@@ -2634,45 +2411,30 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function personalRisk(){
     if (!stackActive()){
       // The how-to lives in .setup-intro above the chips; this stays short.
-      return el("div",{"class":"hint"}, "No setup picked — you're reading the global verdict.");
+      return el("div",{"class":"hint"}, "Nothing picked yet — you're reading the global verdict. Tap the platforms and channels you run for a verdict tuned to your setup.");
     }
-    var pi = DATA.platform_impact || {};
     var ki = DATA.known_issues || [];
-    var W = {none:0, low:1, medium:2, high:3};                 // platform-impact weight
-    var SEVW = {critical:3, high:3, medium:2, low:1};          // severity → comparable weight
-    var SEV_IMP = {critical:"high", high:"high", medium:"medium", low:"low"};  // → badge colour
-    // A platform's *own* issues = those that explicitly name it. The blanket "all"
-    // (cross-cutting) issues are deliberately excluded here so every channel doesn't
-    // repeat the same IDs; they get one shared row below instead.
-    function specificForPlat(k){
-      return ki.filter(function(i){ return issuePlatforms(i).indexOf(k) >= 0; });
-    }
-    function issuesForComp(k){
-      return ki.filter(function(i){ return issueComponents(i).indexOf(k) >= 0; });
-    }
-    // Cross-cutting issues that hit every platform/channel (tagged "all").
-    var crossCutting = ki.filter(function(i){ return issuePlatforms(i).indexOf("all") >= 0; });
-    var pickedPlats = stackPlatforms();
-
+    // One row per picked key, judged by the SAME conservative machinery as the strip
+    // (keyVerdict) — so the panel can never disagree with the chip the user just tapped.
     var rows = [];
-    pickedPlats.forEach(function(k){
-      var lv = String(pi[k]||"none").toLowerCase(), m = PLAT_LABEL[k]||["globe",k];
-      rows.push({kind:"plat", ic:m[0], label:m[1], w:(W[lv]||0),
-                 badgeCls:"imp-"+lv, badgeTxt:(IMPACT[lv]||IMPACT.none).label, iss:specificForPlat(k)});
+    stackPlatforms().forEach(function(k){
+      var m = PLAT_LABEL[k] || ["globe", k];
+      rows.push({ic:m[0], label:m[1], kv:keyVerdict([k], []),
+                 mentions:ki.filter(function(i){ return issuePlatforms(i).indexOf(k) >= 0; })});
     });
     stackComponents().forEach(function(k){
-      var iss = issuesForComp(k), worst = 0, wn = null, m = COMP_LABEL[k]||["build",k];
-      iss.forEach(function(it){ var s = String(it.severity||"low").toLowerCase(), w = SEVW[s]||0; if (w>worst){ worst=w; wn=s; } });
-      rows.push({kind:"comp", emoji:m[0], label:m[1], w:worst,
-                 badgeCls: wn?("imp-"+SEV_IMP[wn]):"imp-none", badgeTxt: wn?(cap(wn)+" sev"):"Clear", iss:iss});
+      var m = COMP_LABEL[k] || ["build", k];
+      rows.push({ic:m[0], label:m[1], kv:keyVerdict([], [k]),
+                 mentions:ki.filter(function(i){ return issueComponents(i).indexOf(k) >= 0; })});
     });
-    rows.sort(function(a,b){ return b.w-a.w || b.iss.length-a.iss.length; });
-
-    var hot = rows.filter(function(r){ return r.w>=2; }).map(function(r){ return r.label; });
+    rows.sort(function(a,b){ return b.kv.blockers.length - a.kv.blockers.length || b.mentions.length - a.mentions.length; });
+    var hot = rows.filter(function(r){ return r.kv.blockers.length; });
+    var cool = rows.filter(function(r){ return !r.kv.blockers.length; });
+    var names = function(rs){ return listNames(rs.map(function(r){ return {label:r.label}; })); };
 
     // The per-setup VERDICT drives the tone + headline (and the badge below) so the copy
-    // can never contradict the glyph — e.g. claim "spared" while still showing the global
-    // Skip. See setupVerdict(): conservative, one-notch, fail-closed, never harsher.
+    // can never contradict the glyph. See setupVerdict(): conservative, one-notch,
+    // fail-closed, never harsher.
     var svd = setupVerdict();
     var gv = VERDICTS[svd.global] || {label:String(svd.global||""), tone:"tone-warn"};
     var sv = VERDICTS[svd.rec] || {label:String(svd.rec||""), tone:"tone-warn"};
@@ -2684,13 +2446,15 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
            + "Back up before updating.";
     } else if (svd.softened){
       head = "Lower risk for your stack — no corroborated blocking issue is confirmed to hit "
-           + "what you run. The global “"+gv.label+"” verdict is driven by issues outside your "
+           + names(rows)+". The global “"+gv.label+"” verdict is driven by issues outside your "
            + "setup (or by reports without corroborating traction yet), so for you it eases to "
            + "“"+sv.label+".” Back up before updating anyway.";
-    } else if (svd.blockers.length){
-      head = "The “"+gv.label+"” verdict applies squarely to you — "
-           + svd.blockers.length+" blocking "+(svd.blockers.length===1?"issue":"issues")
-           + " hit "+(hot.length?hot.join(", "):"your stack")+" or every install.";
+    } else if (hot.length){
+      var seen = {}, n = 0;
+      hot.forEach(function(r){ r.kv.blockers.forEach(function(b){ if (!seen[b.number]){ seen[b.number] = 1; n++; } }); });
+      head = "The “"+gv.label+"” verdict applies to you — "+n+" blocking issue"+(n===1?"":"s")
+           + " land"+(n===1?"s":"")+" on "+names(hot)
+           + (cool.length ? " ("+names(cool)+" "+(cool.length===1?"is":"are")+" clear)" : "")+".";
     } else {
       head = "Your stack looks clear for this release — this matches the global “"+gv.label+"” verdict.";
     }
@@ -2707,16 +2471,17 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 
     var list = el("div",{"class":"prow-list"});
     rows.forEach(function(r){
-      var badge = el("span",{"class":"pbadge "+r.badgeCls}, r.badgeTxt);
+      var nb = r.kv.blockers.length;
+      var badge = el("span",{"class":"pbadge "+(nb ? "imp-high" : (r.kv.fresh ? "imp-medium" : "imp-none"))},
+        nb ? (r.kv.rec+" "+nb+" blocking") : (r.kv.rec+" "+(r.kv.fresh ? "early read" : "clear")));
       var detail;
-      if (r.iss.length){
-        detail = el("span",{"class":"pdetail"}, issueLinks(r.iss, 5));
-      } else if (r.kind==="plat" && r.w>=2){
+      if (nb){
+        detail = el("span",{"class":"pdetail"}, issueLinks(r.kv.blockers, 5));
+      } else if (r.mentions.length){
         detail = el("span",{"class":"pdetail muted2"},
-          crossCutting.length ? ("no "+r.label+"-specific issues — affected via the cross-cutting issues below")
-                              : "rated from cross-cutting regressions — see Known issues below");
+          [document.createTextNode(r.mentions.length+" report"+(r.mentions.length===1?"":"s")+" mention"+(r.mentions.length===1?"s":"")+" it, none a credible blocker — ")].concat(issueLinks(r.mentions, 3)));
       } else {
-        detail = el("span",{"class":"pdetail muted2"}, "clear this release");
+        detail = el("span",{"class":"pdetail muted2"}, "no tracked report names it this release");
       }
       list.appendChild(el("div",{"class":"prow"},[
         el("span",{"class":"ppn"}, [icon(r.ic,13), r.label]),
@@ -2724,21 +2489,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       ]));
     });
 
-    // One shared row for the issues tagged "all" — they hit every channel/platform,
-    // so listing them once (instead of under each) keeps the per-platform rows distinct.
-    // Cross-cutting issues hit every platform & channel, so show this row whenever the
-    // user has picked ANY stack — previously gated on platforms only, so component-only
-    // pickers never saw these core issues. Badge now carries worst severity + a count,
-    // and the note flags how many are confirmed to affect the assessed version.
-    if (stackActive() && crossCutting.length){
-      var ccW = 0, ccN = null;
-      crossCutting.forEach(function(it){ var s=String(it.severity||"low").toLowerCase(), w=SEVW[s]||0; if (w>ccW){ ccW=w; ccN=s; } });
-      var ccLvl = ccN ? SEV_IMP[ccN] : "none";
-      var ccAffV = crossCutting.filter(function(it){ return it.affects_version; }).length;
+    // Credible blockers tagged "all" are listed ONCE: they pin every setup only with
+    // megathread-class traction (the breadth gate), otherwise through their explicit tags.
+    var cross = gateBlockers().filter(function(i){ return issuePlatforms(i).indexOf("all") >= 0; });
+    if (cross.length){
       list.appendChild(el("div",{"class":"prow prow-all"},[
         el("span",{"class":"ppn"}, [icon("globe",13), "All platforms & channels"]),
-        el("span",{"class":"pbadge imp-"+ccLvl}, (IMPACT[ccLvl]||IMPACT.none).label+" · "+crossCutting.length),
-        el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "cross-cutting reports not tied to one OS or channel"+(ccAffV?(" ("+ccAffV+" affect v"+(DATA.version||"")+")"):"")+" — ")].concat(issueLinks(crossCutting, 5)))
+        el("span",{"class":"pbadge imp-medium"}, cross.length+" cross-cutting"),
+        el("span",{"class":"pdetail"}, [el("span",{"class":"ccnote"}, "credible blockers not tied to one OS or channel — ")].concat(issueLinks(cross, 5)))
       ]));
     }
 
@@ -2976,9 +2734,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   // Rebuilds the page body from the current DATA. Safe to call more than once
   // (clears #app first) so the runtime-fetch path can re-render in place.
   // ── top-level long-tail tabs ────────────────────────────────────────────────
-  // The decision content (verdict → setup → reasoning → known issues) stays a single
-  // always-visible scroll; the secondary detail is grouped behind these tabs to cut
-  // clutter without burying the verdict. SEO is unaffected — the crawlable answer is
+  // Lives inside the collapsed "full evidence" wrapper; the secondary detail is grouped
+  // behind these tabs so opening the evidence doesn't dump every section at once. SEO is unaffected — the crawlable answer is
   // the server-rendered <article> (render._seo_body), generated independently of this
   // client-side layout. Empty groups (e.g. gated-out Trends) drop their tab entirely.
   var activateLongTab = null;   // set below; lets scrollToHash() open a deep-linked section's tab
@@ -3042,27 +2799,357 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return el("div",{"class":"ltab-wrap"},[tablist, panelsWrap]);
   }
 
+  // ── plain-language status ───────────────────────────────────────────────────
+  // Mirrors verdict.status_for (Python): the three verdict words, or "Too new to call"
+  // while a non-skip release is still inside the fresh window (a fresh ⏸️ stays a skip —
+  // that evidence is early but already negative).
+  var VERDICT_TONE = {"✅":"pv-good", "⚠️":"pv-warn", "⏸️":"pv-bad"};
+  function isFresh(){ return !!(DATA.freshness && DATA.freshness.fresh); }
+  function statusOf(){
+    var rec = DATA.recommendation, base = VERDICTS[rec];
+    if (!base) return {key:"unknown", label:String(rec||"Assessed"), tone:"tone-muted", rec:rec, early:null};
+    if (isFresh() && rec !== "⏸️") return {key:"wait", label:"Too new to call", tone:"tone-info", rec:rec, early:base.label};
+    var key = rec === "✅" ? "update" : rec === "⚠️" ? "care" : "skip";
+    return {key:key, label:base.label, tone:base.tone, rec:rec, early:null};
+  }
+  // Per-platform verdicts — the conservative keyVerdict run for each surface alone. The
+  // strip, its summary note and the hero one-liner all read this one list.
+  function platformVerdicts(){
+    return PLAT.map(function(p){ return {key:p[0], ic:p[1], label:p[2], kv:keyVerdict([p[0]], [])}; });
+  }
+  function stripSummary(pvs){
+    var gi = VERDICT_ORDER.indexOf(DATA.recommendation);
+    return {
+      clear:  pvs.filter(function(e){ return VERDICT_ORDER.indexOf(e.kv.rec) < gi; }),
+      pinned: pvs.filter(function(e){ return VERDICT_ORDER.indexOf(e.kv.rec) >= gi; })
+    };
+  }
+  function listNames(entries){
+    var names = entries.map(function(e){ return e.label; });
+    if (names.length > 4) return names.slice(0,3).join(", ") + " and " + (names.length-3) + " more";
+    if (names.length <= 1) return names.join("");
+    return names.slice(0,-1).join(", ") + " and " + names[names.length-1];
+  }
+  // The credible blockers behind the verdict: the server-side evidence gate's numbers joined
+  // back onto known_issues; payloads predating the gate fall back to the client twin.
+  function gateBlockers(){
+    var ki = DATA.known_issues || [], byNum = {};
+    ki.forEach(function(i){ byNum[i.number] = i; });
+    var eg = DATA.evidence_gate, list = [];
+    if (eg && Array.isArray(eg.blockers)){
+      eg.blockers.forEach(function(n){ if (byNum[n]) list.push(byNum[n]); });
+    } else {
+      list = blockersFor(PLAT.map(function(p){ return p[0]; }), COMP.map(function(c){ return c[0]; }));
+    }
+    list.sort(function(a,b){ return (Number(b.weight)||0) - (Number(a.weight)||0); });
+    return list;
+  }
+  function whenText(d){ return (d == null || d === 0) ? "today" : (d === 1 ? "yesterday" : d + " days ago"); }
+  // One plain sentence under the status word — computed from the same facts the strip shows.
+  function answerLine(st, pvs){
+    var ver = "v"+(DATA.version||""), fr = DATA.freshness || {}, pre = DATA.latest_prerelease || {};
+    var bl = gateBlockers(), n = bl.length;
+    if (st.key === "wait"){
+      var spec = fr.version_specific_issues || 0;
+      return ver+" came out "+whenText(fr.days_since_release)+". Bug reports are still arriving"
+        + (spec ? " — "+spec+" so far name this release" : "")
+        + ", so this is an early read: "+st.early.toLowerCase()+". Back up first, and check back in a day or two.";
+    }
+    if (st.key === "update") return "No credible blocking issue is confirmed for this release. Back up as usual, then update.";
+    if (st.key === "skip"){
+      var sk = "Open issues outweigh the benefits right now — stay on your current version.";
+      if (pre.tag) sk += " A fix may be staged in "+pre.tag+" (pre-release); it isn't in this release yet.";
+      return sk;
+    }
+    if (st.key !== "care") return "";
+    if (!n){
+      var dr = ((DATA.evidence_gate||{}).departure||{}).reason;
+      return "No credible blocking issue is confirmed for this release, but the analyst sees a contained risk"
+        + (dr ? ": "+dr : "") + ". Back up first.";
+    }
+    var sm = stripSummary(pvs);
+    var nTxt = n+" credible blocking issue"+(n===1?"":"s");
+    if (sm.clear.length && sm.pinned.length){
+      // Count the blockers that land on the pinned platforms (not the release-wide total).
+      var seen = {}, landing = 0;
+      sm.pinned.forEach(function(e){ e.kv.blockers.forEach(function(b){ if (!seen[b.number]){ seen[b.number] = 1; landing++; } }); });
+      var others = sm.clear.length === 1 ? "the other platform is clear" : "the other "+sm.clear.length+" platforms and channels are clear";
+      return "Safe for most setups. "+listNames(sm.pinned)+" users should wait — "+landing+" blocking issue"+(landing===1?"":"s")
+        + " land"+(landing===1?"s":"")+" there; "+others+". Back up first either way.";
+    }
+    if (sm.clear.length) return "No platform is pinned by a blocking issue, but "+nTxt+" remain"+(n===1?"s":"")+" open for this release — back up first.";
+    return nTxt+" "+(n===1?"is":"are")+" confirmed for this release and can hit any setup. Back up first, or wait for the next release.";
+  }
+
+  function hero(){
+    var st = statusOf(), rel = DATA.latest_release || {}, npm = DATA.npm || {};
+    var pvs = platformVerdicts();
+    var sub = [];
+    if (rel.published_at){
+      var d = (DATA.freshness||{}).days_since_release;
+      sub.push("Released "+fmtDate(rel.published_at)+(d != null ? " ("+whenText(d)+")" : ""));
+    }
+    if (DATA.assessed_at) sub.push("assessed "+timeAgo(DATA.assessed_at));
+    if (npm.version) sub.push("npm "+npm.version);
+    var subNodes = [];
+    sub.forEach(function(x,i){
+      if (i) subNodes.push(el("span",{"class":"sep"},"·"));
+      subNodes.push(document.createTextNode(x));
+    });
+
+    var conf = String(DATA.confidence||"medium").toLowerCase();
+    var pre = DATA.latest_prerelease || {};
+    var chips = [
+      el("span",{"class":"chip lvl-"+conf, title:confNote(conf)},[document.createTextNode("Confidence: "), el("b",null,cap(conf))])
+    ];
+    if (pre.tag){
+      var preTip = "A newer release is staged in pre-release. Until those fixes ship in a stable release, the current version still carries the issues below.";
+      var preKids = [el("b",null,"Fix staged: "+pre.tag),document.createTextNode(" (pre-release)")];
+      chips.push(pre.url
+        ? el("a",{"class":"chip chip-link", href:pre.url, title:"View "+pre.tag+" on GitHub. "+preTip},
+            preKids.concat(el("span",{"class":"v-ext","aria-hidden":"true"},"↗")))
+        : el("span",{"class":"chip", title:preTip}, preKids));
+    }
+    // Dual-model review outcome — the central reason to trust an automated verdict: show
+    // that a second, independent model concurred, or that the verdict was REVISED after it
+    // pushed back, rather than asking the user to take the first analyst on faith. The chip
+    // expands into the validator's actual findings (reviewDetail).
+    var rv = DATA.review || {};
+    var rvPanel = null;
+    if (rv.validated){
+      var rvText, rvTip;
+      if (rv.refined && rv.primary_recommendation && rv.primary_recommendation !== (DATA.recommendation||"")){
+        rvText = "Revised "+rv.primary_recommendation+"→"+(DATA.recommendation||"")+" on review";
+        rvTip = "The first analyst model said "+rv.primary_recommendation+"; an independent second model challenged it and the verdict was revised.";
+      } else if (rv.agreed){
+        rvText = "2nd model agreed";
+        rvTip = "An independent second model reviewed this verdict and concurred.";
+      } else if (rv.refined){
+        rvText = "2nd model flagged; held";
+        rvTip = "An independent second model flagged details, but the verdict held after re-check.";
+      } else {
+        rvText = "2nd model flagged; re-check failed";
+        rvTip = "An independent second model flagged details, but the analyst's re-check pass failed this run — shown is the analyst's original read.";
+      }
+      rvPanel = reviewDetail(rv);
+      var rvBtn = el("button",{"class":"chip", type:"button", title:rvTip+" Click for what it said.",
+                               "aria-expanded":"false", "aria-controls":"rev-detail"},
+        [document.createTextNode("⚖︎ "), el("b",null,rvText), el("span",{"class":"cx","aria-hidden":"true"},"▾")]);
+      rvBtn.addEventListener("click", function(){
+        var open = rvBtn.getAttribute("aria-expanded")==="true";
+        rvBtn.setAttribute("aria-expanded", open?"false":"true");
+        if (open) rvPanel.setAttribute("hidden",""); else rvPanel.removeAttribute("hidden");
+      });
+      chips.push(rvBtn);
+    } else if (rv.unreviewed){
+      chips.push(el("span",{"class":"chip", title:"The independent validator model was unavailable on this run, so this verdict reflects a single model — confidence is capped and you should sanity-check it against the linked issues."},
+        [document.createTextNode("⚠︎ "), el("b",null,"single-model — validator unavailable")]));
+    }
+    var eg = DATA.evidence_gate || {};
+    if (eg.verdict){
+      var egTip = "Deterministic floor computed from the issue evidence alone (open high/critical issues confirmed for this version with a person or the community behind them). The analyst may only be MORE cautious than it, with a cited reason.";
+      chips.push(el("span",{"class":"chip", title:egTip+" "+(eg.reason||"")},
+        [document.createTextNode("Evidence gate: "), el("b",null, eg.verdict)]));
+    }
+
+    var glyph = st.key === "wait" ? "⏳" : (DATA.recommendation || "?");
+    var answerKids = [ el("span",{"class":"em","aria-hidden":"true"}, glyph),
+                       el("span",{"class":"answer-word"}, st.label) ];
+    var answer = rel.url
+      ? el("a",{"class":"verdict "+st.tone, href:rel.url, title:"View the OpenClaw "+"v"+(DATA.version||"")+" release on GitHub"},
+           answerKids.concat(el("span",{"class":"v-ext","aria-hidden":"true"},"↗")))
+      : el("div",{"class":"verdict "+st.tone}, answerKids);
+
+    var main = el("div",{"class":"hero-main"},[
+      el("div",{"class":"eyebrow"},"OpenClaw · latest release"),
+      el("h1",{"class":"hero-version"},["OpenClaw ", el("span",{"class":"vnum"},"v"+(DATA.version||"?"))]),
+      el("div",{"class":"hero-sub"}, subNodes),
+      answer,
+      el("p",{"class":"answer-line"}, answerLine(st, pvs)),
+      lowConfBanner(),
+      DATA.headline ? el("p",{"class":"hero-headline"},[el("span",{"class":"hh-k"},"Analyst"), document.createTextNode(DATA.headline)]) : null,
+      el("div",{"class":"conf-row"}, chips),
+      rvPanel
+    ]);
+    return el("div",{"class":"hero "+st.tone},[ main, personalize(pvs) ]);
+  }
+
+  // ── best version to run today (server-computed: verdict.recommended_version) ──
+  function recoLine(rv){
+    var latest = rv.latest || {};
+    if (!rv.version){
+      return "Every release we've assessed is either under "+(rv.min_days||7)+" days old, rated skip, or "
+        + "carries a widespread breaker. If you're on a version that works for you, stay put.";
+    }
+    var days = rv.age_days != null ? rv.age_days+" days in the field" : "settled in the field";
+    var why = (rv.kind === "latest" ? "The latest release, and the most settled one we've assessed: " : "The most settled release we've assessed: ")
+      + days + " with no widespread breaker.";
+    if (rv.kind !== "latest"){
+      why += " If you're on a newer version that works for you, stay put.";
+      if (latest.version && latest.version !== rv.version){
+        if (latest.age_days != null && latest.age_days < (rv.min_days||7))
+          why += " The latest, v"+latest.version+", came out "+whenText(latest.age_days)+" — too new to call settled.";
+        else if (latest.recommendation)
+          why += " The latest, v"+latest.version+", is rated "+((VERDICTS[latest.recommendation]||{label:""}).label.toLowerCase())+".";
+      }
+    }
+    return why;
+  }
+  // The facts behind the pick, as scannable chips rather than a warning sentence.
+  function recoChips(rv){
+    var v = VERDICTS[rv.recommendation] || {label:String(rv.recommendation||"")};
+    var n = rv.blocker_count || 0;
+    var row = el("div",{"class":"reco-chips"});
+    if (rv.published_at) row.appendChild(el("span",{"class":"chip"},[document.createTextNode("Released "), el("b",null,fmtDate(rv.published_at))]));
+    if (rv.recommendation) row.appendChild(el("span",{"class":"chip "+(VERDICT_TONE[rv.recommendation]||""), title:"The last verdict this tool gave that release"},
+      [document.createTextNode("Last verdict: "), el("b",null,rv.recommendation+" "+v.label.toLowerCase())]));
+    row.appendChild(el("span",{"class":"chip", title:"Open high/critical issues confirmed for that version with a person or the community behind them — none drew megathread-class engagement"},
+      [document.createTextNode("Known issues: "), el("b",null, n ? n+" credible, none widespread" : "none credible")]));
+    return row;
+  }
+  function recommendedCard(){
+    var rv = DATA.recommended_version;
+    if (!rv || typeof rv !== "object") return null;
+    var cur = DATA.version || "";
+    var tone = !rv.version ? "tone-muted" : (rv.recommendation === "✅" ? "tone-good" : "tone-info");
+    var kids = [
+      el("div",{"class":"reco-k"},"Best version to run today"),
+      el("div",{"class":"reco-v"}, rv.version ? "v"+rv.version : "No release has settled yet"),
+      el("p",{"class":"reco-why"}, recoLine(rv)),
+      rv.version ? recoChips(rv) : null
+    ];
+    if (rv.version && rv.blockers && rv.blockers.length){
+      var ul = el("ul",{"class":"reco-issues"});
+      rv.blockers.slice(0,4).forEach(function(b){
+        var title = String(b.title||""); if (title.length > 96) title = title.slice(0,93).replace(/\s+\S*$/,"")+"…";
+        ul.appendChild(el("li",null,[ el("a",{"class":"ilink", href:issueUrl(b.number)},"#"+b.number),
+          document.createTextNode(" "+title), el("span",{"class":"why-meta"}, b.severity ? " · "+b.severity : "") ]));
+      });
+      kids.push(el("div",{"class":"reco-kk"},"Known problems to read first"));
+      kids.push(ul);
+    }
+    if (rv.version){
+      var cmd = "npm install -g openclaw@"+rv.version;
+      var copy = el("button",{"class":"pick pick-copy", type:"button", title:"Copy the pinned install command"},"⧉ copy");
+      copy.addEventListener("click", function(){
+        var ok = function(){ announce("Install command copied."); copy.textContent = "✓ copied"; setTimeout(function(){ copy.textContent = "⧉ copy"; }, 1400); };
+        var ko = function(){ announce("Couldn't copy automatically — select the command text instead."); };
+        try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(cmd).then(ok, ko); else ko(); } catch(e){ ko(); }
+      });
+      kids.push(el("div",{"class":"reco-cmdrow"},[ el("span",{"class":"cmd-k"},"Pin it:"), el("code",{"class":"reco-cmd"}, cmd), copy ]));
+      var arch = {}; (DATA.archived_versions||[]).forEach(function(a){ arch[a] = 1; });
+      if (rv.version !== cur && arch[rv.version])
+        kids.push(el("a",{"class":"reco-link", href:"archive/"+encodeURIComponent(rv.version)+".html"}, "Read that release's own verdict page ↗"));
+    }
+    kids.push(el("div",{"class":"reco-note"},
+      "Deterministic rule, no model: the newest release we've assessed that has been out at least "
+      + (rv.min_days||7)+" days, wasn't rated skip, and shows no widespread breaker in its own issue ledger."));
+    return el("div",{"class":"reco "+tone, id:"best-version"}, kids);
+  }
+
+  // ── why: what's broken vs what you'd get ────────────────────────────────────
+  function whyGrid(){
+    var bl = gateBlockers(), ch = DATA.changes || {}, ki = DATA.known_issues || [];
+    var eg = DATA.evidence_gate || {};
+    var s = el("div",{"class":"section", id:"why"});
+    s.appendChild(sectionHead("Why", null, "the evidence behind the answer"));
+    var grid = el("div",{"class":"why-grid"});
+    var bad = el("div",{"class":"why-card "+(bl.length?"why-bad":"why-ok")});
+    bad.appendChild(el("h3",null, bl.length
+      ? "What's broken · "+bl.length+" credible blocking issue"+(bl.length===1?"":"s")
+      : "Nothing credible is blocking"));
+    var subBits = [];
+    if (eg.reason) subBits.push(eg.reason);
+    if (eg.departure && eg.departure.departed) subBits.push("The analyst chose a more cautious call"+(eg.departure.reason ? ": "+eg.departure.reason : "."));
+    if (subBits.length) bad.appendChild(el("p",{"class":"why-sub"}, subBits.join(" ")));
+    if (bl.length){
+      var ul = el("ul");
+      bl.slice(0,4).forEach(function(i){
+        var ps = issuePlatforms(i);
+        var plat = ps.indexOf("all") >= 0 ? "all platforms" : ps.map(function(k){ return (PLAT_LABEL[k]||[0,k])[1]; }).join(", ");
+        ul.appendChild(el("li",null,[ el("a",{"class":"ilink", href:issueUrl(i.number)},"#"+i.number),
+          document.createTextNode(" "+(i.title||"")),
+          el("span",{"class":"why-meta"}, " — "+(i.severity||"")+(plat ? " · "+plat : "")) ]));
+      });
+      bad.appendChild(ul);
+      var rest = bl.length - Math.min(bl.length, 4);
+      bad.appendChild(el("p",{"class":"why-more"}, (rest ? "+"+rest+" more, " : "")+"all "+ki.length+(DATA.issues_capped?"+":"")+" known issues are in the full evidence below."));
+    } else if (!eg.reason){
+      bad.appendChild(el("p",{"class":"why-sub"}, ki.length
+        ? "The "+ki.length+(DATA.issues_capped?"+":"")+" tracked reports for this release carry bot-applied labels with no human corroboration or community traction — normal ambient churn for a project with millions of weekly installs."
+        : "No issues are tracked for this release yet."));
+    }
+    var good = el("div",{"class":"why-card why-good"});
+    var fixes = (ch.fixes||[]).length, feats = (ch.features||[]).length, brk = (ch.breaking||[]).length;
+    good.appendChild(el("h3",null,"What you'd get"));
+    var counts = [];
+    if (feats) counts.push(feats+" highlight"+(feats===1?"":"s"));
+    if (fixes) counts.push(fixes+" fix"+(fixes===1?"":"es")+((DATA.hotfix_chain||[]).length>1 ? " across "+DATA.hotfix_chain.length+" stacked hotfixes" : ""));
+    counts.push(brk ? brk+" breaking change"+(brk===1?"":"s") : "no breaking changes listed");
+    good.appendChild(el("p",{"class":"why-sub"}, counts.join(" · ")));
+    if (feats){
+      var ul2 = el("ul");
+      (ch.features||[]).slice(0,4).forEach(function(f){ ul2.appendChild(el("li",null, linkify(typeof f === "string" ? f : (f.title||"")))); });
+      good.appendChild(ul2);
+    }
+    if (fixes || feats || brk) good.appendChild(el("p",{"class":"why-more"}, "The full changelog is in the evidence below, under What's new."));
+    grid.appendChild(bad); grid.appendChild(good);
+    s.appendChild(grid);
+    return s;
+  }
+
+  // ── the full evidence, behind one toggle ────────────────────────────────────
+  var openDetails = null;   // set by detailsWrap; scrollToHash uses it for deep links
+  function detailsWrap(){
+    var nodes = [stats(), thesis(), evidence(), tabbedLongTail(), issues(), about()].filter(function(n){ return n; });
+    if (!nodes.length) return null;
+    var body = el("div",{"class":"details-body", id:"details-body", hidden:""});
+    nodes.forEach(function(n){ body.appendChild(n); });
+    var ki = DATA.known_issues || [];
+    var bits = ["the analyst's full reasoning", ki.length+(DATA.issues_capped?"+":"")+" known issues with filters",
+                "impact by platform & component", "changelog", "trends", "past verdicts"];
+    var main = el("span",{"class":"dt-main"},"Show the full evidence");
+    var btn = el("button",{"class":"details-toggle", type:"button", "aria-expanded":"false", "aria-controls":"details-body"},
+      [ main, el("span",{"class":"cx","aria-hidden":"true"},"▾"), el("span",{"class":"dt-sub"}, bits.join(" · ")) ]);
+    function setOpen(open){
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      main.textContent = open ? "Hide the full evidence" : "Show the full evidence";
+      if (open){
+        body.removeAttribute("hidden");
+        // sections inside a hidden wrapper never tripped the IntersectionObserver — reveal directly
+        body.querySelectorAll(".reveal").forEach(function(n){ n.classList.add("in"); });
+      } else {
+        body.setAttribute("hidden","");
+      }
+    }
+    btn.addEventListener("click", function(){
+      var open = btn.getAttribute("aria-expanded")==="true";
+      setOpen(!open);
+      announce(open ? "Full evidence hidden." : "Full evidence shown.");
+    });
+    openDetails = function(){ if (btn.getAttribute("aria-expanded") !== "true") setOpen(true); };
+    return el("div",{"class":"details", id:"details"},[btn, body]);
+  }
+
+  // ── render ──────────────────────────────────────────────────────────────────
+  // Rebuilds the page body from the current DATA. Safe to call more than once
+  // (clears #app first) so the runtime-fetch path can re-render in place.
   function render(){
     app.textContent = "";
     if (!DATA || !DATA.recommendation){
       showError("The assessment data could not be loaded. The pipeline may not have run yet.");
       return;
     }
-    var v = VERDICTS[DATA.recommendation] || {label:String(DATA.recommendation), tone:"tone-muted", blurb:""};
-    // Page-level verdict-tinted backdrop glow. A data-* attr + dedicated --pglow var,
+    var st = statusOf();
+    // Page-level status-tinted backdrop glow. A data-* attr + dedicated --pglow var,
     // NOT a .tone-* class: a tone class on the body element would cascade --tone into
     // every component that relies on inheriting it from its own wrapper.
-    // (No angle-bracket tag names in comments — the HTML smoke test counts them.)
-    try { document.body.setAttribute("data-tone", v.tone.replace("tone-","")); } catch(e){}
-    // Tab title stays the tidy static <title> — no version/verdict appended.
-    // Order: lead with the decision-relevant content as one always-visible scroll
-    // — verdict → your-setup → reasoning (why+sentiment → case) — then the long-tail
-    // tab strip (Impact / What's new / Trends / History), and below it the Known
-    // issues section (its own category-tab strip); footer stays at the bottom.
-    [ lowConfBanner(), freshBanner(), hero(v), about(), bestVersion(), stats(),
-      personalize(), thesis(), evidence(), flipConditions(),
-      tabbedLongTail(),
-      issues(),
+    try { document.body.setAttribute("data-tone", st.tone.replace("tone-","")); } catch(e){}
+    // Order: the answer (status word + one line + per-platform strip that doubles as the
+    // setup picker) → the best version to run today → WHY in two cards → what would change
+    // the verdict → everything else behind one "full evidence" toggle → footer.
+    [ hero(), recommendedCard(), whyGrid(), flipConditions(),
+      detailsWrap(),
       footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
     initFresh();
@@ -3070,7 +3157,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     addAnchors();
   }
   function revealOn(){
-    var items = app.querySelectorAll(".section, .stats, .bestver");
+    var items = app.querySelectorAll(".section, .stats, .reco");
     // No IntersectionObserver → just show everything (never gate content on JS animation).
     if (!("IntersectionObserver" in window)){
       items.forEach(function(n){ n.classList.add("in"); });
@@ -3119,6 +3206,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var t = null;
     try { t = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch(e){}
     if (t){
+      if (openDetails && t.closest && t.closest("#details-body")) openDetails();   // deep link into the evidence
       var panel = t.closest ? t.closest(".ltab-panel") : null;
       if (panel && activateLongTab) activateLongTab(panel);   // open the tab holding the target
       t.scrollIntoView({behavior:"smooth", block:"start"});

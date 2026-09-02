@@ -4,8 +4,8 @@
 // deploy box has no Node — run on demand:  node tests/browser/page_ui.test.js
 //
 // Pins the UI-quality fixes: the hydrated DOM keeps an <h1>, an expanded issue row
-// reveals the FULL untruncated title, and the hero setup-CTA action phrase can't wrap
-// into orphaned fragments.
+// reveals the FULL untruncated title, and the answer-first layout leads with a plain
+// status word + per-platform strip while the evidence sits behind one toggle.
 
 const path = require("path");
 const fs = require("fs");
@@ -89,6 +89,14 @@ const DATA = {
             detail: { critique: "checked the labels, sound", suggested_recommendation: "",
                       miscategorized_issues: [], missed_issues: ["#777 memory race"],
                       logical_errors: [], overruled_claims: [] } },
+  // The deterministic evidence gate (verdict.py) + the best version to run today.
+  evidence_gate: { verdict: "⚠️", blockers: [90361], widespread: [], serious: [], blocker_count: 1,
+                   reason: "1 credible blocking issue confirmed for this version, none widespread.",
+                   floor_applied: false, departure: { departed: false, reason: "" } },
+  recommended_version: { version: "2026.5.9", kind: "settled", published_at: "2026-05-20", age_days: 18,
+                         recommendation: "⚠️", gate: "⚠️", blocker_count: 1, min_days: 7, considered: 2,
+                         blockers: [{ number: 777, title: "memory race", severity: "high" }],
+                         latest: { version: "2026.6.1", age_days: 2, recommendation: "⚠️", settled: false } },
 };
 
 (async () => {
@@ -102,6 +110,64 @@ const DATA = {
 
   const checks = [];
   const t = (name, ok) => checks.push([name, ok]);
+
+  // 0. Answer-first layout: the status word + one-liner lead, every platform chip carries its
+  //    own verdict glyph + tone (the fixture's cross-cutting critical pins them all to ⚠️),
+  //    the best-version card names a version + a pinned install command, the WHY card counts
+  //    the gate's credible blockers, and the evidence is collapsed until asked for.
+  const lead = await page.evaluate(() => ({
+    word: (document.querySelector(".hero .verdict .answer-word") || {}).textContent,
+    line: (document.querySelector(".hero .answer-line") || {}).textContent || "",
+    tone: document.body.getAttribute("data-tone"),
+    strip: Array.from(document.querySelectorAll(".setup .chips:not(.comp-chips) .pick[data-k]"))
+      .map((b) => ({ k: b.getAttribute("data-k"), pv: (b.querySelector(".pv") || {}).textContent, cls: b.className })),
+    note: (document.getElementById("strip-note") || {}).textContent,
+    compHidden: (document.getElementById("comp-chips") || {}).hidden,
+    reco: (document.querySelector("#best-version .reco-v") || {}).textContent,
+    recoCmd: (document.querySelector("#best-version .reco-cmd") || {}).textContent,
+    recoWhy: (document.querySelector("#best-version .reco-why") || {}).textContent || "",
+    recoChips: (document.querySelector("#best-version .reco-chips") || {}).textContent || "",
+    why: (document.querySelector("#why .why-bad h3") || {}).textContent,
+    whyLink: !!document.querySelector('#why .why-bad a[href*="issues/90361"]'),
+    gateChip: Array.from(document.querySelectorAll(".conf-row .chip")).some((c) => /Evidence gate/.test(c.textContent)),
+    detailsHidden: (document.getElementById("details-body") || {}).hidden,
+    toggle: (document.querySelector(".details-toggle") || { getAttribute: () => null }).getAttribute("aria-expanded"),
+    heroOrder: (() => {   // hero → best version → why → flip → details → footer
+      const ids = Array.from(document.querySelectorAll("#app > *")).map((n) => n.id || n.className.split(" ")[0]);
+      return ids.join(",");
+    })(),
+  }));
+  t("status word leads the hero", lead.word === "Update with care" && lead.tone === "warn");
+  t("one-liner says the blockers can hit any setup", /can hit any setup/.test(lead.line));
+  const platKeys = ["windows", "macos", "linux", "ios", "android", "web", "discord", "slack", "telegram", "whatsapp", "other-channel"];
+  t("platform strip: 11 chips, each with its own verdict glyph + tone",
+    lead.strip.length === 11 && platKeys.every((k) => lead.strip.some((c) => c.k === k)) &&
+    lead.strip.every((c) => c.pv === "⚠️" && /pv-warn/.test(c.cls)));
+  t("strip note: every platform is affected (cross-cutting critical)", lead.note === "every platform is affected");
+  t("component chips are tucked behind the toggle by default", lead.compHidden === true);
+  t("best-version card names the settled release + a pinned install command",
+    lead.reco === "v2026.5.9" && lead.recoCmd === "npm install -g openclaw@2026.5.9" &&
+    /18 days in the field with no widespread breaker/.test(lead.recoWhy) &&
+    /The latest, v2026.6.1, came out 2 days ago/.test(lead.recoWhy) &&
+    /1 credible, none widespread/.test(lead.recoChips));
+  t("WHY card counts the gate's credible blockers and links them",
+    lead.why === "What's broken · 1 credible blocking issue" && lead.whyLink);
+  t("evidence-gate chip shows in the hero", lead.gateChip);
+  t("full evidence is collapsed by default", lead.detailsHidden === true && lead.toggle === "false");
+  t("section order: hero, best version, why, flip, details, footer",
+    lead.heroOrder === "hero,best-version,why,flip,details,foot");
+
+  // The redesign collapses the evidence behind one toggle; open it so the checks below can
+  // interact with the sections it holds (a visibility-dependent page.click needs this).
+  const openEvidence = () => page.evaluate(() => {
+    const b = document.querySelector(".details-toggle");
+    if (b && b.getAttribute("aria-expanded") !== "true") b.click();
+  });
+  await openEvidence();
+  t("toggle opens the evidence", await page.evaluate(() =>
+    document.getElementById("details-body").hidden === false &&
+    document.querySelector(".details-toggle").getAttribute("aria-expanded") === "true" &&
+    /Hide the full evidence/.test(document.querySelector(".details-toggle .dt-main").textContent)));
 
   // 1. The hydrated DOM keeps a top-level heading (render() wipes the SSR <h1>).
   const h1 = await page.evaluate(() => {
@@ -122,10 +188,16 @@ const DATA = {
   });
   t("expanded row shows the full title", detTitle === LONG_TITLE);
 
-  // 3. The hero setup-CTA action phrase must not wrap into orphaned fragments.
-  const ws = await page.evaluate(() =>
-    getComputedStyle(document.querySelector(".setup-cta b")).whiteSpace);
-  t("setup-CTA action phrase is nowrap", ws === "nowrap");
+  // 3. Picking a platform chip highlights it (ring) without losing its verdict tone.
+  await page.evaluate(() => document.querySelector('.setup .pick[data-k="linux"]').click());
+  const picked = await page.evaluate(() => {
+    const b = document.querySelector('.setup .pick[data-k="linux"]');
+    return { pressed: b.getAttribute("aria-pressed"), cls: b.className,
+             risk: !!document.querySelector(".setup .risk .sv") };
+  });
+  t("picked chip is pressed, keeps its verdict tone, and the per-setup panel appears",
+    picked.pressed === "true" && /pv-warn/.test(picked.cls) && picked.risk);
+  await page.evaluate(() => document.querySelector('.setup .pick[data-k="linux"]').click());   // un-pick
 
   // 4. Impact meters: continuous proportional fill — different issue volumes must
   //    read as different bar lengths (the old 5-segment quantizer saturated), and
@@ -176,6 +248,8 @@ const DATA = {
   }));
   t("clear-all appears once a stack is picked", clearShown);
   t("clear-all wipes every pick and hides", cleared.pressed === 0 && cleared.hidden);
+  t("setup strip lives inside the hero", await page.evaluate(() =>
+    !!document.querySelector(".hero #setup")));
   t("setup intro sits above the chips", await page.evaluate(() => {
     const intro = document.querySelector(".setup .setup-intro");
     const chips = document.querySelector(".setup .chips");
