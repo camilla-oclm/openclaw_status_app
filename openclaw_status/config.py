@@ -112,13 +112,18 @@ PRIMARY_REASONING = _REASONING_HIGH
 PRIMARY_PROVIDER = None
 # Independent reviewer — deliberately a *different* model from the analyst, so it
 # catches the primary's blind spots instead of rubber-stamping its own reasoning.
-# qwen3.7-plus reasons, so the validator call gets the wide token budget too
-# (see _step_validator) or its JSON would truncate like the analyst's did.
-VALIDATOR_MODEL = "qwen/qwen3.7-plus"
+# 2026-09-02: qwen/qwen3.7-plus → upstage/solar-pro4 after a 3-seed-set A/B over every
+# OpenRouter model released since May inside qwen's price band: equal 15/15 catch-rate,
+# more thorough on real defects (16/0 true/false flags vs 11), agrees on a correct
+# assessment, ~1/8 the cost ($0.0010 vs $0.0083 per call), same latency (~45 s),
+# Upstage first-party at 99.9% uptime. solar-pro4 reasons, so the validator call gets the
+# wide token budget too (see _step_validator) or its JSON would truncate like the
+# analyst's did. Rollback = the previous line: "qwen/qwen3.7-plus".
+VALIDATOR_MODEL = "upstage/solar-pro4"
 VALIDATOR_REASONING = _REASONING_HIGH
 
 # Fallback (used if the primary fails). minimax-m3 is a third distinct provider —
-# different from both the analyst (z-ai) and the qwen validator — so a primary
+# different from both the analyst (z-ai) and the upstage validator — so a primary
 # outage neither sinks the run nor collapses analyst+validator onto the same model.
 # IDs are real OpenRouter slugs (provider/model) — a wrong slug returns HTTP 400
 # and burns a retry, so keep them in sync with https://openrouter.ai/api/v1/models.
@@ -151,7 +156,7 @@ MONTHLY_COST_LIMIT = 10.0    # USD
 # generous ceiling rather than a tight one: eval runs used 3.7k-7.7k tokens_out
 # (18-24% of the cap), so there's no starvation risk to size against. Still far
 # under every seat's output ceiling (glm-5.3-flash 131k, minimax 512k,
-# qwen3.7-plus 131k) and worth < $0.03/call at every seat's current prices.
+# solar-pro4 131k) and worth < $0.03/call at every seat's current prices.
 # Time is the real cost of a bigger cap — see PIPELINE_BUDGET_S, sized with it
 # (that sizing, too, is now a ceiling with headroom, not a requirement). The
 # validator reasons too, so _step_validator passes it this same budget (its

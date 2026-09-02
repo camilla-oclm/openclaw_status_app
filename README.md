@@ -50,7 +50,7 @@ providers** argue it out before anything ships.
   reason, and the pipeline enforces the floor so a published verdict is never less cautious than
   the evidence.
 - **Independent multi-model review** — the analyst and validator are *different* providers
-  (Z.ai + Qwen, with MiniMax as fallback), so no model rubber-stamps its own reasoning and a
+  (Z.ai + Upstage, with MiniMax as fallback), so no model rubber-stamps its own reasoning and a
   single-vendor outage can't sink a run.
 - **Evidence-ranked scouting** — issues are scored from the repo's real `P0…P4` / breakage / harm
   labels and ranked by severity *blended with whether the bug affects the assessed version*, so a
@@ -190,7 +190,7 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    gate) and records the gate + any departure in `assessment.json`. The output
    budget is widened (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on
    busy releases.
-2. **Validator** (`qwen/qwen3.7-plus`) — a *different* provider from the analyst, so it's
+2. **Validator** (`upstage/solar-pro4`) — a *different* provider from the analyst, so it's
    an independent second opinion, not the model checking its own work. It re-derives each
    top issue's severity / category (regression vs post-release) / platform from the raw data
    rather than trusting the analyst's labels, and flags missed issues, **mis-categorizations**,
