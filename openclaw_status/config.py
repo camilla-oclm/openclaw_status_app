@@ -18,7 +18,7 @@ WEB_DIR = ROOT / "web"
 # openclaw_status.__version__ (a test pins them equal); surfaced additively in
 # latest.json (`app_version`) and the page footer. Bump on release, then cut the
 # matching annotated git tag (e.g. `v1.0.0`) from this value.
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 
 # ── .env ────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env")
@@ -247,6 +247,14 @@ LABEL_DRIFT_MIN_SHARE = 0.15   # unknown label must sit on ≥15% of this run's 
 LABEL_DRIFT_MIN_COUNT = 5      # …and on at least this many issues (small-scout noise guard)
 SOURCE_EMPTY_FILE = DATA_DIR / "source-empty.json"
 SOURCE_EMPTY_RUNS = 3          # consecutive completed collects a source may be empty before the one-time ping
+
+# Forensics for an LLM response that extract_json rejected: the full text is kept here
+# (newest PARSE_FAILURE_KEEP files) so a parse failure can be diagnosed from what the model
+# actually wrote — the journal carries only the reason and the error dict a 1,000-char head.
+# The 2026-09-02 double failure (analyst AND fallback) had to be diagnosed by re-running the
+# context locally because nothing had kept the responses. Runtime state; gitignored.
+PARSE_FAILURE_DIR = DATA_DIR / "parse-failures"
+PARSE_FAILURE_KEEP = 6
 
 # ── API endpoints ───────────────────────────────────────────────────────────
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"

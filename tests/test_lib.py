@@ -53,6 +53,54 @@ def test_extract_json_escaped_quote_in_string():
     assert out == {"a": 'she said "hi" }', "b": 1}
 
 
+def test_extract_json_repairs_stray_backslashes():
+    # 2026-09-02: #136123's body carries `C:\Users\\.openclaw\workspace`; the analyst AND
+    # the fallback copied it into a string verbatim → `\U` is no JSON escape → both
+    # parse-failed → the run died with nothing to publish. A stray backslash is doubled
+    # (the text stays verbatim); the escaped pair `\\` and every valid escape are untouched.
+    raw = r'{"title": "migration for C:\Users\\.openclaw\workspace", "n": 1}'
+    assert lib.extract_json(raw) == {"title": r"migration for C:\Users\.openclaw\workspace", "n": 1}
+
+
+def test_extract_json_repair_keeps_valid_escapes_and_prefers_strict_parse():
+    raw = r'{"a": "tab\t q\"x\" back\\slash caf\u00e9 stray\path"}'
+    assert lib.extract_json(raw) == {"a": 'tab\t q"x" back\\slash café stray\\path'}
+    # The repair pass is a no-op on legal escapes (and a legal document never enters it).
+    legal = r'{"ok": "\n\"\\\/\u00e9 \b\f\r\t"}'
+    assert lib._repair_escapes(legal) == legal
+    assert lib.extract_json(legal) == json.loads(legal)
+
+
+def test_extract_json_tolerates_raw_newline_inside_string():
+    assert lib.extract_json('{"a": "line1\nline2"}') == {"a": "line1\nline2"}
+
+
+def test_extract_json_repair_applies_after_brace_scan():
+    # Reasoning wrapper + the same defect → strategy 2 isolates the object, then repairs it.
+    out = lib.extract_json('thinking… {"p": "C:\\Users\\x", "q": 2} done')
+    assert out == {"p": r"C:\Users\x", "q": 2}
+
+
+def test_extract_json_skips_a_stray_brace_in_leading_prose():
+    # A `{` in commentary before the document (a quoted `${ENV_VAR}` placeholder, #136238)
+    # used to be the only candidate the brace scan ever tried — every `{` is now a start.
+    assert lib.extract_json('note: ${ENV_VAR} stays unexpanded. {"a": 1} end') == {"a": 1}
+    assert lib.extract_json('unbalanced { then the real one {"b": 2}') == {"b": 2}
+
+
+def test_extract_json_drops_an_inlined_think_block():
+    # A host that inlines the reasoning into content wraps it in <think>…</think>; that
+    # text is full of braces and quotes and must never be what gets parsed.
+    raw = '<think>the schema is {"recommendation": …} and "quotes"\n</think>\n{"a": 1}'
+    assert lib.extract_json(raw) == {"a": 1}
+
+
+def test_extract_json_still_fails_closed_on_garbage():
+    out = lib.extract_json('{"a": "unterminated')
+    assert out["error"] == "Failed to parse JSON"
+    assert lib.extract_json("there is no json here at all")["error"] == "Failed to parse JSON"
+
+
 # ── save_json (atomic) ──────────────────────────────────────────────────────
 
 def test_save_json_roundtrips_and_leaves_no_temp(tmp_path):
@@ -404,11 +452,25 @@ class _ORResp:
         return False
 
 
-def _or_body(content, tokens_out=16000):
-    return {
+def _or_body(content, tokens_out=16000, provider=None):
+    body = {
         "choices": [{"message": {"content": content}, "finish_reason": "length"}],
         "usage": {"prompt_tokens": 10861, "completion_tokens": tokens_out, "cost": 0.05},
     }
+    if provider:
+        body["provider"] = provider
+    return body
+
+
+def test_openrouter_call_records_provider_and_finish_reason(monkeypatch):
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(lib.urllib.request, "urlopen",
+                        lambda req, timeout=None: _ORResp(_or_body('{"a": 1}', tokens_out=7, provider="Z.AI")))
+    out = lib.openrouter_call("x/y", "s", "u", retries=0)
+    assert out["parsed"] == {"a": 1}
+    assert out["usage"]["provider"] == "Z.AI"
+    assert out["usage"]["finish_reason"] == "length"
+    assert out["usage"]["tokens_out"] == 7
 
 
 def test_openrouter_call_null_content_degrades_with_usage(monkeypatch):
@@ -424,6 +486,31 @@ def test_openrouter_call_null_content_degrades_with_usage(monkeypatch):
     assert out["success"] is True
     assert "error" in out["parsed"]
     assert out["usage"]["tokens_out"] == 16000
+
+
+def test_openrouter_call_keeps_raw_text_on_parse_failure(tmp_path, monkeypatch):
+    # Forensics: the journal only says "Failed to parse JSON" and the error dict keeps a
+    # 1,000-char head — the 2026-09-02 double failure had to be diagnosed by re-running the
+    # context locally. A rejected response is now kept in full (newest PARSE_FAILURE_KEEP
+    # files, pruned); null content has nothing to keep; a legal response writes nothing.
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(config, "PARSE_FAILURE_DIR", tmp_path / "pf")
+    monkeypatch.setattr(config, "PARSE_FAILURE_KEEP", 2)
+    bodies = iter(["no json here at all", None, "still {not json", '{"fine": 1}', "nor {this"])
+    monkeypatch.setattr(lib.urllib.request, "urlopen",
+                        lambda req, timeout=None: _ORResp(_or_body(next(bodies))))
+    results = [lib.openrouter_call("z-ai/glm-5.3-flash", "sys", "user", retries=0)
+               for _ in range(5)]
+    assert [("error" in r["parsed"]) for r in results] == [True, True, True, False, True]
+    kept = sorted((tmp_path / "pf").glob("*.txt"))
+    assert len(kept) == 2                                     # 3 written, pruned to KEEP
+    text = kept[-1].read_text()
+    assert text.startswith("# model: z-ai/glm-5.3-flash\n# reason: Failed to parse JSON (provider: ?, finish: length)\n\n")
+    assert text.endswith("nor {this")
+    assert kept[0].read_text().endswith("still {not json")
+    # The host that served the call and why it stopped ride along in every usage record.
+    assert results[-1]["usage"]["finish_reason"] == "length"
+    assert results[-1]["usage"]["provider"] == ""
 
 
 def test_openrouter_call_caps_each_attempt_wallclock(monkeypatch):

@@ -139,10 +139,21 @@ def openrouter_call(
             data = json.loads(resp.read())
         latency = int((time.time() - start) * 1000)
 
-        content = data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        content = choice["message"]["content"]
         usage = data.get("usage", {})
+        # Which host served the call and why it stopped: OpenRouter fans a model out over
+        # many hosts, and a parse failure that only ever happens on the box (2026-09-02:
+        # analyst + fallback rejected in one run, unreproducible locally) is undiagnosable
+        # without them. Strings, so they ride along in usage.json but never into the
+        # numeric totals the pipeline sums.
+        provider = data.get("provider") or ""
+        finish = choice.get("native_finish_reason") or choice.get("finish_reason") or ""
 
         parsed = extract_json(content)
+        if isinstance(parsed, dict) and "error" in parsed:
+            _save_parse_failure(model_id, content,
+                                f"{parsed['error']} (provider: {provider or '?'}, finish: {finish or '?'})")
         return {
             "success": True,
             "parsed": parsed,
@@ -152,6 +163,8 @@ def openrouter_call(
                 "tokens_out": usage.get("completion_tokens", 0),
                 "cost_usd": usage.get("cost", 0),
                 "latency_ms": latency,
+                "provider": provider,
+                "finish_reason": finish,
             },
         }
 
@@ -184,6 +197,58 @@ def openrouter_call(
 #  JSON helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Two LLM output defects that json.loads rejects outright, repaired ONLY after a strict
+# parse has failed (well-formed output is never rewritten):
+#   • a backslash that begins no JSON escape — a model copying a Windows path out of an
+#     issue body (`C:\Users\…` from #136123, 2026-09-02) writes `\U`, and because the path
+#     sits in the shared context BOTH the analyst and the fallback tripped on it in the
+#     same run → nothing to publish, run failed. Doubling the stray backslash keeps the
+#     text verbatim and makes the string legal again;
+#   • a raw control character (a literal newline / tab) inside a string → strict=False.
+_JSON_ESCAPE = re.compile(r'\\(u[0-9a-fA-F]{4}|.|$)', re.DOTALL)
+_BRACE_SCAN_MAX_STARTS = 256  # extract_json strategy 2: how many `{` starts to try
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _repair_escapes(text: str) -> str:
+    """Double every backslash that does not begin a valid JSON escape sequence."""
+    def fix(m):
+        seq = m.group(0)
+        nxt = seq[1:2]
+        if len(seq) == 6 or (nxt and nxt in '"\\/bfnrt'):   # \uXXXX · \" \\ \/ \b \f \n \r \t
+            return seq
+        return "\\" + seq
+    return _JSON_ESCAPE.sub(fix, text)
+
+
+def _loads_lenient(text: str):
+    """json.loads, then one repair pass for the defects above. Raises JSONDecodeError."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return json.loads(_repair_escapes(text), strict=False)
+
+
+def _save_parse_failure(model_id: str, content, reason: str) -> None:
+    """Keep the full text of a response extract_json rejected (config.PARSE_FAILURE_DIR,
+    newest PARSE_FAILURE_KEEP files) so the next parse failure is diagnosable from what the
+    model actually wrote. Best-effort: forensics must never fail the call."""
+    if not content or not isinstance(content, str):
+        return                                   # null / empty content — nothing to keep
+    try:
+        d = Path(config.PARSE_FAILURE_DIR)
+        d.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", model_id)
+        path = d / f"{stamp}-{safe}.txt"
+        path.write_text(f"# model: {model_id}\n# reason: {reason}\n\n{content}")
+        for old in sorted(d.glob("*.txt"))[:-config.PARSE_FAILURE_KEEP]:
+            old.unlink()
+        print(f"   📝 raw response kept: {path}")
+    except Exception as e:
+        print(f"   (could not keep raw response: {e})", file=sys.stderr)
+
+
 def extract_json(content: str) -> dict:
     """Robust JSON extraction from an LLM response.
 
@@ -209,20 +274,26 @@ def extract_json(content: str) -> dict:
         if trailing == "```" or trailing.startswith("```"):
             text = text[:last_fence].strip()
 
-    text = text.strip()
+    # A host that inlines the reasoning into `content` (instead of the separate
+    # `reasoning` field) wraps it in <think>…</think> — drop it, it's never the answer.
+    text = _THINK_BLOCK.sub("", text).strip()
 
     # Strategy 1: Direct parse (cleanest case)
     try:
-        return json.loads(text)
+        return _loads_lenient(text)
     except json.JSONDecodeError:
         pass
 
-    # Strategy 2: Find outermost { ... } by brace matching
+    # Strategy 2: find a balanced { ... } block by brace matching and parse it.
     # Handles reasoning tokens or commentary prepended/appended. Braces inside
     # string values are skipped (with escape handling) so a `}` in a string can't
-    # close the object early.
+    # close the object early. Every `{` is tried in turn (bounded), so a brace in
+    # prose BEFORE the document — a quoted `${ENV_VAR}` placeholder (#136238), say —
+    # can't hijack the scan and hide the real object behind it.
     start = text.find("{")
-    if start != -1:
+    tries = 0
+    while start != -1 and tries < _BRACE_SCAN_MAX_STARTS:
+        tries += 1
         depth = 0
         end = -1
         in_str = False
@@ -249,9 +320,10 @@ def extract_json(content: str) -> dict:
         if end != -1:
             candidate = text[start:end]
             try:
-                return json.loads(candidate)
+                return _loads_lenient(candidate)
             except json.JSONDecodeError:
                 pass
+        start = text.find("{", start + 1)
 
     # Strategy 3: Strip known prefixes (e.g., "Here's the assessment:")
     for prefix in ("Here is", "Here's", "The assessment", "Based on", "After analyzing"):
@@ -262,7 +334,7 @@ def extract_json(content: str) -> dict:
             if brace_start != -1:
                 sub = rest[brace_start:]
                 try:
-                    return json.loads(sub)
+                    return _loads_lenient(sub)
                 except json.JSONDecodeError:
                     pass
 

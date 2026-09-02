@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-09-02
+
+### Fixed
+- **A model copying a Windows path into its JSON took the whole run down.** Issue
+  #136123's body carries `C:\Users\…`; the analyst *and* the fallback both wrote it into a
+  string verbatim, `\U` is not a JSON escape, both responses were rejected, and the
+  scheduled run failed with nothing to publish (the last good page stood). `extract_json`
+  now repairs the two defects strict `json.loads` rejects outright — a backslash that begins
+  no escape sequence (doubled, text kept verbatim) and a raw control character inside a
+  string — but only after a strict parse has failed, so well-formed output is never
+  rewritten. The brace scan that isolates the document from surrounding prose now tries
+  every `{` start (bounded) instead of only the first, so a quoted `${ENV_VAR}` placeholder
+  in leading commentary can't hide the real object, and an inlined `<think>…</think>`
+  block (a host that puts the reasoning in `content`) is dropped before parsing. Garbage
+  still fails closed.
+- **Parse failures are now diagnosable.** The full text of any response `extract_json`
+  rejects is kept under `data/parse-failures/` (newest `config.PARSE_FAILURE_KEEP` files);
+  until now the journal carried only the reason and the error dict a 1,000-char head. Every
+  usage record also carries the OpenRouter host that served the call (`provider`) and why
+  the generation stopped (`finish_reason`) — a failure that only ever happens on the
+  production box, on a model fanned out over twenty hosts, was unreadable without them.
+
 ## [1.1.0] - 2026-09-02
 
 The answer-first release. User feedback on 1.0 was blunt: too much data to navigate,
