@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-03
+
+### Changed
+- **The look.** A new design system for the answer-first page 1.1.0 introduced. A
+  floating glass header carries section links (Answer · Best version · Why · Evidence)
+  that light up as you scroll. The answer is set in the open, on a verdict-tinted mesh
+  canvas with a fading dot grid: the status word large, in a gradient of its verdict
+  colour, next to its glyph; beside it the per-platform strip becomes a **platform
+  matrix** card — one tile per platform and channel with its verdict at a glance, a
+  colour bar for the tone, an accent ring when picked. The best-version card and the
+  "why" pair sit side by side as a bento row on desktop; the flip conditions read as a
+  numbered grid; the long-tail tabs are a segmented control; cards, meters, issue rows
+  and tiles share one translucent-surface recipe with a hairline top highlight. The light
+  theme is reworked to match. Motion is a staggered fade-in of the answer and a pulse
+  on the eyebrow dot, both behind `prefers-reduced-motion`. No new dependency or asset:
+  the page is still one self-contained HTML file with the self-hosted Space Grotesk.
+  Every id and class the client JS, the SSR fallback and the browser suites address is
+  unchanged, so the suites pass untouched (496 pytest / 31 per-setup / 56 page UI).
+- README screenshots re-shot from the new page.
+
 ## [1.1.1] - 2026-09-02
 
 ### Fixed
