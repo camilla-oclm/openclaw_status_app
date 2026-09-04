@@ -8,6 +8,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 ### Changed
+- **Motion (design pass, phase 2).** One small vocabulary: an out-quint ease for settles,
+  a spring (`linear()` where the browser has it, out-quint otherwise) for lifts, three
+  durations (120 / 200 / 420 ms). The entrance is orchestrated — eyebrow and title, then the
+  answer with a spring, then the line and the meta line, the setup card rising alongside with
+  its tiles cascading 30 ms apart, the bento row last. The stat numerals count up the first
+  time they render (a registered CSS integer interpolated from a starting style; the tile's
+  real value stays as text, so nothing that reads the page sees a difference). Cards and tiles
+  lift with a shadow on hover, compact controls press down for a beat, one focus-ring token.
+  The long-tail tab switch goes through the View Transitions API where it exists (a root
+  crossfade; nothing is named, so no thousands-of-pixels panel is ever snapshotted), with the
+  same synchronous path otherwise, for the initial tab and for deep links; the evidence toggle
+  stays synchronous and lets its sections fade in as before. `prefers-reduced-motion: reduce`
+  still turns every animation, transition and view transition off, and nothing is gated on an
+  animation finishing.
 - **Type system (design pass, phase 1 — ships as 1.3.0-pre).** The page's text is now set
   in Inter (self-hosted, variable weight and optical size, the subset staged in the previous
   entry), with Space Grotesk kept for the status word, version numbers, titles and tiles. A

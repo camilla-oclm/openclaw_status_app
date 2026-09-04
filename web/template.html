@@ -91,9 +91,21 @@
   --shadow-2:0 1px 2px rgba(0,0,0,.3),0 14px 34px -18px rgba(0,0,0,.55);
   --shadow-3:0 1px 2px rgba(0,0,0,.35),0 40px 90px -40px rgba(0,0,0,.7);
   --sheen:linear-gradient(180deg,color-mix(in srgb,#fff 2.5%,var(--card)),var(--card));
+  /* motion — one standard ease, an out-quint for settles, a spring for lifts (a linear()
+     curve where supported, see @supports below), durations by size */
   --ease:cubic-bezier(.4,.14,.3,1);
+  --ease-out-quint:cubic-bezier(.22,1,.36,1);
+  --ease-spring:var(--ease-out-quint);
+  --dur-1:120ms; --dur-2:200ms; --dur-3:420ms;
+  /* focus ring */
+  --ring:var(--accent); --ring-w:2px; --ring-off:2px;
   --maxw:1180px;
 }
+@supports (transition-timing-function:linear(0,1)){
+  :root{--ease-spring:linear(0,.006,.025 2.8%,.101 6.1%,.539 18.9%,.721 25.3%,.849 31.5%,.937 38.1%,.968 41.8%,.991 45.7%,1.006 50.1%,1.015 55.2%,1.017 61.3%,1.001 89.2%,1)}
+}
+/* the stat numerals count up: a registered integer property the browser can interpolate */
+@property --n{syntax:"<integer>"; inherits:false; initial-value:0}
 html[data-theme="light"]{
   /* light — cool paper: white glass on a soft blue-gray canvas */
   --bg:#f3f5f9; --bg-elev:#eaeef4;
@@ -187,7 +199,7 @@ html[data-theme="light"] .brand .logo{color:#fff}
 .topnav{display:flex; align-items:center; gap:.15rem}
 .topnav a{
   padding:.38rem .85rem; border-radius:var(--r-pill); text-decoration:none;
-  font-size:var(--fs-sm); font-weight:600; color:var(--muted); transition:.16s var(--ease);
+  font-size:var(--fs-sm); font-weight:600; color:var(--muted); transition:color var(--dur-2) var(--ease-out-quint), background-color var(--dur-2) var(--ease-out-quint);
 }
 .topnav a:hover{color:var(--text); background:var(--card3)}
 .topnav a.on{color:var(--text); background:var(--card3); box-shadow:inset 0 0 0 1px var(--border)}
@@ -196,9 +208,10 @@ html[data-theme="light"] .brand .logo{color:#fff}
   display:inline-flex; align-items:center; justify-content:center;
   width:36px; height:36px; border-radius:50%; cursor:pointer;
   background:transparent; border:1px solid var(--border); color:var(--text);
-  font-size:var(--fs-md); transition:.16s var(--ease);
+  font-size:var(--fs-md); transition:background-color var(--dur-2) var(--ease-out-quint), border-color var(--dur-2) var(--ease-out-quint), transform var(--dur-3) var(--ease-spring);
 }
 .icon-btn:hover{background:var(--card3); border-color:var(--border2); transform:rotate(15deg)}
+.icon-btn:active{transform:rotate(15deg) scale(.94); transition-duration:var(--dur-1)}
 
 .wrap{max-width:calc(var(--maxw) + 4rem); margin:0 auto; padding:clamp(1.4rem,3.5vw,2.6rem) clamp(1rem,4vw,2rem) 5rem}
 
@@ -282,7 +295,9 @@ a.verdict:hover .v-ext{color:var(--tone); opacity:1}
   background:var(--p-bg,var(--card2)); color:var(--p-fg,var(--muted));
   border:1px solid var(--p-bd,var(--border));
 }
-.fbtn,.pick,button.chip{cursor:pointer; transition:color .15s var(--ease), background-color .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease)}
+.fbtn,.pick,button.chip{cursor:pointer; transition:color var(--dur-2) var(--ease-out-quint), background-color var(--dur-2) var(--ease-out-quint), border-color var(--dur-2) var(--ease-out-quint), box-shadow var(--dur-2) var(--ease-out-quint), transform var(--dur-2) var(--ease-spring)}
+/* press: compact controls scale down for one short beat */
+.fbtn:active,.pick:active,button.chip:active,.ltab:active,.tab:active,.icon-btn:active,.ki-more:active,.cu-select:active{transform:scale(.96); transition-duration:var(--dur-1)}
 .fbtn:hover,.pick:hover{--p-fg:var(--text); --p-bd:var(--border2)}
 .fbtn[aria-pressed="true"],.pick[aria-pressed="true"]{
   --p-bg:color-mix(in srgb,var(--accent) 15%,transparent);
@@ -369,7 +384,7 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .setup .chips .pick .pk{min-width:0; line-height:1.15; overflow-wrap:anywhere}
 .setup .chips .pick .pv{margin-left:auto; font-size:.95em; line-height:1; flex:none; display:inline-flex; color:var(--tk,var(--muted))}
 .pick.pv-good{--tk:var(--good)} .pick.pv-warn{--tk:var(--warn)} .pick.pv-bad{--tk:var(--bad)}
-.setup .chips .pick:hover{--p-bd:var(--border2); --p-bg:var(--card2)}
+.setup .chips .pick:hover{--p-bd:var(--border2); --p-bg:var(--card2); transform:translateY(-1px); box-shadow:inset 2px 0 0 var(--tk,transparent), var(--shadow-1)}
 .setup .chips .pick[data-k][aria-pressed="true"]{
   --p-bg:color-mix(in srgb,var(--accent) 14%,var(--card)); --p-fg:var(--text);
   --p-bd:color-mix(in srgb,var(--accent) 55%,transparent); --p-fw:700;
@@ -378,6 +393,7 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .setup .chips .pick.pick-more,.setup .chips .pick.pick-clear,.setup .chips .pick.pick-share{
   --p-bg:transparent; --p-fg:var(--faint); border-style:dashed; justify-content:center; box-shadow:none; text-align:center;
 }
+.setup .chips .pick.pick-more:hover,.setup .chips .pick.pick-clear:hover,.setup .chips .pick.pick-share:hover{box-shadow:none}
 .pick-more[aria-expanded="true"]{--p-fg:var(--text)}
 .setup .chips .pick.pick-clear:hover{--p-fg:var(--bad); --p-bd:var(--bad-bd)}
 .setup .chips .pick.pick-share:hover{--p-fg:var(--accent); --p-bd:color-mix(in srgb,var(--accent) 40%,transparent)}
@@ -406,7 +422,9 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
   padding:1.35rem 1.4rem 1.3rem; border-radius:var(--r-lg);
   background:linear-gradient(150deg,color-mix(in srgb,var(--tone) 16%,var(--card)) 0%,var(--card) 62%);
   border:1px solid var(--tone-bd); box-shadow:inset 0 1px 0 var(--hi), var(--shadow-2);
+  transition:transform var(--dur-3) var(--ease-spring), box-shadow var(--dur-3) var(--ease-out-quint);
 }
+.reco:hover{transform:translateY(-2px); box-shadow:inset 0 1px 0 var(--hi), var(--shadow-3)}
 .reco::after{content:""; position:absolute; right:-18%; top:-30%; width:52%; aspect-ratio:1; border-radius:50%; pointer-events:none;
   background:radial-gradient(closest-side,color-mix(in srgb,var(--tone) 18%,transparent),transparent)}
 .reco > *{position:relative}
@@ -464,7 +482,8 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 /* ── why: what's broken vs what you'd get (bento, right) ───────────────── */
 .why-grid{display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-3)}
 @media(max-width:680px){.why-grid{grid-template-columns:1fr}}
-.why-card{padding:1.1rem 1.25rem; min-width:0; position:relative; overflow:hidden}
+.why-card{padding:1.1rem 1.25rem; min-width:0; position:relative; overflow:hidden; transition:transform var(--dur-3) var(--ease-spring), box-shadow var(--dur-3) var(--ease-out-quint)}
+.why-card:hover{transform:translateY(-2px); box-shadow:inset 0 1px 0 var(--hi), var(--shadow-2)}
 .why-card::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--wc,var(--accent)); opacity:.9}
 .why-bad{--wc:var(--bad)} .why-good{--wc:var(--good)} .why-ok{--wc:var(--good)}
 .why-card h3{font-size:var(--fs-sm); margin-bottom:.55rem; font-weight:700; color:var(--wc); line-height:var(--lh-ui)}
@@ -486,14 +505,15 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .details{margin-top:var(--sp-4)}
 .details-toggle{
   position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:.2rem; width:100%; text-align:left;
-  font:inherit; cursor:pointer; color:var(--text); transition:.18s var(--ease);
+  font:inherit; cursor:pointer; color:var(--text); transition:background var(--dur-2) var(--ease-out-quint), box-shadow var(--dur-3) var(--ease-out-quint), transform var(--dur-3) var(--ease-spring);
   padding:1.05rem 3.2rem 1.05rem 1.4rem; border-radius:var(--r-lg);
   border:1px solid transparent;
   background:linear-gradient(var(--card),var(--card)) padding-box,
              linear-gradient(120deg,color-mix(in srgb,var(--accent) 55%,transparent),var(--border2) 42%,var(--border2) 58%,color-mix(in srgb,var(--accent2) 50%,transparent)) border-box;
   box-shadow:var(--shadow-1);
 }
-.details-toggle:hover{background:linear-gradient(var(--card2),var(--card2)) padding-box,linear-gradient(120deg,var(--accent),var(--accent2)) border-box; box-shadow:var(--shadow-2)}
+.details-toggle:hover{background:linear-gradient(var(--card2),var(--card2)) padding-box,linear-gradient(120deg,var(--accent),var(--accent2)) border-box; box-shadow:var(--shadow-2); transform:translateY(-1px)}
+.details-toggle:active{transform:scale(.995); transition-duration:var(--dur-1)}
 .details-toggle .dt-main{font-family:var(--display); font-weight:700; font-size:var(--fs-md); letter-spacing:-.01em}
 .details-toggle .cx{position:absolute; right:1.1rem; top:50%; width:30px; height:30px; margin-top:-15px; display:grid; place-items:center; border-radius:50%; background:var(--card3); color:var(--text); font-size:var(--fs-xs); transition:transform .2s var(--ease)}
 .details-toggle[aria-expanded="true"] .cx{transform:rotate(180deg)}
@@ -503,10 +523,12 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 
 /* ── signal tiles (stats) ──────────────────────────────────────────────── */
 .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:var(--sp-3); margin-bottom:var(--sp-5)}
-.stat{position:relative; overflow:hidden; padding:1.1rem 1.2rem 1rem; transition:transform .18s var(--ease), border-color .18s var(--ease)}
+.stat{position:relative; overflow:hidden; padding:1.1rem 1.2rem 1rem; transition:transform var(--dur-3) var(--ease-spring), box-shadow var(--dur-3) var(--ease-out-quint), border-color var(--dur-2) var(--ease-out-quint)}
 .stat::before{content:""; position:absolute; inset:0 auto auto 0; width:100%; height:100%; pointer-events:none;
   background:radial-gradient(60% 55% at 0% 0%,color-mix(in srgb,var(--sc,var(--accent)) 16%,transparent),transparent 70%)}
-.stat:hover{transform:translateY(-2px); border-color:var(--border2)}
+.stat:hover{transform:translateY(-3px); border-color:var(--border2); box-shadow:inset 0 1px 0 var(--hi), var(--shadow-2)}
+.stat .v .num{display:inline-block}
+.stat .v .num::before{--n:var(--n-final,0); counter-reset:n var(--n); content:counter(n) var(--sfx,"")}
 .stat .v{position:relative; font-family:var(--display); font-size:clamp(2rem,1.7rem + 1.2vw,2.7rem); font-weight:700; letter-spacing:-.04em; line-height:1.05; color:var(--sc,var(--text)); font-variant-numeric:tabular-nums}
 .stat .l{position:relative; font-size:var(--fs-xs); color:var(--muted); margin-top:.35rem; font-weight:600}
 .stat .s{position:relative; font-size:var(--fs-xs); color:var(--faint); margin-top:.1rem}
@@ -537,21 +559,21 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
   color:var(--muted); background:transparent; border:0; border-radius:var(--r-pill);
   padding:.45rem 1rem; cursor:pointer; position:relative; white-space:nowrap;
   display:inline-flex; align-items:center; gap:.4rem;
-  transition:color .15s var(--ease), background-color .15s var(--ease);
+  transition:color var(--dur-2) var(--ease-out-quint), background-color var(--dur-2) var(--ease-out-quint), transform var(--dur-2) var(--ease-spring);
 }
 .ltab:hover{color:var(--text)}
 .ltab[aria-selected="true"], .ltab[aria-pressed="true"]{color:var(--text); background:var(--card); box-shadow:var(--shadow-1), inset 0 1px 0 var(--hi)}
 .ki-cats{margin-bottom:.8rem}
 .ki-subs{margin-top:0}
-.ltab:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.ltab:focus-visible{outline:var(--ring-w) solid var(--ring); outline-offset:var(--ring-off)}
 .ltab-panel:focus{outline:none}
 .ltab-panel .section:first-child{margin-top:1.5rem}
 
 /* ── tabs (changes) ────────────────────────────────────────────────────── */
 .tabs{display:inline-flex; gap:3px; margin-bottom:1rem; flex-wrap:wrap; background:var(--card3); border:1px solid var(--border); border-radius:var(--r-pill); padding:3px}
-.tab{
+  .tab{
   font-size:var(--fs-sm); font-weight:600; padding:.38rem .9rem; border-radius:var(--r-pill); cursor:pointer;
-  background:transparent; border:0; color:var(--muted); transition:.15s var(--ease);
+  background:transparent; border:0; color:var(--muted); transition:color var(--dur-2) var(--ease-out-quint), background-color var(--dur-2) var(--ease-out-quint), transform var(--dur-2) var(--ease-spring);
   display:inline-flex; align-items:center; gap:.45rem;
 }
 .tab:hover{color:var(--text)}
@@ -570,8 +592,8 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .impact-sublabel{font-family:var(--mono); font-size:var(--fs-2xs); letter-spacing:.12em; text-transform:uppercase; color:var(--faint); font-weight:600; margin-bottom:.6rem}
 .impact-note{font-size:var(--fs-xs); color:var(--muted); margin-bottom:.6rem}
 .plat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:.7rem}
-.plat{padding:.85rem 1rem; border-radius:var(--r-md); transition:border-color .15s var(--ease)}
-.plat:hover{border-color:var(--border2)}
+.plat{padding:.85rem 1rem; border-radius:var(--r-md); transition:border-color var(--dur-2) var(--ease-out-quint), transform var(--dur-3) var(--ease-spring), box-shadow var(--dur-3) var(--ease-out-quint)}
+.plat:hover{border-color:var(--border2); transform:translateY(-2px); box-shadow:inset 0 1px 0 var(--hi), var(--shadow-2)}
 .plat .ph{display:flex; align-items:center; gap:.4rem; min-width:0}
 .plat .pn{font-weight:700; font-size:var(--fs-base); display:flex; align-items:center; gap:.45rem; min-width:0; flex:1; color:var(--text)}
 .plat .pn .ic-svg{color:var(--ic)}
@@ -611,7 +633,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 /* ── verdict track record ───────────────────────────────────────────────── */
 .tr-sum{font-size:var(--fs-sm); color:var(--muted); margin-bottom:.9rem}
 .tr-list{display:flex; flex-direction:column; gap:.45rem}
-.tr-row{display:flex; align-items:center; gap:.4rem .9rem; flex-wrap:wrap; background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:.65rem 1rem; font-size:var(--fs-sm)}
+.tr-row{display:flex; align-items:center; gap:.4rem .9rem; flex-wrap:wrap; background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:.65rem 1rem; font-size:var(--fs-sm); transition:transform var(--dur-3) var(--ease-spring), border-color var(--dur-2) var(--ease-out-quint)}
+.tr-row:hover{transform:translateY(-1px); border-color:var(--border2)}
 .tr-row.cur{border-color:color-mix(in srgb,var(--accent) 45%,transparent); background:color-mix(in srgb,var(--accent) 6%,var(--card))}
 .tr-ver{font-family:var(--mono); font-weight:700; min-width:8ch}
 .tr-ver .cur-dot{color:var(--accent); font-size:.6rem; vertical-align:middle; margin-left:.25rem}
@@ -642,7 +665,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 /* ── Trends: 2×2 time-series charts ──────────────────────────────────────── */
 .trends-grid{display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-3)}
 @media(max-width:680px){.trends-grid{grid-template-columns:1fr}}
-.tcard{padding:1rem 1.1rem}
+.tcard{padding:1rem 1.1rem; transition:transform var(--dur-3) var(--ease-spring), box-shadow var(--dur-3) var(--ease-out-quint)}
+.tcard:hover{transform:translateY(-2px); box-shadow:inset 0 1px 0 var(--hi), var(--shadow-2)}
 .tc-h{display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem}
 .tc-t{font-family:var(--display); font-weight:700; font-size:var(--fs-base)}
 .tc-s{font-size:var(--fs-xs); color:var(--muted)}
@@ -681,8 +705,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .issue-list{display:flex; flex-direction:column; gap:.4rem}
 .issue{
   background:var(--card); border:1px solid var(--border); border-left-width:3px; border-radius:var(--r-md);
-  overflow:hidden; transition:border-color .15s var(--ease), transform .15s var(--ease); box-shadow:var(--shadow-1)}
-.issue:hover{border-color:var(--border2)}
+  overflow:hidden; transition:border-color var(--dur-2) var(--ease-out-quint), transform var(--dur-3) var(--ease-spring); box-shadow:var(--shadow-1)}
+.issue:hover{border-color:var(--border2); transform:translateX(2px)}
 .issue.sev-critical{border-left-color:var(--bad); border-left-width:4px}
 .issue.sev-high{border-left-color:var(--orange)}
 .issue.sev-medium{border-left-color:var(--warn)}
@@ -690,7 +714,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .irow{display:flex; align-items:center; gap:.6rem; width:100%; text-align:left; cursor:pointer;
   background:none; border:0; color:inherit; font:inherit; padding:.65rem .95rem}
 .irow:hover{background:var(--card2)}
-.irow:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.irow:focus-visible{outline:var(--ring-w) solid var(--ring); outline-offset:-2px}
 .sevdot{flex:none; width:9px; height:9px; border-radius:50%; background:var(--gray); box-shadow:0 0 0 3px color-mix(in srgb,var(--gray) 15%,transparent)}
 .issue.sev-critical .sevdot{background:var(--bad); box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 18%,transparent)}
 .issue.sev-high .sevdot{background:var(--orange); box-shadow:0 0 0 3px color-mix(in srgb,var(--orange) 18%,transparent)}
@@ -763,26 +787,56 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 ::-webkit-scrollbar{width:9px; height:9px}
 ::-webkit-scrollbar-thumb{background:var(--border2); border-radius:var(--r-xs)}
 ::-webkit-scrollbar-thumb:hover{background:var(--accent)}
-:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+:focus-visible{outline:var(--ring-w) solid var(--ring); outline-offset:var(--ring-off); border-radius:4px}
+
+/* view transitions — the long-tail tab switch goes through document.startViewTransition
+   (where it exists and motion isn't reduced): a root crossfade. Nothing is named on
+   purpose — naming the panels would snapshot elements thousands of pixels tall every
+   frame. The evidence toggle stays a plain, synchronous reveal; its sections fade in
+   through .reveal as before (see the JS). */
+::view-transition-old(root){animation:vt-out var(--dur-2) var(--ease-out-quint) both}
+::view-transition-new(root){animation:vt-in var(--dur-2) var(--ease-out-quint) both}
+@keyframes vt-out{to{opacity:0}}
+@keyframes vt-in{from{opacity:0}}
 
 @media (prefers-reduced-motion:no-preference){
   /* meters fill once when their section reveals. Visual only: the width the
      browser tests and applyStack read lives on the INLINE style, untouched. */
-  .vfill{transition:width .7s var(--ease) .1s}
+  .vfill{transition:width var(--dur-3) var(--ease-out-quint) .1s}
   .reveal:not(.in) .vfill{width:0 !important}
-  .idetail,.rev-detail,.ltab-panel{transition:opacity .18s var(--ease), translate .18s var(--ease)}
+  .idetail,.rev-detail{transition:opacity var(--dur-2) var(--ease-out-quint), translate var(--dur-2) var(--ease-out-quint)}
+  /* small reveals only: the evidence body and the tab panels are thousands of px tall,
+     and animating them whole promotes layers a phone can't afford — their sections
+     already fade in one by one through .reveal, and the tab switch crossfades via the
+     view transition. */
+  .comp-chips{transition:opacity var(--dur-3) var(--ease-out-quint), translate var(--dur-3) var(--ease-out-quint)}
   @starting-style{
-    .idetail:not([hidden]),.rev-detail:not([hidden]),.ltab-panel:not([hidden]){opacity:0; translate:0 -4px}
+    .idetail:not([hidden]),.rev-detail:not([hidden]){opacity:0; translate:0 -4px}
+    .comp-chips:not([hidden]){opacity:0; translate:0 8px}
   }
-  .hero-main > *{animation:rise .6s var(--ease) both}
-  .hero-main > :nth-child(2){animation-delay:.05s} .hero-main > :nth-child(3){animation-delay:.1s}
-  .hero-main > :nth-child(4){animation-delay:.15s} .hero-main > :nth-child(5){animation-delay:.22s}
-  .hero-main > :nth-child(n+6){animation-delay:.28s}
-  .hero .setup{animation:rise .7s var(--ease) .2s both}
+  /* entrance, orchestrated: eyebrow + title → the answer (a spring) → the line → the
+     meta line; the setup card rises with the answer and its tiles cascade 30 ms
+     apart; the bento row follows once (html.entering is on for the first second). */
+  .hero-main > *{animation:rise var(--dur-3) var(--ease-out-quint) both}
+  .hero-main > .hero-version{animation-delay:.04s} .hero-main > .hero-sub{animation-delay:.08s}
+  .hero-main > .verdict{animation:pop .62s var(--ease-spring) .1s both}
+  .hero-main > .answer-line{animation-delay:.2s}
+  .hero-main > .hero-headline,.hero-main > .banner{animation-delay:.26s}
+  .hero-main > .conf-row{animation-delay:.32s}
+  .hero .setup{animation:rise .55s var(--ease-out-quint) .16s both}
+  .setup .chips .pick{animation:rise var(--dur-3) var(--ease-out-quint) both; animation-delay:calc(.26s + var(--i,0) * 30ms)}
+  .setup .comp-chips .pick{animation-delay:calc(var(--i,0) * 25ms)}
+  html.entering #app > .reco.reveal,html.entering #app > #why.reveal{transition-delay:.42s}
   @keyframes rise{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none}}
+  @keyframes pop{from{opacity:0; transform:translateY(12px) scale(.985)} to{opacity:1; transform:none}}
+  /* the stat numerals count up the first time they render (the evidence opening):
+     --n is a registered <integer>, so @starting-style 0 → the final value interpolates */
+  .stat .v .num::before{transition:--n .6s var(--ease-out-quint)}
+  @starting-style{ .stat .v .num::before{--n:0} }
 }
 @media(prefers-reduced-motion:reduce){
   *{animation:none !important; transition:none !important; scroll-behavior:auto !important}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none !important}
   .reveal{opacity:1; transform:none}
 }
 
@@ -1599,6 +1653,14 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   function confNote(conf){
     return ((DATA.freshness && DATA.freshness.fresh) ? CONF_DESC_FRESH : CONF_DESC)[conf] || "";
   }
+  // View Transitions (the long-tail tab switch): used only where the API exists and
+  // motion isn't reduced; the initial activation and deep links take the synchronous path.
+  function withTransition(apply, instant){
+    var ok = !instant && typeof document.startViewTransition === "function" &&
+             !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    if (!ok){ apply(); return; }
+    try { document.startViewTransition(apply); } catch(e){ apply(); }
+  }
   var SVGNS = "http://www.w3.org/2000/svg";
   function svgEl(name, attrs){
     var n = document.createElementNS(SVGNS, name);
@@ -1730,8 +1792,15 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     ];
     var grid = el("div",{"class":"stats"});
     tiles.forEach(function(t){
+      // The visible digits are a CSS counter that counts up on first render (see
+      // .stat .v .num::before); the real value stays as (visually hidden) text, so
+      // the DOM reads the same as before: "60+".
+      var m = /^(\d+)(.*)$/.exec(String(t.v)) || [null, "0", String(t.v)];
       grid.appendChild(el("div",{"class":"stat", style:"--sc:"+t.c},[
-        el("div",{"class":"v"}, String(t.v)),
+        el("div",{"class":"v", style:"--n-final:"+m[1]+";--sfx:'"+m[2].replace(/['\\]/g,"")+"'"},[
+          el("span",{"class":"vh"}, String(t.v)),
+          el("span",{"class":"num","aria-hidden":"true"})
+        ]),
         el("div",{"class":"l"}, t.l),
         el("div",{"class":"s"}, t.s)
       ]));
@@ -2415,13 +2484,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     s.appendChild(el("div",{"class":"setup-intro"},
       "Each platform shows its own verdict — tap what you run and the answer below is "+
       "tuned to your setup (saved on this device)."));
-    function pickBtn(k, ic, label, kv){
+    function pickBtn(k, ic, label, kv, idx){
       var v = VERDICTS[kv.rec] || {label:String(kv.rec||"")};
       var n = kv.blockers.length;
       var why = n ? (n+" blocking issue"+(n===1?"":"s")+" land"+(n===1?"s":"")+" here")
         : (kv.softened ? "no blocking issue is confirmed here — eases one notch from the global verdict"
         : (kv.fresh ? "fresh release — too new to soften" : "matches the global verdict"));
-      return el("button",{"class":"pick "+(VERDICT_TONE[kv.rec]||""), type:"button",
+      return el("button",{"class":"pick "+(VERDICT_TONE[kv.rec]||""), type:"button", style: idx != null ? "--i:"+idx : null,
                           "aria-pressed": STACK[k]?"true":"false", "data-k":k,
                           "aria-label": label+": "+v.label,
                           title: label+": "+v.label+" — "+why+". Tap to add it to your setup."},
@@ -2429,25 +2498,25 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     }
     var chips = el("div",{"class":"chips"});
     chips.appendChild(el("span",{"class":"chip-grp"}, "Platforms & channels"));
-    pvs.forEach(function(e){ chips.appendChild(pickBtn(e.key, e.ic, e.label, e.kv)); });
+    pvs.forEach(function(e, idx){ chips.appendChild(pickBtn(e.key, e.ic, e.label, e.kv, idx)); });
     // Components sit behind a small toggle — most visitors only need the platform row.
-    var compToggle = el("button",{"class":"pick pick-more", type:"button", "aria-expanded":"false",
+    var compToggle = el("button",{"class":"pick pick-more", type:"button", "aria-expanded":"false", style:"--i:"+pvs.length,
                                   "aria-controls":"comp-chips", title:"Also pick the OpenClaw subsystems you rely on"}, "+ components");
     chips.appendChild(compToggle);
-    var clearBtn = el("button",{"class":"pick pick-clear", type:"button", id:"stack-clear",
+    var clearBtn = el("button",{"class":"pick pick-clear", type:"button", id:"stack-clear", style:"--i:"+(pvs.length+1),
                                 title:"Clear every picked platform, channel and component"}, "✕ clear all");
     if (!stackActive()) clearBtn.setAttribute("hidden","");
     chips.appendChild(clearBtn);
     // The URL always mirrors the stack (saveStack), so sharing = copying the address.
     // This chip just makes that discoverable; clipboard failure degrades to a hint.
-    var shareBtn = el("button",{"class":"pick pick-share", type:"button", id:"stack-share",
+    var shareBtn = el("button",{"class":"pick pick-share", type:"button", id:"stack-share", style:"--i:"+(pvs.length+2),
                                 title:"Copy a link that opens this page with your setup pre-picked"}, "⧉ copy link");
     if (!stackActive()) shareBtn.setAttribute("hidden","");
     chips.appendChild(shareBtn);
     s.appendChild(chips);
     var compWrap = el("div",{"class":"chips comp-chips", id:"comp-chips", hidden:""});
     compWrap.appendChild(el("span",{"class":"chip-grp"}, "Components"));
-    COMP.forEach(function(c){ compWrap.appendChild(pickBtn(c[0], c[1], c[2], keyVerdict([], [c[0]]))); });
+    COMP.forEach(function(c, idx){ compWrap.appendChild(pickBtn(c[0], c[1], c[2], keyVerdict([], [c[0]]), idx)); });
     if (stackComponents().length){ compToggle.setAttribute("aria-expanded","true"); compWrap.removeAttribute("hidden"); }
     compToggle.addEventListener("click", function(){
       var open = compToggle.getAttribute("aria-expanded")==="true";
@@ -2886,20 +2955,22 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     });
     if (!tabs.length) return null;
 
-    function activate(btn){
-      tabs.forEach(function(t,i){
-        var on = (t === btn);
-        t.setAttribute("aria-selected", on ? "true" : "false");
-        t.setAttribute("tabindex", on ? "0" : "-1");
-        if (on){
-          pans[i].removeAttribute("hidden");
-          // sections in a freshly-shown panel never tripped the IntersectionObserver
-          // (they had no layout while hidden) — reveal them directly.
-          pans[i].querySelectorAll(".reveal").forEach(function(n){ n.classList.add("in"); });
-        } else {
-          pans[i].setAttribute("hidden","");
-        }
-      });
+    function activate(btn, instant){
+      withTransition(function(){
+        tabs.forEach(function(t,i){
+          var on = (t === btn);
+          t.setAttribute("aria-selected", on ? "true" : "false");
+          t.setAttribute("tabindex", on ? "0" : "-1");
+          if (on){
+            pans[i].removeAttribute("hidden");
+            // sections in a freshly-shown panel never tripped the IntersectionObserver
+            // (they had no layout while hidden) — reveal them directly.
+            pans[i].querySelectorAll(".reveal").forEach(function(n){ n.classList.add("in"); });
+          } else {
+            pans[i].setAttribute("hidden","");
+          }
+        });
+      }, instant);
     }
     tablist.addEventListener("keydown", function(ev){
       var i = tabs.indexOf(document.activeElement);
@@ -2913,10 +2984,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       ev.preventDefault(); activate(tabs[j]); tabs[j].focus();
     });
 
-    activate(tabs[0]);                        // first non-empty tab open by default
+    activate(tabs[0], true);                  // first non-empty tab open by default
     activateLongTab = function(panel){        // open the tab that holds a deep-linked section
       var k = pans.indexOf(panel);
-      if (k >= 0) activate(tabs[k]);
+      if (k >= 0) activate(tabs[k], true);    // instant: scrollToHash scrolls right after
     };
     return el("div",{"class":"ltab-wrap"},[tablist, panelsWrap]);
   }
@@ -3238,6 +3309,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var main = el("span",{"class":"dt-main"},"Show the full evidence");
     var btn = el("button",{"class":"details-toggle", type:"button", "aria-expanded":"false", "aria-controls":"details-body"},
       [ main, el("span",{"class":"cx","aria-hidden":"true"},"▾"), el("span",{"class":"dt-sub"}, bits.join(" · ")) ]);
+    // Synchronous on purpose: the body's entrance is the CSS @starting-style rise (cheap,
+    // compositor-only). A view transition here would crossfade the whole viewport for a
+    // change that happens below the button, and swallow clicks while it runs.
     function setOpen(open){
       btn.setAttribute("aria-expanded", open ? "true" : "false");
       main.textContent = open ? "Hide the full evidence" : "Show the full evidence";
@@ -3279,6 +3353,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
       detailsWrap(),
       footer()
     ].forEach(function(node){ if (node) app.appendChild(node); });
+    // The entrance window: the bento row's reveal waits for the answer's animation
+    // only during the first second after render (CSS: html.entering).
+    var root = document.documentElement;
+    root.classList.add("entering");
+    setTimeout(function(){ root.classList.remove("entering"); }, 1200);
     revealOn();
     addAnchors();
   }
