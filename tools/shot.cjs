@@ -9,6 +9,7 @@
 //   node tools/shot.cjs web/proto/preview.html shots/tab-2.png --open \
 //        --click '.ltabs[role="tablist"] .ltab:nth-child(2)' --scroll '.ltabs[role="tablist"]'
 //   node tools/shot.cjs https://clawstat.us shots/live.png
+//   node tools/shot.cjs web/logo.svg web/logo-512.png --size 512x512 --transparent
 //
 // Options
 //   --size WxH          viewport in CSS px (default 1440x900)
@@ -23,6 +24,7 @@
 //   --motion            keep animations; by default prefers-reduced-motion: reduce is
 //                       emulated so every .reveal is visible and captures are deterministic
 //   --allow-errors      exit 0 even when the page threw an uncaught error
+//   --transparent       omit the page background (icons/marks rendered from an .svg)
 //
 // A local file is served over http by an in-process static server whose roots are the
 // file's own directory, then web/. That way the template's relative fonts/… and absolute
@@ -66,7 +68,7 @@ const CHROME = process.env.CHROME_PATH ||
 // ── args ────────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
   const o = { size: "1440x900", dpr: 1, theme: "dark", full: false, open: false,
-              clicks: [], scroll: null, wait: 300, motion: false, allowErrors: false, pos: [] };
+              clicks: [], scroll: null, wait: 300, motion: false, allowErrors: false, transparent: false, pos: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], next = () => argv[++i];
     if (a === "--size") o.size = next();
@@ -79,6 +81,7 @@ function parseArgs(argv) {
     else if (a === "--wait") o.wait = Number(next());
     else if (a === "--motion") o.motion = true;
     else if (a === "--allow-errors") o.allowErrors = true;
+    else if (a === "--transparent") o.transparent = true;
     else if (a === "-h" || a === "--help") { usage(); process.exit(0); }
     else if (a.startsWith("--")) { console.error(`unknown option ${a}`); usage(); process.exit(2); }
     else o.pos.push(a);
@@ -169,7 +172,7 @@ function serve(roots) {
     await new Promise((r) => setTimeout(r, opt.wait));
 
     fs.mkdirSync(path.dirname(path.resolve(opt.out)), { recursive: true });
-    await page.screenshot({ path: opt.out, fullPage: opt.full });
+    await page.screenshot({ path: opt.out, fullPage: opt.full, omitBackground: opt.transparent });
     const docH = await page.evaluate(() => document.documentElement.scrollHeight);
     const kb = (fs.statSync(opt.out).size / 1024).toFixed(0);
     console.log(`wrote ${opt.out} — ${opt.width}x${opt.full ? docH : opt.height} css px @${opt.dpr}x, ` +

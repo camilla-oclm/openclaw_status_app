@@ -8,6 +8,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 ### Changed
+- **Brand (design pass, phase 3).** One logomark for everything: a lobster claw drawn as an
+  open C — a thick upper jaw, a thinner lower one, a hinge at the wrist — holding the status
+  dot, on a dark rounded tile. `web/logo.svg` is the source; the header mark, the favicon
+  set (`favicon.ico` 16/32/48, `logo-16/32/64/512.png`), the touch icon and the badge's mark
+  are the same geometry, and the PNGs are rendered from the SVG by the screenshot tool
+  (`tools/shot.cjs … --transparent`). The share image `web/og.png` is now a screenshot of
+  `tools/og-card.html` — the page's fonts, mesh, mark and verdict glyphs — so it follows the
+  design system and is reproducible with one command. The badge takes the page's card colour
+  for its label segment, the claw mark in the accent, and verdict tones deepened for white
+  text (`#1f8a5b` / `#a8782a` / `#c4404f`). README heroes re-shot from the new page.
 - **Motion (design pass, phase 2).** One small vocabulary: an out-quint ease for settles,
   a spring (`linear()` where the browser has it, out-quint otherwise) for lifts, three
   durations (120 / 200 / 420 ms). The entrance is orchestrated — eyebrow and title, then the

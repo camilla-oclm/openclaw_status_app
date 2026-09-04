@@ -1013,10 +1013,11 @@ _norm_rec = norm_rec
 # Badge/feed verdict text + colour. The phrasing must NAME the same verdict as _VERDICT_LABEL
 # (the SSR/llms/page label), differing only in case — they once diverged ("update with care"
 # vs "Update with precautions"), giving one verdict two names across surfaces.
+# Badge colours: the page's verdict tones, deepened so white badge text keeps ≥ 4.5:1.
 _VERDICT_TEXT = {
-    "✅": (verdict.STATUS["✅"]["label"].lower(), "#4c1"),
-    "⚠️": (verdict.STATUS["⚠️"]["label"].lower(), "#dfb317"),
-    "⏸️": (verdict.STATUS["⏸️"]["label"].lower(), "#e05d44"),
+    "✅": (verdict.STATUS["✅"]["label"].lower(), "#1f8a5b"),
+    "⚠️": (verdict.STATUS["⚠️"]["label"].lower(), "#a8782a"),
+    "⏸️": (verdict.STATUS["⏸️"]["label"].lower(), "#c4404f"),
 }
 
 
@@ -1104,7 +1105,10 @@ def _write_feed(data: dict, output_path: str) -> None:
 def _badge_svg(label: str, message: str, color: str) -> str:
     """A self-contained shields-style SVG badge (no external dependency).
 
-    Carries the ClawStat mark (white, mono) on the left of the label segment.
+    Carries the ClawStat claw mark (the same geometry as web/logo.svg, in the page's
+    accent) on the left of the label segment, which is the page's dark card colour; the
+    message segment takes the verdict tone. System fonts only — badge hosts proxy the
+    image, so a web font would never load.
     """
     def w(s):
         return int(len(s) * 6.6) + 12
@@ -1120,15 +1124,17 @@ def _badge_svg(label: str, message: str, color: str) -> str:
         f'<title>{le}: {me}</title>\n'
         '<linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/>'
         '<stop offset="1" stop-opacity=".1"/></linearGradient>\n'
-        f'<clipPath id="r"><rect width="{total}" height="20" rx="3" fill="#fff"/></clipPath>\n'
+        f'<clipPath id="r"><rect width="{total}" height="20" rx="4" fill="#fff"/></clipPath>\n'
         '<g clip-path="url(#r)">\n'
-        f'<rect width="{lw}" height="20" fill="#444"/>\n'
+        f'<rect width="{lw}" height="20" fill="#151b25"/>\n'
         f'<rect x="{lw}" width="{mw}" height="20" fill="{color}"/>\n'
         f'<rect width="{total}" height="20" fill="url(#s)"/>\n'
         '</g>\n'
-        '<g transform="translate(5,3) scale(0.14)">\n'
-        '<path d="M73 30.7 A30 30 0 1 0 73 69.3" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round"/>\n'
-        '<circle cx="50" cy="50" r="8" fill="#fff"/>\n'
+        '<g transform="translate(5,3) scale(0.14)" fill="none" stroke="#3fe0d5" stroke-linecap="round" stroke-linejoin="round">\n'
+        '<path d="M69 25 A31 31 0 0 0 21 50" stroke-width="19"/>\n'
+        '<path d="M21 50 A31 31 0 0 0 66 76" stroke-width="12"/>\n'
+        '<circle cx="21" cy="50" r="9.5" fill="#3fe0d5" stroke="none"/>\n'
+        '<circle cx="60" cy="51" r="8" fill="#3fe0d5" stroke="none"/>\n'
         '</g>\n'
         '<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">\n'
         f'<text x="{lx:.0f}" y="15" fill="#010101" fill-opacity=".3">{le}</text>\n'

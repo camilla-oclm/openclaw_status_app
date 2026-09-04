@@ -1,4 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" color="#4dd0d9" role="img" aria-label="ClawStat.us logo">
-  <path d="M73 30.7 A30 30 0 1 0 73 69.3" stroke="currentColor" stroke-width="13" stroke-linecap="round"/>
-  <circle cx="50" cy="50" r="8" fill="currentColor"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="ClawStat.us logo">
+  <!-- The ClawStat mark: a lobster claw drawn as an open C — a thick upper jaw, a thinner
+       lower jaw, a hinge at the wrist — holding the status dot. One source for the header
+       mark, the favicon set, the touch icon, the badge and the share card; the tile keeps
+       it legible on any tab strip. Mark geometry lives in the <g id="mark"> below. -->
+  <rect width="100" height="100" rx="24" fill="#0c1017"/>
+  <g id="mark" fill="none" stroke="#3fe0d5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M69 25 A31 31 0 0 0 21 50" stroke-width="19"/>
+    <path d="M21 50 A31 31 0 0 0 66 76" stroke-width="12"/>
+    <circle cx="21" cy="50" r="9.5" fill="#3fe0d5" stroke="none"/>
+    <circle cx="60" cy="51" r="8" fill="#3fe0d5" stroke="none"/>
+  </g>
 </svg>

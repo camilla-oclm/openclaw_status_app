@@ -96,3 +96,22 @@ check against the plan's 90 KB all-fonts budget. It needs fontTools with woff2 s
 
 Every committed face is OFL and ships with its license text next to it
 (`web/fonts/<Family>-OFL.txt`); the exact cut of each one is recorded in the tool's docstring.
+
+### Brand assets
+
+`web/logo.svg` is the one source of the mark. Everything else is rendered from it or from a
+small HTML card, so a brand change is a re-run, not a redraw:
+
+```bash
+S="node tools/shot.cjs"
+for s in 16 32 64 512; do $S web/logo.svg web/logo-$s.png --size ${s}x${s} --transparent; done
+$S web/logo.svg /tmp/icon-48.png --size 48x48 --transparent        # + 16/32 → favicon.ico (Pillow, sizes 16/32/48)
+printf '<!doctype html><style>html,body{margin:0;background:#0c1017}img{width:180px;height:180px;display:block}</style><img src="/logo.svg">' > web/proto/touch.html
+$S web/proto/touch.html web/apple-touch-icon.png --size 180x180     # full-bleed: iOS masks its own corners
+$S tools/og-card.html web/og.png --size 1200x630                    # the share card
+$S web/proto/preview.html docs/hero-dark.png  --size 1200x1000 --dpr 2 --theme dark   # README heroes
+$S web/proto/preview.html docs/hero-light.png --size 1200x1000 --dpr 2 --theme light  # (quantize to 256 colours after)
+```
+
+The badge (`render._badge_svg`) carries the same mark geometry inline — keep it in step with
+`logo.svg` when the mark changes.

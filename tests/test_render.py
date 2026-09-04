@@ -912,7 +912,7 @@ def test_write_badge_emits_svg(tmp_path):
     svg = (tmp_path / "badge.svg").read_text()
     assert svg.startswith("<svg")
     assert "OpenClaw v2.0" in svg and "skip this version" in svg
-    assert "#e05d44" in svg   # red for skip
+    assert "#c4404f" in svg   # the skip tone (render._VERDICT_TEXT)
 
 
 def test_write_llms_emits_agent_layer(tmp_path, monkeypatch):
