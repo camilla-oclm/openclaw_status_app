@@ -7,7 +7,30 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Changed
+- **Type system (design pass, phase 1 — ships as 1.3.0-pre).** The page's text is now set
+  in Inter (self-hosted, variable weight and optical size, the subset staged in the previous
+  entry), with Space Grotesk kept for the status word, version numbers, titles and tiles. A
+  metric-matched fallback (`Inter Fallback`, Arial re-proportioned with `size-adjust` and the
+  ascent/descent overrides) means the swap to the web font moves nothing on screen; only the
+  text face is preloaded. One six-step text scale, line-height by role (display / body / UI),
+  optical sizing on, tabular numerals wherever figures line up. Body copy grows to 16 px.
+- **Verdict glyphs of our own.** The four verdict marks (safe / care / skip / too new) are now
+  inline stroke SVGs drawn in the page's icon language and tinted by their surface's tone,
+  in the hero mark, the platform tiles, the best-version chips, the per-setup badge and rows,
+  the verdict-by-component line, the track-record paths and the past-verdicts timeline. The
+  emoji stays in the DOM as visually hidden text beside each glyph — it is the data key shared
+  with the JSON API, llms.txt, the badge and RSS, and the browser suites read it back unchanged.
+- **Less chrome.** The hero's chip row is one quiet meta line (confidence · fix staged ·
+  second-model review · evidence gate) with the review expander kept; uppercase mono labels
+  are down to three roles (the hero eyebrow, section kickers, table heads) and every other
+  label is sentence case in the text face; platform tiles carry their tone in the glyph and a
+  2 px bar behind a hairline border; the header's "release health" tag is gone; more air
+  between the answer, the bento row and the evidence toggle. Blur surfaces drop from three to
+  two.
+
 ### Added
+- `tools/preview.py --css FILE` injects an override stylesheet into the preview for A/B variants.
 - **Dev tooling for the design pass** (nothing here ships in the page). `tools/preview.py`
   builds `web/proto/preview.html` from the real template plus a real payload (the live
   `latest.json` by default) through render's own injectors; `tools/shot.cjs` screenshots it

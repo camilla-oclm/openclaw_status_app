@@ -48,7 +48,9 @@ neither runs at render time, and the deploy box never installs anything for them
   `--data <path-or-url>` — through render's own injectors, so it is exactly what
   `render_assessment_page` would publish for that payload (minus the deploy guard, the smoke
   test and the sibling files). The payload is written beside it as `latest.json`; offline,
-  `--data web/proto/latest.json` re-uses the last fetch.
+  `--data web/proto/latest.json` re-uses the last fetch. `--css FILE` injects an override
+  stylesheet after the page's own — the A/B hook (`--out web/proto/variant.html` keeps the
+  base preview intact); nothing injected this way ships.
 - **`tools/shot.cjs`** screenshots a local file or a URL with the same puppeteer/Chromium
   discovery as the suites (`PUPPETEER_PATH` / `CHROME_PATH` win). A local file is served over
   http from its own directory with `web/` as the fallback root, so `fonts/…` and

@@ -5,6 +5,7 @@
     .venv/bin/python tools/preview.py --data web/latest.json   # a local payload, or any URL
     .venv/bin/python tools/preview.py --data web/proto/latest.json   # re-use the last fetch (offline)
     .venv/bin/python tools/preview.py --out web/proto/other.html
+    .venv/bin/python tools/preview.py --css web/proto/variant.css --out web/proto/variant.html   # A/B
 
 The page is built with render's own injectors (`_inject_data` + `_inject_seo`), so it is
 what `render_assessment_page` would publish for that payload, minus the deploy guard, the
@@ -46,10 +47,13 @@ def load_payload(source: str) -> dict:
     return json.loads(Path(source).read_text(encoding="utf-8"))
 
 
-def build_preview(data: dict, out: Path) -> Path:
+def build_preview(data: dict, out: Path, extra_css: str = "") -> Path:
     html = config.TEMPLATE_FILE.read_text(encoding="utf-8")
     html = render._inject_data(html, data)
     html = render._inject_seo(html, data)
+    if extra_css:
+        # A/B hook: an override stylesheet after the page's own, never shipped.
+        html = html.replace("</head>", "<style id=\"ab-css\">\n" + extra_css + "\n</style>\n</head>", 1)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
     out.with_name("latest.json").write_text(json.dumps(data, indent=2, ensure_ascii=False),
@@ -63,12 +67,14 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"payload: a latest.json path or URL (default: {LIVE_URL})")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT,
                     help=f"where to write the page (default: {DEFAULT_OUT.relative_to(ROOT)})")
+    ap.add_argument("--css", type=Path,
+                    help="an override stylesheet to inject after the page's own (A/B variants; never shipped)")
     args = ap.parse_args(argv)
 
     data = load_payload(args.data)
     if not isinstance(data, dict) or not data.get("recommendation"):
         sys.exit(f"{args.data} does not look like a latest.json payload (no 'recommendation')")
-    out = build_preview(data, args.out)
+    out = build_preview(data, args.out, args.css.read_text(encoding="utf-8") if args.css else "")
 
     status = (data.get("status") or {}).get("label") or data.get("recommendation")
     print(f"payload: v{data.get('version')} · {status} · assessed {data.get('assessed_at')} "
