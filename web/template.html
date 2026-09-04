@@ -110,7 +110,7 @@ html[data-theme="light"]{
   /* light — cool paper: white glass on a soft blue-gray canvas */
   --bg:#f3f5f9; --bg-elev:#eaeef4;
   --card:#ffffff; --card2:#f6f8fb; --card3:#edf0f5;
-  --glass:rgba(255,255,255,.72);
+  --glass:rgba(255,255,255,.8);
   --border:color-mix(in srgb,#42506a 12%,transparent);
   --border2:color-mix(in srgb,#42506a 20%,transparent);
   --border-soft:color-mix(in srgb,#42506a 9%,transparent);
@@ -120,10 +120,10 @@ html[data-theme="light"]{
   --accent:#0a686f; --accent2:#4759ae;
   --good:#197245; --warn:#7b5f1c; --orange:#9f4c1b; --bad:#b13643; --info:#385fbc; --gray:#60646c;
   --word-mix:#000; --word-tail:16%;
-  --mesh-a:16%; --mesh-b:10%; --mesh-c:7%; --dots:9%;
-  --shadow-1:0 1px 2px rgba(25,30,40,.06);
-  --shadow-2:0 1px 2px rgba(25,30,40,.05),0 14px 34px -20px rgba(25,30,40,.2);
-  --shadow-3:0 1px 2px rgba(25,30,40,.06),0 36px 80px -40px rgba(25,30,40,.25);
+  --mesh-a:12%; --mesh-b:8%; --mesh-c:5%; --dots:8%;
+  --shadow-1:0 1px 2px rgba(28,44,78,.07);
+  --shadow-2:0 1px 2px rgba(28,44,78,.06),0 14px 34px -20px rgba(28,44,78,.22);
+  --shadow-3:0 1px 2px rgba(28,44,78,.07),0 36px 80px -40px rgba(28,44,78,.28);
   --sheen:linear-gradient(180deg,#fff,#fff);
 }
 
@@ -599,19 +599,22 @@ button.chip:hover{--p-bd:var(--accent); --p-fg:var(--text)}
 .plat .pn .ic-svg{color:var(--ic)}
 .plat .pname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .plat .pmeter{display:flex; flex-direction:column; align-items:flex-start; gap:.45rem; margin-top:.75rem}
-.plat .vbar{display:block; width:100%; height:7px; border-radius:var(--r-pill); background:var(--bg-elev); overflow:hidden; box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
-.plat .vbar .vfill{display:block; height:100%; border-radius:var(--r-pill); background:linear-gradient(90deg,color-mix(in srgb,var(--ic) 70%,transparent),var(--ic)); box-shadow:0 0 12px -2px var(--ic)}
+.plat .vbar{display:block; width:100%; height:6px; border-radius:var(--r-pill); background:var(--bg-elev); box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.plat .vbar .vfill{display:block; position:relative; height:100%; border-radius:var(--r-pill); background:linear-gradient(90deg,color-mix(in srgb,var(--ic) 40%,transparent),var(--ic))}
+.plat .vbar .vfill::after{content:""; position:absolute; right:-2px; top:50%; width:10px; height:10px; margin-top:-5px; border-radius:50%; background:var(--ic); box-shadow:0 0 0 2px var(--card), 0 0 10px -1px var(--ic)}
 .plat .pl{font-size:var(--fs-xs); font-weight:600; color:var(--ic)}
 .plat.you{border-color:color-mix(in srgb,var(--accent) 45%,transparent); background:color-mix(in srgb,var(--accent) 6%,var(--card))}
 .plat .me{flex:none; white-space:nowrap; font-size:var(--fs-2xs); font-weight:700; color:var(--accent)}
 
-/* per-component verdict line */
-.vline{display:flex; flex-wrap:wrap; gap:.45rem}
-.vchip{gap:.35rem; --p-bg:var(--card); cursor:help}
-.vchip.hot{--p-bd:var(--bad-bd); --p-bg:var(--bad-bg); --p-fg:var(--text)}
-.vchip .vc-em{font-size:var(--fs-sm); line-height:1; display:inline-flex}
-.vchip.hot .vc-em{color:var(--bad)}
-.vchip .vc-n{font-family:var(--mono); font-size:var(--fs-2xs); background:var(--bg-elev); border-radius:var(--r-pill); padding:.05rem .4rem; color:var(--muted)}
+/* per-component verdict line — a compact table: glyph · icon · component · verdict · count */
+.vline{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:0 1.2rem; border:1px solid var(--border); border-radius:var(--r-md); background:var(--card); padding:.15rem .3rem; box-shadow:inset 0 1px 0 var(--hi), var(--shadow-1)}
+.vline .vchip{display:grid; grid-template-columns:1.1rem 1rem minmax(0,1fr) auto auto; align-items:center; gap:.55rem; --p-pad:.42rem .5rem; --p-bg:transparent; --p-bd:transparent; --p-fg:var(--text); --p-fw:600; --p-fs:var(--fs-sm); border-radius:var(--r-xs); border-bottom:1px solid var(--border); cursor:help}
+.vline .vchip:last-child{border-bottom:0}
+.vline .vchip .vc-em{font-size:var(--fs-sm); line-height:1; display:inline-flex; color:var(--good)}
+.vline .vchip.hot .vc-em{color:var(--bad)}
+.vline .vchip .vc-w{font-weight:500; color:var(--muted); font-size:var(--fs-xs); white-space:nowrap}
+.vline .vchip.hot .vc-w{color:var(--bad)}
+.vline .vchip .vc-n{font-family:var(--mono); font-size:var(--fs-2xs); background:var(--bg-elev); border-radius:var(--r-pill); padding:.05rem .45rem; color:var(--muted); min-width:1.9rem; text-align:center}
 .vline-note{font-size:var(--fs-xs); color:var(--faint); margin-top:.5rem}
 
 /* ── triage ────────────────────────────────────────────────────────────── */
@@ -670,13 +673,23 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 .tc-h{display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem}
 .tc-t{font-family:var(--display); font-weight:700; font-size:var(--fs-base)}
 .tc-s{font-size:var(--fs-xs); color:var(--muted)}
-.tcard .chartwrap{position:relative}
+.tcard .chartwrap{position:relative; touch-action:pan-y}
 .tcard svg.tchart2{width:100%; height:auto; display:block; overflow:visible}
-.tcard .tgrid line{stroke:var(--border2); stroke-width:1; stroke-dasharray:2 4; opacity:.6}
+.tcard .tgrid line{stroke:var(--border); stroke-width:1; stroke-dasharray:2 5; opacity:.9}
 .tcard .taxis2{font-family:var(--mono); font-size:8px; fill:var(--faint)}
-.tc-legend{display:flex; flex-wrap:wrap; gap:.35rem .8rem; margin-top:.6rem; font-size:var(--fs-xs); color:var(--muted)}
-.tc-k{display:inline-flex; align-items:center; gap:.3rem}
-.tc-sw{width:12px; height:4px; border-radius:2px; display:inline-block}
+.tcard .tcap-bg{fill:var(--card3); stroke:var(--border2); stroke-width:.6}
+.tcard .tguide{stroke:var(--faint); stroke-width:1; stroke-dasharray:3 3; display:none} .tcard .tguide.on{display:block}
+.tcard .tdot{display:none; stroke:var(--card); stroke-width:1.5} .tcard .tdot.on{display:block}
+.tcard .tend{stroke:var(--card); stroke-width:1.5}
+.tc-legend{display:flex; flex-wrap:wrap; gap:.35rem .45rem; margin-top:.7rem; font-size:var(--fs-2xs); color:var(--muted)}
+.tc-k{display:inline-flex; align-items:center; gap:.35rem; padding:.14rem .55rem; border:1px solid var(--border); border-radius:var(--r-pill); background:var(--card2); font-weight:600}
+.tc-sw{width:8px; height:8px; border-radius:50%; display:inline-block; flex:none}
+/* the shared hover tip: date · each series' value · version, snapped to the nearest run */
+.ttip{position:absolute; top:4px; transform:translateX(10px); pointer-events:none; z-index:2; background:var(--card3); border:1px solid var(--border2); border-radius:var(--r-sm); padding:.4rem .6rem; font-size:var(--fs-2xs); color:var(--text); box-shadow:var(--shadow-2); white-space:nowrap; font-variant-numeric:tabular-nums; line-height:1.45}
+.ttip.flip{transform:translateX(calc(-100% - 10px))}
+.ttip .tt-h{color:var(--muted); font-weight:600; margin-bottom:.15rem}
+.ttip .tt-r{display:flex; align-items:center; gap:.4rem}
+.ttip .tt-r b{margin-left:auto; padding-left:.7rem; font-weight:700}
 .tc-empty{color:var(--faint); font-size:var(--fs-sm); font-style:italic; padding:2.6rem 0; text-align:center}
 
 /* ── catching up ───────────────────────────────────────────────────────── */
@@ -2241,7 +2254,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
                                   title:e.name+": "+v.label+" — "+why+" Derived on this page from the issue tags; the official verdict stays global."},[
         el("span",{"class":"vc-em","aria-hidden":"true"}, verdictMark(e.kv.rec)),
         icon(e.ic,12),
-        document.createTextNode(e.name),
+        el("span",{"class":"vc-name"}, e.name),
+        el("span",{"class":"vc-w","aria-hidden":"true"}, v.label),
         el("span",{"class":"vc-n"}, String(e.n))
       ]));
     });
@@ -2721,6 +2735,45 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   }
   function px(c,i,n){ return c.l+(c.r-c.l)*(n<=1?0.5:i/(n-1)); }
   function py(c,v,vmax){ return c.b-(c.b-c.t)*Math.min(v,vmax)/(vmax||1); }
+  // Monotone-cubic (Fritsch–Carlson) interpolation, sampled densely: the curve passes
+  // through every run and never overshoots — a count can't dip below zero between two
+  // runs, and stacked bands can't cross (the caller also clamps them). Returns chart
+  // coordinates [[x,y],…]; x spacing is the run index, so the tangents use h = 1.
+  function monotone(ys, c, vmax, steps){
+    var n = ys.length, i;
+    if (n < 2) return ys.map(function(v,k){ return [px(c,k,n), py(c,v,vmax)]; });
+    var d = [], m = [];
+    for (i=0;i<n-1;i++) d.push(ys[i+1]-ys[i]);
+    m[0] = d[0]; m[n-1] = d[n-2];
+    for (i=1;i<n-1;i++) m[i] = (d[i-1]*d[i] <= 0) ? 0 : (d[i-1]+d[i])/2;
+    for (i=0;i<n-1;i++){
+      if (d[i] === 0){ m[i] = 0; m[i+1] = 0; continue; }
+      var a = m[i]/d[i], b = m[i+1]/d[i], s2 = a*a+b*b;
+      if (s2 > 9){ var t = 3/Math.sqrt(s2); m[i] = t*a*d[i]; m[i+1] = t*b*d[i]; }
+    }
+    var out = [];
+    for (i=0;i<n-1;i++){
+      for (var k=0;k<steps;k++){
+        var u = k/steps, u2 = u*u, u3 = u2*u;
+        var y = (2*u3-3*u2+1)*ys[i] + (u3-2*u2+u)*m[i] + (-2*u3+3*u2)*ys[i+1] + (u3-u2)*m[i+1];
+        out.push([px(c,i+u,n), py(c,Math.max(0,y),vmax)]);
+      }
+    }
+    out.push([px(c,n-1,n), py(c,ys[n-1],vmax)]);
+    return out;
+  }
+  function pathOf(pts){ return pts.map(function(p,i){ return (i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1); }).join(""); }
+  var gradSeq = 0;
+  // A vertical fade from the series colour to nothing, for area fills (one <defs> per use).
+  function areaFill(c, stroke){
+    var id = "tg"+(++gradSeq);
+    var defs = svgEl("defs"), g = svgEl("linearGradient",{id:id, x1:"0", y1:"0", x2:"0", y2:"1"});
+    var s1 = svgEl("stop",{offset:"0"}), s2 = svgEl("stop",{offset:"1"});
+    s1.setAttribute("style","stop-color:"+stroke+";stop-opacity:.34");
+    s2.setAttribute("style","stop-color:"+stroke+";stop-opacity:0");
+    g.appendChild(s1); g.appendChild(s2); defs.appendChild(g); c.svg.appendChild(defs);
+    return "url(#"+id+")";
+  }
   function gridY(c,vmax,ticks,unit){
     var g=svgEl("g",{"class":"tgrid"});
     for (var i=0;i<=ticks;i++){
@@ -2733,12 +2786,44 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     c.svg.appendChild(g);
   }
   function plotLine(c,series,vmax,n,stroke,wd,fillArea,dash){
-    var pts=series.map(function(v,i){ return px(c,i,n)+","+py(c,v,vmax); });
-    if (fillArea) c.svg.appendChild(svgEl("polygon",{points:px(c,0,n)+","+c.b+" "+pts.join(" ")+" "+px(c,n-1,n)+","+c.b, fill:stroke, opacity:"0.13"}));
-    var pl=svgEl("polyline",{points:pts.join(" "), fill:"none", stroke:stroke, "stroke-width":wd||2, "stroke-linejoin":"round","stroke-linecap":"round"});
+    var pts = monotone(series, c, vmax, 8), d = pathOf(pts);
+    if (fillArea) c.svg.appendChild(svgEl("path",{d: d+"L"+px(c,n-1,n).toFixed(1)+" "+c.b+"L"+px(c,0,n).toFixed(1)+" "+c.b+"Z", fill:areaFill(c, stroke), stroke:"none"}));
+    var pl=svgEl("path",{d:d, fill:"none", stroke:stroke, "stroke-width":wd||2, "stroke-linejoin":"round","stroke-linecap":"round"});
     if (dash) pl.setAttribute("stroke-dasharray", dash);
     c.svg.appendChild(pl);
-    c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,series[n-1],vmax), r:"3", fill:stroke}));
+    c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,series[n-1],vmax), r:"3.2", fill:stroke, "class":"tend"}));
+  }
+  // One hover tip per chart: a guide line snaps to the nearest run and the tip lists
+  // the date, each series' value and the version assessed. Pointer-only sugar — the
+  // chart stays aria-hidden and its card title is the accessible name.
+  function attachHover(wrap, c, rows, series){
+    var n = rows.length; if (n < 2) return;
+    var guide = svgEl("line",{"class":"tguide", x1:0, x2:0, y1:c.t, y2:c.b}); c.svg.appendChild(guide);
+    var dots = series.map(function(s){ var d = svgEl("circle",{r:"3.5", fill:s.color, "class":"tdot"}); c.svg.appendChild(d); return d; });
+    var tip = el("div",{"class":"ttip", hidden:""}); wrap.appendChild(tip);
+    function show(i){
+      var x = px(c,i,n);
+      guide.setAttribute("x1",x); guide.setAttribute("x2",x); guide.classList.add("on");
+      series.forEach(function(s,k){ dots[k].setAttribute("cx",x); dots[k].setAttribute("cy",py(c,s.values[i],s.vmax)); dots[k].classList.add("on"); });
+      tip.textContent = "";
+      var r = rows[i];
+      tip.appendChild(el("div",{"class":"tt-h"}, fmtDate(r.t)+(r.version ? " · v"+r.version : "")));
+      series.forEach(function(s){
+        tip.appendChild(el("div",{"class":"tt-r"},[ el("span",{"class":"tc-sw", style:"background:"+s.color}),
+          document.createTextNode(s.name), el("b",null, s.fmt ? s.fmt(s.values[i], i) : String(s.values[i])) ]));
+      });
+      var fx = (x - c.l)/(c.r - c.l);
+      tip.style.left = (fx*100).toFixed(1)+"%"; tip.classList.toggle("flip", fx > .6);
+      tip.removeAttribute("hidden");
+    }
+    function hide(){ guide.classList.remove("on"); dots.forEach(function(d){ d.classList.remove("on"); }); tip.setAttribute("hidden",""); }
+    wrap.addEventListener("pointermove", function(ev){
+      var box = c.svg.getBoundingClientRect(); if (!box.width) return;
+      var sx = (ev.clientX - box.left) / box.width * c.W;
+      var i = Math.round((sx - c.l)/(c.r - c.l)*(n-1));
+      show(Math.max(0, Math.min(n-1, i)));
+    });
+    wrap.addEventListener("pointerleave", hide);
   }
   function tLegend(items){
     var lg=el("div",{"class":"tc-legend"});
@@ -2760,7 +2845,11 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     return el("div",{"class":"tcard"},[ el("div",{"class":"tc-h"},[ el("span",{"class":"tc-t"},title), el("span",{"class":"tc-s"},sub) ]), body ]);
   }
   function tEmpty(){ return el("div",{"class":"tc-empty"}, "Collecting — fills in as runs accumulate"); }
-  function wrapChart(c,legend){ return el("div",null,[ el("div",{"class":"chartwrap"}, c.svg), legend ]); }
+  function wrapChart(c,legend,rows,series){
+    var wrap = el("div",{"class":"chartwrap"}, c.svg);
+    if (rows && series) attachHover(wrap, c, rows, series);
+    return el("div",null,[ wrap, legend ]);
+  }
   function maxOf(a){ return a.reduce(function(m,v){ return v>m?v:m; }, 0); }
   // The ledger tracks at most DATA.issues_cap issues per version (server-fed; older
   // payloads carry only the boolean, where the current list length IS the cap). A count
@@ -2770,12 +2859,15 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     if (DATA.issues_cap) return DATA.issues_cap;
     return DATA.issues_capped ? (DATA.known_issues||[]).length : 0;
   }
+  // The tracking-cap line, styled as an annotation: a dashed rule with a small labelled tag.
   function capLine(c, capv, vmax){
     var y = py(c,capv,vmax);
     c.svg.appendChild(svgEl("line",{x1:c.l, x2:c.r, y1:y, y2:y,
       stroke:"var(--faint)", "stroke-width":1, "stroke-dasharray":"5 4", opacity:"0.9"}));
-    var lab = svgEl("text",{"class":"taxis2 tcap", x:c.l+4, y:y-4});
-    lab.textContent = "tracking cap ("+capv+")";
+    var txt = "tracking cap ("+capv+")", w = txt.length*4.7+8;
+    c.svg.appendChild(svgEl("rect",{"class":"tcap-bg", x:c.l+3, y:y-12.5, width:w.toFixed(0), height:12, rx:3}));
+    var lab = svgEl("text",{"class":"taxis2 tcap", x:c.l+7, y:y-4});
+    lab.textContent = txt;
     c.svg.appendChild(lab);
   }
 
@@ -2787,7 +2879,10 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var cap=issuesCap(), atCap=cap && iss[n-1]>=cap;
     gridY(c,vmax,3); plotLine(c,iss,vmax,n,"var(--accent)",2.5,true); plotLine(c,reg,vmax,n,"var(--orange)",2);
     if (cap && maxOf(iss)>=cap) capLine(c,cap,vmax);
-    return wrapChart(c, tLegend([["known issues"+(atCap?" — "+cap+"+ at cap":""),"var(--accent)"],["regressions","var(--orange)"]]));
+    var capFmt = function(v){ return cap && v>=cap ? cap+"+" : String(v); };
+    return wrapChart(c, tLegend([["known issues"+(atCap?" — "+cap+"+ at cap":""),"var(--accent)"],["regressions","var(--orange)"]]),
+      p, [{name:"known issues", color:"var(--accent)", values:iss, vmax:vmax, fmt:capFmt},
+          {name:"regressions", color:"var(--orange)", values:reg, vmax:vmax}]);
   }
   function severityChart(tl){
     var p=tl.filter(function(r){ return !(r.approx && !r.issues); });
@@ -2796,17 +2891,20 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var tot=p.map(function(r){ return r.issues || (r.critical+r.high+r.medium+r.low); });
     var vmax=Math.max(maxOf(tot)*1.1, 4);
     var c=chartSVG(); gridY(c,vmax,3);
-    var cum=p.map(function(){return 0;});
+    // Stacked bands, each boundary smoothed then clamped to the one below so they never cross.
+    var cum=p.map(function(){return 0;}), below=null, series=[];
     bands.forEach(function(band){
       var top=p.map(function(r,i){ return cum[i]+(r[band[0]]||0); });
-      var up=top.map(function(v,i){ return px(c,i,n)+","+py(c,v,vmax); });
-      var dn=cum.map(function(v,i){ return px(c,i,n)+","+py(c,v,vmax); }).reverse();
-      c.svg.appendChild(svgEl("polygon",{points:up.concat(dn).join(" "), fill:band[1], opacity:"0.55"}));
-      cum=top;
+      var up=monotone(top,c,vmax,8);
+      if (below) up=up.map(function(pt,i){ return [pt[0], Math.min(pt[1], below[i][1])]; });
+      var base = below ? below.slice().reverse() : [[px(c,n-1,n),c.b],[px(c,0,n),c.b]];
+      c.svg.appendChild(svgEl("path",{d:pathOf(up)+"L"+base.map(function(pt){ return pt[0].toFixed(1)+" "+pt[1].toFixed(1); }).join("L")+"Z", fill:band[1], opacity:"0.55", stroke:"none"}));
+      series.push({name:band[0], color:band[1], values:p.map(function(r){ return r[band[0]]||0; }), vmax:vmax});
+      cum=top; below=up;
     });
     var cap=issuesCap();
     if (cap && maxOf(tot)>=cap) capLine(c,cap,vmax);
-    return wrapChart(c, tLegend([["critical","var(--bad)"],["high","var(--orange)"],["medium","var(--warn)"],["low","var(--gray)"]]));
+    return wrapChart(c, tLegend([["critical","var(--bad)"],["high","var(--orange)"],["medium","var(--warn)"],["low","var(--gray)"]]), p, series.reverse());
   }
   function verdictChart(tl){
     var p=tl.filter(function(r){ return !(r.approx && !r.issues); });  // same filter as siblings
@@ -2821,8 +2919,9 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     for (var i=0;i<n;i++){ if(i) seq.push(px(c,i,n)+","+py(c,risk[i-1],100)); seq.push(px(c,i,n)+","+py(c,risk[i],100)); }
     c.svg.appendChild(svgEl("polyline",{points:seq.join(" "), fill:"none", stroke:"var(--accent)","stroke-width":2.5,"stroke-linejoin":"round","stroke-linecap":"round"}));
     for (var j=1;j<n;j++){ if (p[j].version!==p[j-1].version){ var mx=px(c,j,n); c.svg.appendChild(svgEl("line",{x1:mx,x2:mx,y1:c.t,y2:c.b,stroke:"var(--accent2)","stroke-width":1,"stroke-dasharray":"2 3",opacity:"0.7"})); } }
-    c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,risk[n-1],100), r:"3", fill:"var(--accent)"}));
-    return wrapChart(c, tLegend([["risk per run","var(--accent)"],["new version","var(--accent2)"]]));
+    c.svg.appendChild(svgEl("circle",{cx:px(c,n-1,n), cy:py(c,risk[n-1],100), r:"3.2", fill:"var(--accent)", "class":"tend"}));
+    return wrapChart(c, tLegend([["risk per run","var(--accent)"],["new version","var(--accent2)"]]),
+      p, [{name:"verdict", color:"var(--accent)", values:risk, vmax:100, fmt:function(v,i){ return verdictWord(p[i].recommendation); }}]);
   }
   function regressionShareChart(tl){
     // What fraction of known issues are post-release regressions (vs pre-existing)?
@@ -2831,7 +2930,8 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
     var n=p.length, share=p.map(function(r){ return Math.round(100*(r.regressions||0)/(r.issues||1)); });
     var c=chartSVG(); gridY(c,100,4,"%");
     plotLine(c,share,100,n,"var(--orange)",2.5,true);
-    return wrapChart(c, tLegend([["regressions ÷ known issues — "+share[n-1]+"%","var(--orange)"]]));
+    return wrapChart(c, tLegend([["regressions ÷ known issues — "+share[n-1]+"%","var(--orange)"]]),
+      p, [{name:"regression share", color:"var(--orange)", values:share, vmax:100, fmt:function(v){ return v+"%"; }}]);
   }
   function trends(){
     var tl=(DATA.timeline||[]).slice();

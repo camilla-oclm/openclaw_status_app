@@ -13,12 +13,22 @@ npm i puppeteer            # bundles its own Chrome
 npm i puppeteer-core       # lighter; drives a Chrome/Chromium you already have
 ```
 
-Then run either suite from the repo root:
+Then run any suite from the repo root:
 
 ```bash
 node tests/browser/per_setup_verdict.test.js
 node tests/browser/page_ui.test.js
+node tests/browser/contrast.test.js
 ```
+
+- **`contrast.test.js`** — the accessibility floor as a test. It renders the real template with
+  the shared payload in both themes, opens every panel, then samples every visible text run:
+  the text colour (with effective opacity folded in) against the background found by
+  alpha-compositing the ancestors' background colours, with the few gradient surfaces
+  flattened to their base colour first. Every pair must reach WCAG AA — 4.5:1, or 3:1 for
+  large text (≥ 24 px, or ≥ 18.66 px bold). Failures print the selector, the pair, the ratio
+  and the size. `fixture.js` holds the toolchain discovery, the template and the payload the
+  page-UI and contrast suites share.
 
 - **`per_setup_verdict.test.js`** — audit **M8**. Drives the real `setupVerdict()` / `setupBlockers()`
   (via the guarded `window.__perSetupTest` hook) across a matrix and asserts the conservative

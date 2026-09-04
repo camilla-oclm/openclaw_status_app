@@ -386,10 +386,11 @@ The suite covers the scouting/scoring logic, input sanitization, the assessment-
 validator, the data-injection contract, and the HTML smoke test.
 
 The page's client runtime (hydration, the per-setup verdict, filters, `?stack=` sharing)
-has its own headless-Chrome suites — `node tests/browser/per_setup_verdict.test.js` and
-`node tests/browser/page_ui.test.js` (need Node plus `npm i puppeteer` or `puppeteer-core`
-with a system Chromium — see `tests/browser/README.md`). CI runs both jobs — pytest
-and the browser suites — on every push. The same README documents the `tools/` preview and
+has its own headless-Chrome suites — `node tests/browser/per_setup_verdict.test.js`,
+`node tests/browser/page_ui.test.js` and a contrast audit, `node tests/browser/contrast.test.js`,
+that asserts WCAG AA on every visible text run in both themes (they need Node plus
+`npm i puppeteer` or `puppeteer-core` with a system Chromium — see `tests/browser/README.md`).
+CI runs both jobs — pytest and the browser suites — on every push. The same README documents the `tools/` preview and
 screenshot harness used for design work on the page.
 
 ---

@@ -5,9 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] - 2026-09-05
+
+The premium craft pass: four phases on the page's type, motion, brand and charts, plus a
+contrast audit that now runs as a test. The DOM contract, the data keys and every public
+surface (JSON, feed, badge, llms.txt) are unchanged.
 
 ### Changed
+- **Charts, light theme, contrast (design pass, phase 4).** The Trends charts draw
+  monotone-cubic curves (through every run, never overshooting; stacked severity bands are
+  clamped so they can't cross) over gradient area fills, with quieter dotted axes, legends as
+  chips, the tracking-cap line as a tagged annotation, and one shared hover tip per chart —
+  date, each series' value and the version assessed, snapped to the nearest run. Impact
+  meters carry a tone gradient with an end cap; the verdict-by-component line is a compact
+  table (glyph · component · verdict · count). The light theme gets its parity pass: glass on
+  paper, a softer mesh, shadows tinted toward the page's blue. A **contrast audit** is now a
+  browser suite (`tests/browser/contrast.test.js`): it samples every visible text run on the
+  rendered page in both themes and asserts WCAG AA (4.5:1, or 3:1 for large text) — 232 runs
+  per theme at this release, all passing; the browser suites share a fixture module.
 - **Brand (design pass, phase 3).** One logomark for everything: a lobster claw drawn as an
   open C — a thick upper jaw, a thinner lower one, a hinge at the wrist — holding the status
   dot, on a dark rounded tile. `web/logo.svg` is the source; the header mark, the favicon

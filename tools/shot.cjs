@@ -25,6 +25,7 @@
 //                       emulated so every .reveal is visible and captures are deterministic
 //   --allow-errors      exit 0 even when the page threw an uncaught error
 //   --transparent       omit the page background (icons/marks rendered from an .svg)
+//   --hover SEL         move the pointer onto SEL before capturing (hover states, chart tips)
 //
 // A local file is served over http by an in-process static server whose roots are the
 // file's own directory, then web/. That way the template's relative fonts/… and absolute
@@ -68,7 +69,7 @@ const CHROME = process.env.CHROME_PATH ||
 // ── args ────────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
   const o = { size: "1440x900", dpr: 1, theme: "dark", full: false, open: false,
-              clicks: [], scroll: null, wait: 300, motion: false, allowErrors: false, transparent: false, pos: [] };
+              clicks: [], scroll: null, hover: null, wait: 300, motion: false, allowErrors: false, transparent: false, pos: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], next = () => argv[++i];
     if (a === "--size") o.size = next();
@@ -78,6 +79,7 @@ function parseArgs(argv) {
     else if (a === "--open") o.open = true;
     else if (a === "--click") o.clicks.push(next());
     else if (a === "--scroll") o.scroll = next();
+    else if (a === "--hover") o.hover = next();
     else if (a === "--wait") o.wait = Number(next());
     else if (a === "--motion") o.motion = true;
     else if (a === "--allow-errors") o.allowErrors = true;
@@ -168,6 +170,9 @@ function serve(roots) {
         const n = document.querySelector(s); if (n) n.scrollIntoView({ block: "start" }); return !!n;
       }, opt.scroll);
       if (!hit) console.error(`warning: --scroll ${opt.scroll} matched nothing`);
+    }
+    if (opt.hover) {
+      try { await page.hover(opt.hover); } catch (e) { console.error(`warning: --hover ${opt.hover}: ${e.message}`); }
     }
     await new Promise((r) => setTimeout(r, opt.wait));
 

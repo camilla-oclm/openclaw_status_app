@@ -38,3 +38,4 @@ jobs:
           export CHROME_PATH="$(node -e "console.log(require('puppeteer').executablePath())")"
           node tests/browser/per_setup_verdict.test.js
           node tests/browser/page_ui.test.js
+          node tests/browser/contrast.test.js
