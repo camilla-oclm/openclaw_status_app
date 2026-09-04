@@ -5,7 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] - 2026-09-05
+
+The premium craft pass: four phases on the page's type, motion, brand and charts, a contrast
+audit that now runs as a test, and the client rebuilt as Svelte components compiled into the
+template. The DOM contract, the data keys and every public surface (JSON, feed, badge,
+llms.txt) are unchanged.
 
 ### Changed
 - **The page client is now Svelte** (design pass, phase 5 — an architecture change with the same
@@ -20,14 +25,6 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   pixel-identical across the standard set, and every suite passes untouched. `package.json` and
   the lockfile are committed (pinned toolchain, `npm ci`); CI gained a `client-build` job that
   rebuilds the bundle and fails when the template has drifted from the source.
-
-## [1.3.0] - 2026-09-05
-
-The premium craft pass: four phases on the page's type, motion, brand and charts, plus a
-contrast audit that now runs as a test. The DOM contract, the data keys and every public
-surface (JSON, feed, badge, llms.txt) are unchanged.
-
-### Changed
 - **Charts, light theme, contrast (design pass, phase 4).** The Trends charts draw
   monotone-cubic curves (through every run, never overshooting; stacked severity bands are
   clamped so they can't cross) over gradient area fills, with quieter dotted axes, legends as
