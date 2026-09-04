@@ -18,6 +18,19 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m pytest
 
+  # The committed template carries the built client (web-src/ → one inline IIFE). The deploy
+  # box has no Node, so the bundle must be rebuilt and committed by hand; this job rebuilds
+  # it from the pinned lockfile and fails when web/template.html has drifted from web-src/.
+  client-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: python3 tools/build.py --check
+
   # The template's entire client runtime (render hydration, the conservative per-setup /
   # per-component verdict logic, filters, ?stack= boot) is covered ONLY by the Node browser
   # suites. Without this job a JS-broken-but-structurally-valid template.html would pass
@@ -29,8 +42,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      # Installs puppeteer and its matching Chromium (postinstall → ~/.cache/puppeteer).
-      - run: npm install puppeteer
+      # The pinned toolchain from the lockfile, plus puppeteer with its matching Chromium
+      # (postinstall → ~/.cache/puppeteer) for the headless runs.
+      - run: npm ci && npm install --no-save puppeteer
       - name: Browser suites (per-setup verdict + page UI)
         env:
           PUPPETEER_PATH: ${{ github.workspace }}/node_modules/puppeteer

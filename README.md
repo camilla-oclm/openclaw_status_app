@@ -55,8 +55,10 @@ providers** argue it out before anything ships.
 - **Evidence-ranked scouting** — issues are scored from the repo's real `P0…P4` / breakage / harm
   labels and ranked by severity *blended with whether the bug affects the assessed version*, so a
   confirmed regression outranks a critical about some other release.
-- **Safe by construction** — a zero-dependency static page that builds its DOM with `textContent`
-  (XSS-safe) and no inline handlers (CSP-clean), even though every field is untrusted LLM text.
+- **Safe by construction** — a static page with zero runtime dependencies (the client is Svelte
+  components compiled ahead of time into one inline script, nothing loads from a CDN) that puts
+  every data field into the DOM as text (XSS-safe) and uses no inline handlers (CSP-clean), even
+  though every field is untrusted LLM text.
 - **Ships only trustworthy pages** — a deploy guard refuses low-confidence or invalid assessments,
   an HTML smoke test runs *before* the old page is overwritten, and each page is archived to a
   browsable per-version snapshot.
@@ -227,8 +229,11 @@ review so the page can show what the second model actually said.
 ### 4. Render — `openclaw_status/render.py`
 
 Injects the pipeline data into `web/template.html` (via a `<script type="application/json">`
-block) and writes **`web/index.html`** — a zero-dependency, dark/light, mobile-responsive page
-that builds its DOM with `textContent` (XSS-safe) and no inline handlers (CSP-clean). A **deploy
+block) and writes **`web/index.html`** — a dark/light, mobile-responsive page with zero runtime
+dependencies: its client is a set of Svelte components (`web-src/`) compiled by Vite into one
+inline script that is committed inside the template (`tools/build.py`), so render time needs
+only Python and the served page loads nothing external. Every data field enters the DOM as text
+(XSS-safe) and there are no inline handlers (CSP-clean). A **deploy
 guard** refuses to publish a low-confidence or invalid assessment, and an **HTML smoke test**
 validates the page before it overwrites the previous one. The page leads with the answer: a plain status
 word (or *Too new to call* inside the fresh window), one sentence naming which platforms should
@@ -385,7 +390,12 @@ python3 -m pytest        # 496 tests, hermetic (no network)
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output
 validator, the data-injection contract, and the HTML smoke test.
 
-The page's client runtime (hydration, the per-setup verdict, filters, `?stack=` sharing)
+The page's client lives in `web-src/` (Svelte 5 + Vite) and is compiled into the template:
+after editing it, run `npm ci` once, then `python3 tools/build.py`, and commit the template
+with the source (CI's `client-build` job rebuilds and fails on drift). The dependency tree is
+deliberately small — Svelte, Vite and its Svelte plugin, pinned by the lockfile — because the
+built output is what ships, and a public, security-minded project should keep that surface
+easy to audit. Its runtime behaviour (hydration, the per-setup verdict, filters, `?stack=` sharing)
 has its own headless-Chrome suites — `node tests/browser/per_setup_verdict.test.js`,
 `node tests/browser/page_ui.test.js` and a contrast audit, `node tests/browser/contrast.test.js`,
 that asserts WCAG AA on every visible text run in both themes (they need Node plus
@@ -445,6 +455,8 @@ openclaw_status_app/
 ├── run.py                  entry point
 ├── requirements.txt
 ├── requirements-dev.txt    dev-seat extras for tools/ (fontTools) — never installed on the box
+├── package.json            the client build + browser-test toolchain (pinned; `npm ci`)
+├── vite.config.mjs         builds web-src/ into one IIFE (web-src/dist/app.js)
 ├── .env.example            template for the two API keys
 ├── openclaw_status/
 │   ├── cli.py              the unified CLI
@@ -459,14 +471,20 @@ openclaw_status_app/
 │   ├── lib.py              shared utils (OpenRouter, sanitize, locks, usage, timer)
 │   └── config.py           paths, models, env
 ├── web/
-│   ├── template.html       production frontend template (data injected here)
+│   ├── template.html       production frontend template: data injected here; carries the
+│   │                       built client between its app-js markers (tools/build.py)
 │   ├── fonts/              self-hosted woff2 subsets, each with its OFL license text
 │   ├── index.html          generated public page (gitignored)
 │   ├── latest.json         generated runtime-fetch payload (gitignored)
 │   └── archive/            per-version page snapshots (gitignored)
 ├── docs/                   README screenshots (hero-dark.png / hero-light.png)
-├── tools/                  dev-only: preview.py (template + payload → web/proto/), shot.cjs
-│                           (headless screenshots), subset_font.py (woff2 subsets)
+├── web-src/                the page client: Svelte 5 components + plain-JS logic modules
+│   ├── main.js             boot: theme/nav, the stack, mount, deep links, runtime refresh
+│   ├── App.svelte          section order; components/ (Hero, Setup, Reco, Why, Issues, Chart …)
+│   └── lib/                tables, verdict machinery, formatting, chart geometry, state
+├── tools/                  dev-only: build.py (web-src → template; --check for CI), preview.py
+│                           (template + payload → web/proto/), shot.cjs (headless screenshots),
+│                           subset_font.py (woff2 subsets), og-card.html (the share image)
 ├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile,
 │                           and watchdog.py (external uptime check — run it off-box via cron)
 ├── .github/workflows/      ci.yml (pytest + browser suites on every push)

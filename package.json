@@ -1,0 +1,19 @@
+{
+  "name": "openclaw-status-web",
+  "private": true,
+  "version": "1.3.0",
+  "description": "The clawstat.us page client: Svelte components compiled to one inline IIFE (web-src/ \u2192 web/template.html).",
+  "scripts": {
+    "build": "vite build",
+    "check": "python3 tools/build.py --check",
+    "test:browser": "node tests/browser/per_setup_verdict.test.js && node tests/browser/page_ui.test.js && node tests/browser/contrast.test.js"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "svelte": "^5.57.0",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.3.0"
+  }
+}

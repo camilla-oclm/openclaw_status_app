@@ -27,10 +27,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Node — only used to run the browser test suites locally / in CI (no committed package.json)
+# Node — the browser test suites and the web-src/ build. package.json + the lockfile ARE
+# committed (pinned toolchain, `npm ci`); node_modules and the intermediate bundle are not.
 node_modules/
-package.json
-package-lock.json
+web-src/dist/
 
 # Local Claude Code settings (and any other local Claude state)
 .claude/

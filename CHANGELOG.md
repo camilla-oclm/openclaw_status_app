@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **The page client is now Svelte** (design pass, phase 5 — an architecture change with the same
+  page). The 2,100-line hand-built client is a set of Svelte 5 components under `web-src/`
+  (Hero, Setup, best version, Why, flip conditions, the evidence toggle with its tabs, Impact,
+  Changes, Trends charts, track record, history, the issues list) over plain modules for the
+  verdict machinery, formatting, chart geometry and state. Vite compiles them into one inline
+  script that `tools/build.py` writes into the template between marker lines; the deploy box
+  still needs only Python, the served page still loads nothing external, and archives stay
+  single files. The DOM contract is unchanged: a structural diff of the rendered page against
+  the previous client is identical at rest and with the evidence open, screenshots are
+  pixel-identical across the standard set, and every suite passes untouched. `package.json` and
+  the lockfile are committed (pinned toolchain, `npm ci`); CI gained a `client-build` job that
+  rebuilds the bundle and fails when the template has drifted from the source.
+
 ## [1.3.0] - 2026-09-05
 
 The premium craft pass: four phases on the page's type, motion, brand and charts, plus a

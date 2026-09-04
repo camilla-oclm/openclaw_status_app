@@ -48,6 +48,22 @@ PUPPETEER_PATH=$PWD/node_modules/puppeteer-core CHROME_PATH=/usr/bin/chromium \
 
 `PUPPETEER_PATH` / `CHROME_PATH` always win over discovery; CI sets both.
 
+## Building the client (`web-src/` → `web/template.html`)
+
+The page's JavaScript is Svelte 5 components plus plain modules under `web-src/`, compiled by
+Vite into one self-contained IIFE and inlined into the template between the `app-js` marker
+lines. The suites drive the built template, so after any change under `web-src/`:
+
+```bash
+npm ci                          # once — the pinned toolchain (svelte, vite, the svelte plugin)
+python3 tools/build.py          # vite build + inline; then commit web-src/ AND web/template.html
+python3 tools/build.py --check  # what CI runs: rebuild and fail if the template has drifted
+```
+
+The deploy box never runs any of this: render.py only injects JSON into the committed
+template. Static markup lives in the components; every data field is bound as text, never as
+HTML (`{@html}` is not used anywhere), so the page stays XSS-safe by construction.
+
 ## Preview & screenshot harness (`tools/`)
 
 Design work needs the real page with real data on screen. Two small dev tools do that —
