@@ -37,3 +37,60 @@ PUPPETEER_PATH=$PWD/node_modules/puppeteer-core CHROME_PATH=/usr/bin/chromium \
 ```
 
 `PUPPETEER_PATH` / `CHROME_PATH` always win over discovery; CI sets both.
+
+## Preview & screenshot harness (`tools/`)
+
+Design work needs the real page with real data on screen. Two small dev tools do that —
+neither runs at render time, and the deploy box never installs anything for them:
+
+- **`tools/preview.py`** builds `web/proto/preview.html` (gitignored) from `web/template.html`
+  plus a payload — the live `https://clawstat.us/latest.json` by default, or
+  `--data <path-or-url>` — through render's own injectors, so it is exactly what
+  `render_assessment_page` would publish for that payload (minus the deploy guard, the smoke
+  test and the sibling files). The payload is written beside it as `latest.json`; offline,
+  `--data web/proto/latest.json` re-uses the last fetch.
+- **`tools/shot.cjs`** screenshots a local file or a URL with the same puppeteer/Chromium
+  discovery as the suites (`PUPPETEER_PATH` / `CHROME_PATH` win). A local file is served over
+  http from its own directory with `web/` as the fallback root, so `fonts/…` and
+  `/logo.svg`-style paths resolve as in production (`file://` blocks the font) and the page's
+  runtime `latest.json` fetch finds the copy `preview.py` wrote. Flags: `--size WxH`,
+  `--dpr N`, `--theme dark|light`, `--full`, `--open` (the evidence toggle), `--click SEL`
+  (repeatable, in-page click), `--scroll SEL`, `--wait MS`, `--motion` (animations are off by
+  default through `prefers-reduced-motion`, so every `.reveal` is visible and shots are
+  deterministic), `--allow-errors`. It exits 1 on an uncaught page error — the "no page
+  errors" check of the per-phase loop comes for free.
+
+The standard set the design plan asks for before a phase ships (paste-able; `/tmp/shots`
+is scratch):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"          # if node is only on the login-shell PATH
+.venv/bin/python tools/preview.py
+P=web/proto/preview.html; O=/tmp/shots; S="node tools/shot.cjs"
+for t in dark light; do
+  $S $P $O/desktop-$t.png --theme $t
+  $S $P $O/desktop-$t-evidence.png --theme $t --open --scroll "#details-body"
+  $S "$P?stack=linux,discord,gateway" $O/desktop-$t-picked.png --theme $t
+  $S $P $O/mobile-$t.png --theme $t --size 390x844 --dpr 2 --full
+done
+for i in 1 2 3 4; do
+  $S $P $O/tab-$i.png --open --click ".ltabs[role=tablist] .ltab:nth-child($i)" --scroll ".ltabs[role=tablist]"
+done
+```
+
+The README heroes (`docs/hero-*.png`) are the same tool at `--size 1200x1000 --dpr 2`.
+
+### Fonts
+
+`tools/subset_font.py` cuts a variable font down to the self-hosted woff2 the page ships from
+`web/fonts/` — Unicode ranges (`latin`, `latin-ext`, `latin-ext-core`), an optional weight-axis
+narrowing (`--wght 400:800`), extra OpenType features (`tnum`, `case`) — and prints the size to
+check against the plan's 90 KB all-fonts budget. It needs fontTools with woff2 support:
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt      # dev seat only — never the box, never CI
+.venv/bin/python tools/subset_font.py InterVariable.ttf web/fonts/Inter-var.woff2 --wght 400:800
+```
+
+Every committed face is OFL and ships with its license text next to it
+(`web/fonts/<Family>-OFL.txt`); the exact cut of each one is recorded in the tool's docstring.

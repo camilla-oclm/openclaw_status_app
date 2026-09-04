@@ -389,7 +389,8 @@ The page's client runtime (hydration, the per-setup verdict, filters, `?stack=` 
 has its own headless-Chrome suites — `node tests/browser/per_setup_verdict.test.js` and
 `node tests/browser/page_ui.test.js` (need Node plus `npm i puppeteer` or `puppeteer-core`
 with a system Chromium — see `tests/browser/README.md`). CI runs both jobs — pytest
-and the browser suites — on every push.
+and the browser suites — on every push. The same README documents the `tools/` preview and
+screenshot harness used for design work on the page.
 
 ---
 
@@ -442,6 +443,7 @@ should be `chmod 600`. A `--test` flag sends one labeled ping to verify the aler
 openclaw_status_app/
 ├── run.py                  entry point
 ├── requirements.txt
+├── requirements-dev.txt    dev-seat extras for tools/ (fontTools) — never installed on the box
 ├── .env.example            template for the two API keys
 ├── openclaw_status/
 │   ├── cli.py              the unified CLI
@@ -457,10 +459,13 @@ openclaw_status_app/
 │   └── config.py           paths, models, env
 ├── web/
 │   ├── template.html       production frontend template (data injected here)
+│   ├── fonts/              self-hosted woff2 subsets, each with its OFL license text
 │   ├── index.html          generated public page (gitignored)
 │   ├── latest.json         generated runtime-fetch payload (gitignored)
 │   └── archive/            per-version page snapshots (gitignored)
 ├── docs/                   README screenshots (hero-dark.png / hero-light.png)
+├── tools/                  dev-only: preview.py (template + payload → web/proto/), shot.cjs
+│                           (headless screenshots), subset_font.py (woff2 subsets)
 ├── deploy/                 AWS provisioning: provision.sh, systemd unit+timer, Caddyfile,
 │                           and watchdog.py (external uptime check — run it off-box via cron)
 ├── .github/workflows/      ci.yml (pytest + browser suites on every push)

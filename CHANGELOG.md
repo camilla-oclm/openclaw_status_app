@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Dev tooling for the design pass** (nothing here ships in the page). `tools/preview.py`
+  builds `web/proto/preview.html` from the real template plus a real payload (the live
+  `latest.json` by default) through render's own injectors; `tools/shot.cjs` screenshots it
+  with puppeteer-core and a system Chromium (viewport, device-pixel ratio, theme, evidence
+  open/closed, scroll and click targets, animations off by default; fails on an uncaught page
+  error); `tools/subset_font.py` cuts a variable font down to a self-hosted woff2. The
+  subsetter needs the new `requirements-dev.txt` (fontTools), which the deploy box and CI
+  never install. All three are documented in `tests/browser/README.md`.
+- **Inter staged, not yet used.** `web/fonts/Inter-var.woff2` — Inter 4.1, variable
+  (weight 400–800, the whole optical-size axis), latin plus the everyday slice of
+  latin-ext, 63 KB — with its OFL text next to it, ahead of the type-system work. The page
+  does not reference it yet. Space Grotesk's OFL text now ships next to its woff2 as well.
+
 ## [1.2.0] - 2026-09-03
 
 ### Changed

@@ -1,0 +1,9 @@
+# Dev-seat extras on top of requirements.txt — for the design tools under tools/ only.
+# NEVER installed on the deploy box or in CI: nothing at render time imports these.
+#
+#   .venv/bin/pip install -r requirements-dev.txt
+#
+-r requirements.txt
+
+# tools/subset_font.py — subsets a variable font to woff2 ([woff] pulls in brotli).
+fonttools[woff]>=4.60,<5
