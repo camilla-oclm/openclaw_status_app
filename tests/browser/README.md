@@ -113,7 +113,8 @@ The README heroes (`docs/hero-*.png`) are the same tool at `--size 1200x1000 --d
 `tools/subset_font.py` cuts a variable font down to the self-hosted woff2 the page ships from
 `web/fonts/` — Unicode ranges (`latin`, `latin-ext`, `latin-ext-core`), an optional weight-axis
 narrowing (`--wght 400:800`), extra OpenType features (`tnum`, `case`) — and prints the size to
-check against the plan's 90 KB all-fonts budget. It needs fontTools with woff2 support:
+check against the 100 KB all-fonts budget (Inter 63 KB + Space Grotesk 22 KB + Instrument Serif
+14 KB today). It needs fontTools with woff2 support:
 
 ```bash
 .venv/bin/pip install -r requirements-dev.txt      # dev seat only — never the box, never CI
