@@ -33,6 +33,8 @@ font budget in the design plan before committing.
 Provenance of the committed subsets (source archives, not committed):
 - Space Grotesk — github.com/floriankarsten/space-grotesk (OFL), latin subset (pre-dates
   this tool).
+- Instrument Serif — github.com/google/fonts `ofl/instrumentserif/InstrumentSerif-Regular.ttf`
+  (OFL): `--ranges latin --features case` → 14 KB static; the status word only.
 - Inter 4.1 — github.com/rsms/inter/releases/tag/v4.1, `InterVariable.ttf` (OFL):
   `--ranges latin,latin-ext-core --wght 400:800 --features tnum,case` → 63 KB with the
   whole opsz axis (14–32). For the record, the same cut with Google's full latin-ext is

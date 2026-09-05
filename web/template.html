@@ -10,6 +10,7 @@
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="fonts/Inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/InstrumentSerif.woff2" as="font" type="font/woff2" crossorigin>
 <title>ClawStat.us — Should you update OpenClaw?</title>
 <link rel="alternate" type="text/markdown" href="llms-full.txt" title="Full verdict as markdown (for LLMs / agents)">
 <link rel="alternate" type="application/json" href="latest.json" title="Assessment JSON API">
@@ -27,7 +28,9 @@
 /* Self-hosted fonts — no runtime CDN: the woff2 files ship next to the page
    (web/fonts/, OFL texts beside them), so the page stays offline/file:///CSP-safe.
    Text: Inter (variable, wght 400–800 + optical size, latin + core latin-ext, 63 KB).
-   Display: Space Grotesk (variable, latin, 22 KB) — the status word, versions, titles.
+   Display: Space Grotesk (variable, latin, 22 KB) — versions, titles, tiles.
+   Status word: Instrument Serif (static regular, latin, 14 KB) — the one editorial
+   voice on the page, preloaded because it is the first thing anyone reads.
    "Inter Fallback" is Arial (or a metric clone) re-proportioned to Inter with the
    size-adjust / ascent / descent overrides, so the swap from the fallback to the
    web font moves nothing on screen. */
@@ -45,6 +48,11 @@
   font-family:"Space Grotesk";
   font-style:normal; font-weight:300 700; font-display:swap;
   src:url(fonts/SpaceGrotesk-var.woff2) format("woff2");
+}
+@font-face{
+  font-family:"Instrument Serif";
+  font-style:normal; font-weight:400; font-display:swap;
+  src:url(fonts/InstrumentSerif.woff2) format("woff2");
 }
 
 :root{
@@ -75,6 +83,7 @@
      scale (2xs…lg) plus display clamps; line-height by role */
   --text-face:"Inter","Inter Fallback",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --display-face:"Space Grotesk",var(--text-face);
+  --status-face:"Instrument Serif",Georgia,"Times New Roman",serif;
   --sans:var(--text-face); --display:var(--display-face);
   --mono:ui-monospace,"SFMono-Regular","SF Mono",Menlo,"JetBrains Mono",Consolas,monospace;
   --fs-2xs:.72rem; --fs-xs:.8rem; --fs-sm:.875rem; --fs-base:.95rem; --fs-md:1.05rem; --fs-lg:1.4rem;
@@ -264,10 +273,12 @@ html[data-theme="light"] .brand .logo{color:#fff}
   box-shadow:0 0 0 6px color-mix(in srgb,var(--tone) 8%,transparent), 0 24px 50px -22px color-mix(in srgb,var(--tone) 70%,transparent);
 }
 .verdict .answer-word{
-  font-family:var(--display); font-size:var(--fs-hero); font-weight:700; letter-spacing:-.045em; line-height:1;
+  /* the status word — the page's one editorial voice: Instrument Serif at 1.16× the display
+     size (its x-height is smaller), regular weight, a whisper of tightening */
+  font-family:var(--status-face); font-size:calc(var(--fs-hero) * 1.16); font-weight:400; letter-spacing:-.012em; line-height:.98;
   background:linear-gradient(94deg,var(--tone) 0%,color-mix(in srgb,var(--word-mix) var(--word-tail),var(--tone)) 100%);
   -webkit-background-clip:text; background-clip:text; color:transparent;
-  padding-bottom:.06em;   /* keep descenders inside the clipped box */
+  padding-bottom:.09em;   /* keep descenders inside the clipped box */
   text-wrap:balance;
 }
 a.verdict{cursor:pointer}

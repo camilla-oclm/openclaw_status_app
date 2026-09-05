@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-09-05
+
+### Changed
+- **The status word is set in Instrument Serif.** The A/B from the type phase, decided:
+  "Safe to update", "Update with care", "Skip this version" and "Too new to call" now read in
+  an editorial serif (Instrument Serif, regular, a 14 KB latin subset shipped with its OFL
+  text and preloaded), at 1.16× the display size so it holds the same line, against the
+  grotesk everywhere else. Nothing else on the page changes. README heroes re-shot.
+
 ## [1.3.1] - 2026-09-05
 
 ### Changed
