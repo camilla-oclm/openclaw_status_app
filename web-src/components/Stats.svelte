@@ -3,7 +3,7 @@
   // render (.stat .v .num::before); the real value stays as visually hidden text, so the
   // DOM reads "60+" exactly as before.
   import { app } from "../lib/state.svelte.js";
-  import { reveal } from "../lib/dom.js";
+  import { reveal, stagger } from "../lib/dom.js";
   const D = $derived(app.data);
   const tiles = $derived.by(() => {
     const ki = D.known_issues || [], ch = D.changes || {};
@@ -21,4 +21,4 @@
     });
   });
 </script>
-<div class="stats" use:reveal>{#each tiles as t}<div class="stat" style="--sc:{t.c}"><div class="v" style="--n-final:{t.n};--sfx:'{t.sfx}'"><span class="vh">{t.v}</span><span class="num" aria-hidden="true"></span></div><div class="l">{t.l}</div><div class="s">{t.s}</div></div>{/each}</div>
+<div class="stats" use:reveal use:stagger>{#each tiles as t}<div class="stat" style="--sc:{t.c}"><div class="v" style="--n-final:{t.n};--sfx:'{t.sfx}'"><span class="vh">{t.v}</span><span class="num" aria-hidden="true"></span></div><div class="l">{t.l}</div><div class="s">{t.s}</div></div>{/each}</div>

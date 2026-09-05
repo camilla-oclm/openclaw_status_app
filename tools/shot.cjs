@@ -167,7 +167,7 @@ function serve(roots) {
     }
     if (opt.scroll) {
       const hit = await page.evaluate((s) => {
-        const n = document.querySelector(s); if (n) n.scrollIntoView({ block: "start" }); return !!n;
+        const n = document.querySelector(s); if (n) n.scrollIntoView({ block: "start", behavior: "instant" }); return !!n;
       }, opt.scroll);
       if (!hit) console.error(`warning: --scroll ${opt.scroll} matched nothing`);
     }

@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-09-05
+
+### Changed
+- **The page comes alive as you scroll.** Sections used to fade in as whole blocks, and only
+  during the first two seconds after load; after that nothing moved. Now a section fades in
+  when it reaches the viewport, and the things inside it arrive one by one, 40 ms apart, as
+  they scroll into view: the stat tiles, the why cards, the flip-condition tripwires, the
+  analyst's paragraphs, the evidence cards, the component rows and both meter grids (each
+  meter fills as its own card appears), the trends charts, the changelog rows, the
+  track-record rows, the timeline entries and the known-issue rows — including rows that
+  appear later through a filter or a tab switch. The safety net is visibility-based instead
+  of a global timer: without IntersectionObserver everything shows at once; anything on
+  screen the observer missed is revealed 1.8 s after render and after every scroll or resize;
+  focusing a control reveals its row; printing reveals the whole page. Reduced motion still
+  turns all of it off, and screenshots and the contrast audit run with it off.
+
 ## [1.3.0] - 2026-09-05
 
 The premium craft pass: four phases on the page's type, motion, brand and charts, a contrast

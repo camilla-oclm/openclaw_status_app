@@ -4,7 +4,7 @@
   import { PLAT_LABEL } from "../lib/tables.js";
   import { gateBlockers, issuePlatforms } from "../lib/verdict.js";
   import { issueUrl } from "../lib/fmt.js";
-  import { reveal } from "../lib/dom.js";
+  import { reveal, stagger } from "../lib/dom.js";
   import SectionHead from "./SectionHead.svelte";
   import Linkify from "./Linkify.svelte";
 
@@ -37,7 +37,7 @@
 </script>
 <div class="section" id="why" use:reveal>
   <SectionHead title="Why" note="the evidence behind the answer" id="why" />
-  <div class="why-grid">
+  <div class="why-grid" use:stagger>
     <div class="why-card {bl.length ? 'why-bad' : 'why-ok'}">
       <h3>{bl.length ? "What's broken · " + bl.length + " credible blocking issue" + (bl.length === 1 ? "" : "s") : "Nothing credible is blocking"}</h3>
       {#if subBits.length}<p class="why-sub">{subBits.join(" ")}</p>{/if}

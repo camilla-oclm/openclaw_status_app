@@ -18,7 +18,7 @@ WEB_DIR = ROOT / "web"
 # openclaw_status.__version__ (a test pins them equal); surfaced additively in
 # latest.json (`app_version`) and the page footer. Bump on release, then cut the
 # matching annotated git tag (e.g. `v1.0.0`) from this value.
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 
 # ── .env ────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env")
