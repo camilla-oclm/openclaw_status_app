@@ -672,41 +672,191 @@ def test_budget_gate_emits_no_real_webhook_post(tmp_path, monkeypatch):
     assert posted == []  # no webhook POST happened
 
 
-def test_refined_validation_errors_reflect_final_not_primary(tmp_path, monkeypatch):
-    """Regression: when the validator forces a refine, the published validation_errors
-    (and the deploy gate that reads them) must describe the REFINED assessment, not the
-    now-discarded primary. A primary with a validation error + a clean refinement must
-    deploy with NO errors — previously the stale primary errors blocked the good page."""
-    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
-        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
-
-    primary = _valid_assessment(thesis="too short")          # < 100 chars → a validation error
-    refined = _valid_assessment(thesis="This release is solid. " * 10)   # clean
-    review = {"agrees": False, "critique": "thesis is too thin", "suggested_recommendation": "✅"}
-
-    def fake_call(model, system, user, **kw):
-        if "VALIDATOR" in system:                            # validator step
-            parsed = review
-        elif "previously produced an assessment" in system:  # refinement step
-            parsed = refined
-        else:                                                # primary step
-            parsed = primary
-        return {"success": True, "parsed": parsed, "model": model,
-                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}}
-    monkeypatch.setattr(agent, "openrouter_call", fake_call)
-
-    raw = {"target_version": "1.0", "sources": {
+def _raw_sources():
+    return {"target_version": "1.0", "sources": {
         "latest_release": {"tag": "v1.0", "published_at": "2026-01-01T00:00:00Z"},
         "latest_prerelease": None, "github_issues": [],
         "clawsweeper": {}, "release_history": [],
     }}
-    result = agent.run_assessment_pipeline(raw=raw)
+
+
+def test_schema_invalid_primary_retries_on_fallback_then_refines_clean(tmp_path, monkeypatch):
+    """A primary that PARSES but fails the assessment schema (thesis too short here; on the
+    box on 2026-09-08 it was well-formed JSON with no recommendation/headline/thesis) is a
+    failed attempt: the fallback model gets the same prompt and the run continues from ITS
+    assessment. The published validation_errors describe the final (refined) assessment,
+    the deploy gate passes, and the discarded primary's spend is still logged."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    monkeypatch.setattr(config, "PARSE_FAILURE_DIR", tmp_path / "pf")
+
+    primary = _valid_assessment(thesis="too short")          # < 100 chars → schema-invalid
+    fallback = _valid_assessment(headline="fallback wrote this")
+    refined = _valid_assessment(headline="refined")
+    review = {"agrees": False, "critique": "thesis is too thin", "suggested_recommendation": "✅"}
+    seen = []
+
+    def fake_call(model, system, user, **kw):
+        seen.append(model)
+        if "VALIDATOR" in system:                            # validator step
+            parsed, cost = review, 0.002
+        elif "previously produced an assessment" in system:  # refinement step
+            parsed, cost = refined, 0.003
+        elif model == config.PRIMARY_MODEL:                  # primary: parses, invalid
+            parsed, cost = dict(primary), 0.031
+        else:                                                # fallback model: clean
+            parsed, cost = fallback, 0.014
+        return {"success": True, "parsed": parsed, "model": model, "content": "{...}",
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": cost, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    result = agent.run_assessment_pipeline(raw=_raw_sources())
     assert result["success"] is True
+    assert seen[:2] == [config.PRIMARY_MODEL, config.FALLBACK_MODELS[0]["model"]]
 
     saved = json.loads(config.ASSESSMENT_FILE.read_text())
     assert saved["refined"] is True
-    assert saved["validation_errors"] == []      # the clean REFINED assessment, not the primary's
+    assert saved["assessment"]["headline"] == "refined"
+    assert saved["validation_errors"] == []      # the clean REFINED assessment
+    assert saved["pipeline_steps"][0]["model"] == config.FALLBACK_MODELS[0]["model"]
     assert config.HISTORY_FILE.exists()          # deployable → folded into the persistent record
+    log = json.loads(config.USAGE_LOG_FILE.read_text())
+    discarded = [e for e in log if e["cost_usd"] == 0.031]
+    assert len(discarded) == 1 and discarded[0]["success"] is False   # billed, discarded, logged
+    assert result["usage"]["api_calls"] == 4     # invalid primary + fallback + validator + refine
+
+
+def test_schema_invalid_refinement_keeps_primary_and_publishes(tmp_path, monkeypatch, capsys):
+    """The 2026-09-08 00:52Z run: the refinement call returned JSON that parsed but had no
+    recommendation/headline/thesis. It was accepted, the deploy guard blocked the page, and
+    the last good page stood for 12 h. Now that output is a failed refinement: the validated
+    primary ships, its spend is logged, and the raw text is kept for forensics."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    monkeypatch.setattr(config, "PARSE_FAILURE_DIR", tmp_path / "pf")
+    primary = _valid_assessment(headline="the primary")
+    review = {"agrees": False, "critique": "thin", "suggested_recommendation": "⏸️"}
+    bad_refine = {"known_issues": [], "changes": [], "evidence": {"for_updating": []}}
+
+    def fake_call(model, system, user, **kw):
+        if "VALIDATOR" in system:
+            return {"success": True, "parsed": review, "model": model,
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.02, "latency_ms": 1}}
+        if "previously produced an assessment" in system:
+            return {"success": True, "parsed": dict(bad_refine), "model": model,
+                    "content": '{"known_issues": [], "changes": []}',
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.05, "latency_ms": 1,
+                              "provider": "Wafer", "finish_reason": "stop"}}
+        return {"success": True, "parsed": primary, "model": model,
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.03, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    result = agent.run_assessment_pipeline(raw=_raw_sources())
+    assert result["success"] is True
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["refined"] is False
+    assert saved["assessment"]["headline"] == "the primary"
+    assert saved["validation_errors"] == []
+    assert config.HISTORY_FILE.exists()                              # published, not blocked
+    costs = [e["cost_usd"] for e in json.loads(config.USAGE_LOG_FILE.read_text())]
+    assert 0.05 in costs                                             # the refine's spend logged
+    kept = list((tmp_path / "pf").glob("*.txt"))
+    assert len(kept) == 1
+    text = kept[0].read_text()
+    assert text.startswith(f"# model: {config.PRIMARY_MODEL}\n# reason: refinement: schema-invalid — "
+                           "Missing required field: recommendation; Missing required field: headline; "
+                           "Missing required field: thesis (provider: Wafer, finish: stop)\n\n")
+    assert text.endswith('{"known_issues": [], "changes": []}')
+    out = capsys.readouterr().out
+    assert "Refinement unusable (refinement: schema-invalid" in out
+
+
+def test_schema_invalid_primary_output_is_a_failed_attempt(tmp_path, monkeypatch, capsys):
+    """_step_primary on its own: a schema-invalid primary counts as a failed attempt (raw text
+    kept, journal names it), the fallback is tried, and both attempts are on the record."""
+    monkeypatch.setattr(config, "PARSE_FAILURE_DIR", tmp_path / "pf")
+    good = _valid_assessment()
+    calls = []
+
+    def fake_call(model, system, user, **kw):
+        calls.append(model)
+        if model == config.PRIMARY_MODEL:
+            return {"success": True, "parsed": {"known_issues": []}, "model": model,
+                    "content": '{"known_issues": []}',
+                    "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.01, "latency_ms": 1,
+                              "provider": "Phala", "finish_reason": ""}}
+        return {"success": True, "parsed": good, "model": model,
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.01, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    res = agent._step_primary("ctx")
+    assert calls == [config.PRIMARY_MODEL, config.FALLBACK_MODELS[0]["model"]]
+    assert res["parsed"] == good
+    assert [a["model"] for a in res["attempts"]] == calls
+    kept = list((tmp_path / "pf").glob("*.txt"))
+    assert len(kept) == 1
+    assert "(provider: Phala, finish: ?)" in kept[0].read_text()
+    assert "Primary model failed: analyst: schema-invalid — Missing required field" in capsys.readouterr().out
+
+
+def test_reject_if_invalid_leaves_failed_and_clean_results_alone(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "PARSE_FAILURE_DIR", tmp_path / "pf")
+    failed = {"success": False, "parsed": {}, "error": "boom", "usage": {}}
+    unparseable = {"success": True, "parsed": {"error": "Failed to parse JSON"}, "usage": {}}
+    clean = {"success": True, "parsed": _valid_assessment(), "content": "x", "usage": {}}
+    retired = {"success": True, "parsed": _valid_assessment(recommendation="🔄"), "usage": {}}
+    not_an_object = {"success": True, "parsed": [1, 2], "content": "[1, 2]", "usage": {}}
+    assert agent._reject_if_invalid(failed, "m", "analyst") == []
+    assert agent._reject_if_invalid(unparseable, "m", "analyst") == []
+    assert agent._reject_if_invalid(clean, "m", "analyst") == []
+    assert "error" not in clean["parsed"]
+    assert agent._reject_if_invalid(retired, "m", "analyst") == []      # 🔄 → ⏸️, not a failure
+    assert retired["parsed"]["recommendation"] == "⏸️"
+    errs = agent._reject_if_invalid(not_an_object, "m", "analyst")
+    assert errs == ["Response is not a JSON object (got list)"]
+    assert not_an_object["parsed"]["error"].startswith("analyst: schema-invalid — Response is not a JSON object")
+    assert not (tmp_path / "pf").exists() or len(list((tmp_path / "pf").glob("*.txt"))) == 1
+
+
+def test_blocked_deploy_alerts_instead_of_green_summary(tmp_path, monkeypatch):
+    """A run the deploy guard refuses (low confidence here) must reach the channel as a 🛑
+    "NOT PUBLISHED" notice — never as the green run summary. 2026-09-08: a blocked run went
+    out as "✅ OpenClaw Status — v2026.9.2 ?" and the stale page sat unnoticed for 12 h."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    sent = []
+    monkeypatch.setattr(agent, "notify", lambda text: sent.append(text) or True)
+    primary = _valid_assessment(confidence="low")
+    review = {"agrees": True, "critique": "fine"}
+
+    def fake_call(model, system, user, **kw):
+        parsed = review if "VALIDATOR" in system else primary
+        return {"success": True, "parsed": parsed, "model": model,
+                "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.01, "latency_ms": 1}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    result = agent.run_assessment_pipeline(raw=_raw_sources())
+    assert result["success"] is True                     # the assessment ran; the page didn't move
+    assert not config.HISTORY_FILE.exists()
+    blocked = [m for m in sent if m.startswith("🛑 OpenClaw Status — v1.0 assessed but NOT PUBLISHED")]
+    assert len(blocked) == 1
+    assert "confidence is 'low'" in blocked[0]
+    assert "The live page is unchanged" in blocked[0]
+    assert "this run $0.0200" in blocked[0]
+    assert not any(m.startswith("✅ OpenClaw Status —") for m in sent)
+
+
+def test_refinement_header_names_its_trigger(monkeypatch, capsys):
+    """The step-3 header used to say "validator disagreed" even when the validator AGREED and
+    only a material mis-tag forced the pass (2026-09-09 10:52Z run)."""
+    monkeypatch.setattr(agent, "openrouter_call",
+                        lambda *a, **k: {"success": False, "parsed": {}, "model": "m",
+                                         "usage": {}, "error": "x"})
+    agent._step_refinement("ctx", _valid_assessment(), {"agrees": True},
+                           reason="validator agreed but flagged a material mis-tag")
+    assert "STEP 3/3 — Refinement (validator agreed but flagged a material mis-tag)" in capsys.readouterr().out
+    agent._step_refinement("ctx", _valid_assessment(), {"agrees": False})
+    assert "STEP 3/3 — Refinement (validator disagreed)" in capsys.readouterr().out
 
 
 def test_minor_miscat_skips_refine_material_forces_it(tmp_path, monkeypatch):
@@ -1194,9 +1344,21 @@ def test_prompts_pin_earned_hold_calibration():
     assert "both directions are" in agent.VALIDATOR_PROMPT
 
 
+def test_primary_provider_is_an_allowlist_without_pool_fallback():
+    """2026-09-09: glm-5.3-flash's OpenRouter pool had grown to 20 hosts and every failure in
+    the box's usage log came from the tail (Phala, StreamLake, Wafer). The pin is an ordered
+    allowlist of the hosts with a clean record, first-party first, and OpenRouter's own
+    fallback to the rest of the pool is OFF — the app's fallback SEAT (a different model)
+    is the safety net, not a lottery ticket on another host."""
+    pin = config.PRIMARY_PROVIDER
+    assert pin["allow_fallbacks"] is False
+    assert pin["order"][0] == "z-ai"
+    assert all(s == s.lower() and "/" not in s and " " not in s for s in pin["order"]), "slugs, not display names"
+
+
 def test_provider_prefs_ride_primary_seats_only(monkeypatch):
-    """config.PRIMARY_PROVIDER (the OpenRouter provider-routing pin — None today, no
-    reliability history yet for the seated analyst) must ride ONLY the two PRIMARY_MODEL
+    """config.PRIMARY_PROVIDER (the OpenRouter provider-routing pin — an allowlist since
+    2026-09-09, see the config comment) must ride ONLY the two PRIMARY_MODEL
     call sites: analyst and refine. The minimax fallback and the validator keep default
     routing regardless — their provider pools are different entirely."""
     calls = []

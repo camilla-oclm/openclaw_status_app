@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-09-09
+
+### Fixed
+- **A model reply that parses but isn't an assessment no longer blocks the page.** On
+  2026-09-08 a refinement call came back as well-formed JSON with no recommendation,
+  headline or thesis. It was accepted, the deploy guard refused the result ten minutes
+  later, and the last good page stood for twelve hours. Such a reply is now a failed
+  attempt where it happens: the analyst step moves on to its fallback model, the
+  refinement step keeps the validated first pass, and the raw text is kept in
+  `data/parse-failures/` like an unparseable reply's is.
+- **A run the deploy guard refuses is reported as one.** The channel used to get the green
+  run summary (with a `?` for the verdict) and nothing else. It now gets a 🛑 "assessed but
+  NOT PUBLISHED" notice naming the reason, and the green summary only goes out for a run
+  that actually changed the page.
+
+### Changed
+- **The analyst's calls are pinned to an allowlist of hosts.** glm-5.3-flash's OpenRouter
+  pool had grown from two hosts to twenty, and the box's usage log split cleanly: every
+  failure in the 09-08/09 window (an empty reply, a `finish_reason=error`, the JSON above)
+  came from the long tail, while Z.AI, NextBit and Novita had a clean record. The analyst
+  and refinement calls now try those three in that order with OpenRouter's own fallback
+  off; anything they can't serve goes to the fallback seat as before.
+- The refinement step's journal header names its trigger — "validator disagreed", or
+  "validator agreed but flagged a material mis-tag" — instead of always saying the former.
+
 ## [1.3.2] - 2026-09-05
 
 ### Changed

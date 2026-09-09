@@ -468,6 +468,7 @@ def test_openrouter_call_records_provider_and_finish_reason(monkeypatch):
                         lambda req, timeout=None: _ORResp(_or_body('{"a": 1}', tokens_out=7, provider="Z.AI")))
     out = lib.openrouter_call("x/y", "s", "u", retries=0)
     assert out["parsed"] == {"a": 1}
+    assert out["content"] == '{"a": 1}'            # raw text, for the caller's own forensics
     assert out["usage"]["provider"] == "Z.AI"
     assert out["usage"]["finish_reason"] == "length"
     assert out["usage"]["tokens_out"] == 7

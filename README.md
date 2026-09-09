@@ -208,13 +208,15 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    visible in the published review but doesn't burn a refinement call.
 3. **Refine** (analyst again) — only if the validator disagrees.
 
-If the analyst call fails, it falls back to `minimax/minimax-m3` — a third distinct provider,
-so a single-vendor outage doesn't sink the run (and the analyst and validator stay on
-different models). All models are served via OpenRouter; the analyst/refine calls can carry a
-provider-routing preference for a specific host (`config.PRIMARY_PROVIDER`) — used previously to
-pin a prior analyst seat to its first-party endpoint after a run of wall-clock runaways traced
-to degraded third-party hosts in its pool, currently unset for the seated model pending its own
-reliability history.
+If the analyst call fails — an HTTP error, the wall-clock cap, or a reply that isn't an
+assessment (unparseable JSON, or JSON with no verdict in it) — it falls back to
+`minimax/minimax-m3`, a third distinct provider, so a single-vendor outage doesn't sink the run
+(and the analyst and validator stay on different models). A refinement reply that fails the same
+check keeps the validated first pass instead. Rejected replies are kept in `data/parse-failures/`
+for diagnosis. All models are served via OpenRouter; the analyst/refine calls carry a
+provider-routing allowlist (`config.PRIMARY_PROVIDER`): the seated model's pool had grown to
+twenty hosts and every failure on record came from the long tail, so those calls try the hosts
+with a clean record in order, with OpenRouter's own fallback to the rest of the pool switched off.
 
 The output is schema- and XSS-validated, appended to `data/history.json`, and cost/latency
 is logged to `data/usage.json` (with daily/monthly budget alerts, plus a latency watch that

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from openclaw_status import config, github, release_changes, verdict
 from openclaw_status.lib import (
     openrouter_call, load_json, load_json_or, save_json, log_usage,
-    check_cost_thresholds, notify, norm_rec,
+    check_cost_thresholds, notify, norm_rec, _save_parse_failure,
 )
 
 
@@ -630,6 +630,45 @@ def validate_assessment(assessment: dict) -> list[str]:
     return errors
 
 
+def _reject_if_invalid(result: dict, model_id: str, stage: str) -> list[str]:
+    """Treat a response that PARSED but fails the assessment schema like a parse failure.
+
+    2026-09-08 00:52Z: a refinement call (glm-5.3-flash, served by a tail host of its
+    OpenRouter pool) returned well-formed JSON with no recommendation/headline/thesis.
+    It parsed, so it was accepted; the run's validation_errors filled up; and the deploy
+    guard blocked the page ten minutes later — the last good page stood for 12 h while
+    the channel got a green run summary. The fix sits upstream of all that: a schema-
+    invalid output is a FAILED ATTEMPT, so the analyst step tries its fallback model and
+    the refinement step keeps the validated primary — both through the branches that
+    already exist for unparseable JSON (the callers test for the {"error": ...} shape,
+    which this writes in place). The raw text is kept the way a parse failure's is
+    (config.PARSE_FAILURE_DIR): nothing had kept the 09-08 text, so what that host
+    actually wrote is unknown.
+
+    Returns the validation errors (empty = accepted). A response that already failed
+    (HTTP error, deadline, unparseable) is left alone."""
+    if not result.get("success"):
+        return []
+    parsed = result.get("parsed")
+    if isinstance(parsed, dict) and "error" in parsed:
+        return []
+    if not isinstance(parsed, dict):
+        errors = [f"Response is not a JSON object (got {type(parsed).__name__})"]
+    else:
+        _normalize_recommendation(parsed)      # a retired 🔄 is not a schema failure
+        errors = validate_assessment(parsed)
+    if not errors:
+        return []
+    for err in errors:
+        print(f"   ⚠️ {err}")
+    u = result.get("usage") or {}
+    reason = (f"{stage}: schema-invalid — {'; '.join(errors[:3])}"
+              f" (provider: {u.get('provider') or '?'}, finish: {u.get('finish_reason') or '?'})")
+    _save_parse_failure(model_id, result.get("content"), reason)
+    result["parsed"] = {"error": reason}
+    return errors
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  History tracking
 # ═══════════════════════════════════════════════════════════════════════════
@@ -740,6 +779,7 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
         deadline=deadline,
         provider=config.PRIMARY_PROVIDER,
     )
+    _reject_if_invalid(result, config.PRIMARY_MODEL, "analyst")
     attempts.append({"model": config.PRIMARY_MODEL, "usage": result.get("usage") or {}})
 
     if not result["success"] or "error" in result.get("parsed", {}):
@@ -753,6 +793,7 @@ def _step_primary(context: str, deadline: float | None = None) -> dict:
                 reasoning=fallback.get("reasoning"),
                 deadline=deadline,
             )
+            _reject_if_invalid(result, fallback["model"], "analyst (fallback)")
             attempts.append({"model": fallback["model"], "usage": result.get("usage") or {}})
             if result["success"] and "error" not in result.get("parsed", {}):
                 print(f"   ✓ Fallback {fallback['model']} succeeded")
@@ -950,10 +991,12 @@ def _step_validator(context: str, primary_assessment: dict, deadline: float | No
     return result
 
 
-def _step_refinement(context: str, primary_assessment: dict, validator_review: dict, deadline: float | None = None) -> dict:
-    """Step 3: Refinement (only if validator disagrees)."""
+def _step_refinement(context: str, primary_assessment: dict, validator_review: dict,
+                     deadline: float | None = None, reason: str = "validator disagreed") -> dict:
+    """Step 3: Refinement — runs when the validator disagrees OR agrees but flags a
+    material mis-tag (see _validator_disagrees); `reason` names which, for the journal."""
     print(f"\n{'─'*60}")
-    print("STEP 3/3 — Refinement (validator disagreed)")
+    print(f"STEP 3/3 — Refinement ({reason})")
     print(f"{'─'*60}")
 
     clean_a = {k: v for k, v in primary_assessment.items() if k != "usage"}
@@ -974,6 +1017,7 @@ def _step_refinement(context: str, primary_assessment: dict, validator_review: d
         deadline=deadline,
         provider=config.PRIMARY_PROVIDER,
     )
+    _reject_if_invalid(result, config.PRIMARY_MODEL, "refinement")
 
     if result["success"]:
         u = result["usage"]
@@ -1002,6 +1046,16 @@ def _run_summary_message(version, recommendation, run_cost, daily_total, monthly
     return (
         f"✅ OpenClaw Status — v{version} {recommendation} "
         f"({n_issues} known issue{'' if n_issues == 1 else 's'}) · "
+        f"this run ${run_cost:.4f} · today ${daily_total:.2f} · month ${monthly_total:.2f}"
+    )
+
+
+def _blocked_run_message(version, reasons, run_cost, daily_total, monthly_total):
+    """The run-completion notice for a run the deploy guard refused: the page did NOT
+    change, and the message says so first. Same cost tail as the green summary."""
+    return (
+        f"🛑 OpenClaw Status — v{version} assessed but NOT PUBLISHED "
+        f"({'; '.join(reasons)[:300]}). The live page is unchanged (last good deploy stands). "
         f"this run ${run_cost:.4f} · today ${daily_total:.2f} · month ${monthly_total:.2f}"
     )
 
@@ -1250,7 +1304,8 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
 
     if "error" in primary_assessment:
         log_usage(final_model, primary_usage, False)
-        return {"success": False, "error": "Primary returned unparseable JSON"}
+        return {"success": False,
+                "error": f"Primary returned unusable JSON: {primary_assessment['error']}"[:300]}
 
     validation_errors = validate_assessment(primary_assessment)
     for err in validation_errors:
@@ -1296,7 +1351,10 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         refined = False
 
         if needs_refine:
-            refinement_result = _step_refinement(context, primary_assessment, validator_review, deadline=deadline)
+            refine_reason = ("validator disagreed" if not validator_review.get("agrees", True)
+                             else "validator agreed but flagged a material mis-tag")
+            refinement_result = _step_refinement(context, primary_assessment, validator_review,
+                                                 deadline=deadline, reason=refine_reason)
             if refinement_result["success"] and "error" not in refinement_result.get("parsed", {}):
                 ru = refinement_result.get("usage", {})
                 for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):
@@ -1315,7 +1373,8 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
                 final_assessment = refined_assessment
                 refined = True
             else:
-                print("   ⚠️ Refinement failed/unparseable, falling back to primary")
+                why = refinement_result.get("error") or (refinement_result.get("parsed") or {}).get("error") or "?"
+                print(f"   ⚠️ Refinement unusable ({str(why)[:160]}), falling back to primary")
                 # If the refine call HTTP-succeeded (billed) but returned unparseable JSON, its
                 # cost is REAL — account for it like the primary path does for its discarded
                 # attempts, so the budget gate isn't blind to it. A truly failed call (deadline /
@@ -1521,15 +1580,21 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     save_json(config.ASSESSMENT_FILE, output)
     print(f"💾 Saved to: {config.ASSESSMENT_FILE}")
 
-    # Run-completion confirmation: verdict + this run's cost + running totals.
-    # (No-op unless ALERT_WEBHOOK_URL is set; daily/monthly already include this run.)
-    notify(_run_summary_message(
-        version,
-        final_assessment.get("recommendation", "?"),
-        total_usage.get("cost_usd", 0.0),
-        daily, monthly,
-        len(final_assessment.get("known_issues", [])),
-    ))
+    # Run-completion notice (no-op unless ALERT_WEBHOOK_URL is set; daily/monthly already
+    # include this run). A run the deploy guard refuses gets the 🛑 notice, never the green
+    # summary: on 2026-09-08 such a run went out as "✅ … ?" and nothing else, and the last
+    # good page stood for 12 h with no one told.
+    if deployable:
+        notify(_run_summary_message(
+            version,
+            final_assessment.get("recommendation", "?"),
+            total_usage.get("cost_usd", 0.0),
+            daily, monthly,
+            len(final_assessment.get("known_issues", [])),
+        ))
+    else:
+        notify(_blocked_run_message(
+            version, block_reasons, total_usage.get("cost_usd", 0.0), daily, monthly))
 
     return {"success": True, "assessment": final_assessment, "usage": total_usage}
 

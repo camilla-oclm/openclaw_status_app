@@ -18,7 +18,7 @@ WEB_DIR = ROOT / "web"
 # openclaw_status.__version__ (a test pins them equal); surfaced additively in
 # latest.json (`app_version`) and the page footer. Bump on release, then cut the
 # matching annotated git tag (e.g. `v1.0.0`) from this value.
-APP_VERSION = "1.3.2"
+APP_VERSION = "1.3.3"
 
 # ── .env ────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env")
@@ -100,16 +100,22 @@ PRIMARY_MODEL = "z-ai/glm-5.3-flash"
 _REASONING_HIGH = {"effort": "high", "exclude": False}
 PRIMARY_REASONING = _REASONING_HIGH
 # OpenRouter provider routing for the analyst + refine calls (config.PRIMARY_MODEL's
-# two use sites). This was a deepseek-specific first-party pin (see the seat-history
-# comment above) — the un-dated pro pool was ~18 hosts with OpenRouter load-balancing
-# across them, so every call was a provider lottery, and degraded hosts served the
-# trickling/empty responses behind the wall-clock kills. That reasoning doesn't
-# transfer to z-ai/glm-5.3-flash: its OpenRouter pool is just two hosts (Z.AI direct,
-# Novita) with no reliability history yet to prefer one over the other, so this stays
-# None (default routing) until evidence says otherwise — same trigger as last time:
-# a runaway/degraded-host pattern on scheduled runs.
+# two use sites): an ALLOWLIST in order of preference, with OpenRouter's own fallback
+# to the rest of the pool OFF — a call the listed hosts can't serve fails fast and the
+# app's own fallback seat (FALLBACK_MODELS, a different model entirely) takes the run.
+# History: the deepseek era pinned first-party for the same reason (an ~18-host pool
+# load-balanced into a provider lottery, degraded hosts serving the trickling/empty
+# responses behind the wall-clock kills). When the seat moved to glm-5.3-flash its
+# pool was two hosts, so this went back to None "until a degraded-host pattern shows
+# on scheduled runs". 2026-09-09: it showed. The pool had grown to 20 hosts and the
+# box's usage log split cleanly by host — Z.AI 20/20, NextBit 4/4, Novita 1/1 clean;
+# every failure in the 09-08/09 window came from the long tail: Phala (empty content),
+# StreamLake (finish_reason=error), Wafer (well-formed JSON with no recommendation/
+# headline/thesis — that run never published). Slugs are OpenRouter provider slugs
+# (the prefix of `tag` in /api/v1/models/<id>/endpoints); an unknown slug is skipped,
+# so re-check that listing when editing. Rollback = None (default routing).
 # Deliberately NOT applied to the validator/fallback seats: different pools.
-PRIMARY_PROVIDER = None
+PRIMARY_PROVIDER = {"order": ["z-ai", "nextbit", "novita"], "allow_fallbacks": False}
 # Independent reviewer — deliberately a *different* model from the analyst, so it
 # catches the primary's blind spots instead of rubber-stamping its own reasoning.
 # 2026-09-02: qwen/qwen3.7-plus → upstage/solar-pro4 after a 3-seed-set A/B over every

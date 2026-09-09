@@ -95,7 +95,7 @@ def openrouter_call(
     deadline: float | None = None,
     provider: dict = None,
 ) -> dict:
-    """Single call to OpenRouter. Returns {success, parsed, model, usage, error?}.
+    """Single call to OpenRouter. Returns {success, parsed, model, usage, content?, error?}.
 
     `deadline` (an absolute time.time() epoch, optional) hard-bounds each attempt to the
     time remaining before it AND to config.LLM_CALL_CAP_S, so a trickling/hung response
@@ -158,6 +158,10 @@ def openrouter_call(
             "success": True,
             "parsed": parsed,
             "model": model_id,
+            # The raw text, so a caller that rejects the PARSED output on its own terms
+            # (agent._reject_if_invalid: JSON that lacks the assessment's required fields)
+            # can keep it for forensics the way a parse failure is kept above.
+            "content": content,
             "usage": {
                 "tokens_in": usage.get("prompt_tokens", 0),
                 "tokens_out": usage.get("completion_tokens", 0),
