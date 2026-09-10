@@ -112,8 +112,11 @@ PRIMARY_REASONING = _REASONING_HIGH
 # every failure in the 09-08/09 window came from the long tail: Phala (empty content),
 # StreamLake (finish_reason=error), Wafer (well-formed JSON with no recommendation/
 # headline/thesis — that run never published). Slugs are OpenRouter provider slugs
-# (the prefix of `tag` in /api/v1/models/<id>/endpoints); an unknown slug is skipped,
-# so re-check that listing when editing. Rollback = None (default routing).
+# (the prefix of `tag` in /api/v1/models/<id>/endpoints). A slug OpenRouter doesn't
+# know is NOT skipped: with allow_fallbacks off the call 404s ("No endpoints found",
+# probed live 2026-09-10) and every analyst call lands on the fallback seat — so
+# re-check that listing when editing; a run cost settling at ~2× the usual is the tell.
+# Rollback = None (default routing).
 # Deliberately NOT applied to the validator/fallback seats: different pools.
 PRIMARY_PROVIDER = {"order": ["z-ai", "nextbit", "novita"], "allow_fallbacks": False}
 # Independent reviewer — deliberately a *different* model from the analyst, so it
