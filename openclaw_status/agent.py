@@ -101,8 +101,9 @@ OUTPUT FORMAT: Return ONLY valid JSON. No markdown code fences, no commentary ou
 """ + _OUTPUT_SCHEMA % (
     "ONE plain-language sentence, at most 140 characters, no issue numbers — the answer a user "
     "reads first (e.g. 'Fine for most setups; Linux and Windows upgrades can fail to start the gateway')",
-    "2-4 paragraph argument with evidence. Cite specific issue numbers, PRs, and sources. "
-    "Explain the risk/reward tradeoff. Write for a user deciding whether to update — describe "
+    "2-4 paragraph argument with evidence, as ONE JSON string — separate the paragraphs with "
+    "\\n\\n inside this string, never as extra strings after it. Cite specific issue numbers, "
+    "PRs, and sources. Explain the risk/reward tradeoff. Write for a user deciding whether to update — describe "
     "the release and its issues; never mention this analysis process, the validator, or prior "
     "assessment passes.",
 )
@@ -193,7 +194,8 @@ OUTPUT FORMAT: Return ONLY valid JSON. Same schema as before.
 """ + _OUTPUT_SCHEMA % (
     "ONE plain-language sentence, at most 140 characters, no issue numbers — the answer a user "
     "reads first",
-    "2-4 paragraph argument with evidence. Incorporate what the critique changed, but write "
+    "2-4 paragraph argument with evidence, as ONE JSON string — separate the paragraphs with "
+    "\\n\\n inside this string, never as extra strings after it. Incorporate what the critique changed, but write "
     "for the end user deciding whether to update — describe the release itself; never mention "
     "the validator, the original analysis, or the review process.",
 )

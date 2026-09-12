@@ -225,12 +225,95 @@ def _repair_escapes(text: str) -> str:
     return _JSON_ESCAPE.sub(fix, text)
 
 
+def _fold_orphan_strings(text: str) -> str:
+    """Fold a bare string sitting where an object KEY should be into the string value
+    before it, joined with a blank line.
+
+    2026-09-10 and 09-11 (and, by its identical symptom, 09-08): glm-5.3-flash wrote a
+    complete, correct assessment but split the multi-paragraph `thesis` into consecutive
+    strings — `"thesis": "para 1", "para 2", "para 3",` — so the document was not JSON. The strict parse failed, the brace scan then returned the first sub-object
+    that parsed on its own (`evidence`), the schema check rejected it, and the fallback
+    seat wrote the run. Both raw replies became valid assessments with this fold alone.
+
+    Deliberately narrow: only a string, directly after `,` inside an object, that is not
+    followed by `:`, and only when the previous value was itself a string. Array elements
+    are never touched (they live inside `[`), and a bare string after a number, `}` or `]`
+    is left alone so real garbage still fails closed. Never raises — on anything odd the
+    text is returned as it came."""
+    try:
+        while True:
+            n = len(text)
+            i = 0
+            stack = []               # open containers: '{' / '['
+            expect_key = False       # inside an object, at member start
+            last_str_end = None      # index of the closing quote of the last string VALUE
+            prev_tok = None
+            folded = False
+            while i < n:
+                c = text[i]
+                if c.isspace():
+                    i += 1
+                    continue
+                if c == '"':
+                    j = i + 1
+                    while j < n and text[j] != '"':
+                        j += 2 if text[j] == "\\" else 1
+                    if j >= n:
+                        return text              # unterminated string: nothing to fold
+                    k = j + 1
+                    while k < n and text[k].isspace():
+                        k += 1
+                    is_key = k < n and text[k] == ":"
+                    in_obj = bool(stack) and stack[-1] == "{"
+                    if (in_obj and expect_key and not is_key and prev_tok == ","
+                            and last_str_end is not None):
+                        # `"<value>",  "<orphan>"` → `"<value>\n\n<orphan>"`
+                        text = text[:last_str_end] + "\\n\\n" + text[i + 1:j] + text[j:]
+                        folded = True
+                        break
+                    last_str_end = j if (in_obj and not is_key) else None
+                    if is_key:
+                        expect_key = False
+                    prev_tok = "str"
+                    i = j + 1
+                    continue
+                if c in "{[":
+                    stack.append(c)
+                    expect_key = c == "{"
+                    last_str_end = None
+                elif c in "}]":
+                    if not stack:
+                        return text
+                    stack.pop()
+                    expect_key = False
+                    last_str_end = None
+                elif c == ",":
+                    expect_key = bool(stack) and stack[-1] == "{"
+                elif c == ":":
+                    expect_key = False
+                else:                            # number / true / false / null / junk
+                    j = i
+                    while j < n and text[j] not in ',:}] \t\r\n':
+                        j += 1
+                    last_str_end = None
+                    prev_tok = "scalar"
+                    i = max(j, i + 1)
+                    continue
+                prev_tok = c
+                i += 1
+            if not folded:
+                return text
+    except Exception:
+        return text
+
+
 def _loads_lenient(text: str):
     """json.loads, then one repair pass for the defects above. Raises JSONDecodeError."""
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        return json.loads(_repair_escapes(text), strict=False)
+        pass
+    return json.loads(_repair_escapes(_fold_orphan_strings(text)), strict=False)
 
 
 def _save_parse_failure(model_id: str, content, reason: str) -> None:

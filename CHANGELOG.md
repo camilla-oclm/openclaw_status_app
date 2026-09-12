@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2026-09-12
+
+### Fixed
+- **A thesis split into bare strings no longer sends the run to the fallback model.** Two
+  analyst calls since 1.3.3 (2026-09-10 and 09-11, both served by the model's first-party
+  host) wrote a complete, correct assessment but emitted the multi-paragraph `thesis` as
+  consecutive strings — `"thesis": "para 1", "para 2", "para 3",` — so the document was not
+  JSON. The strict parse failed, the brace scan returned the first sub-object that parsed
+  on its own (`evidence`), the schema check rejected it, and minimax wrote the run at up
+  to five times the cost. The JSON extractor now folds a bare string sitting in key
+  position into the string value before it, joined with a blank line, before its other
+  repairs. The fold is narrow — only after `,` inside an object, only when the previous
+  value was a string; array elements and a bare string after a number or a nested
+  container are left alone, so real garbage still fails closed. Both raw replies from the
+  box become valid assessments with this fold alone. The 2026-09-08 reply that 1.3.3 was
+  written for had the identical symptom; its text was not kept, but it was almost
+  certainly the same shape — a model habit, not a host defect, so the host allowlist
+  (kept: it did remove the empty-reply and `finish_reason=error` hosts) never addressed it.
+
+### Changed
+- The thesis hint in the analyst and refinement prompts says the 2-4 paragraphs are ONE
+  JSON string, with the paragraphs separated by `\n\n` inside it, never as extra strings
+  after it.
+
 ## [1.3.3] - 2026-09-09
 
 ### Fixed

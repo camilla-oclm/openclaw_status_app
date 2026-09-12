@@ -818,6 +818,33 @@ def test_reject_if_invalid_leaves_failed_and_clean_results_alone(tmp_path, monke
     assert not (tmp_path / "pf").exists() or len(list((tmp_path / "pf").glob("*.txt"))) == 1
 
 
+def test_split_thesis_reply_is_accepted_not_a_failed_attempt(tmp_path, monkeypatch):
+    """The 2026-09-10/11 shape end to end: a complete assessment whose thesis came out as
+    consecutive bare strings parses to the assessment (paragraphs joined by a blank line)
+    and passes the schema check — it no longer sends the analyst step to the fallback."""
+    from openclaw_status import lib
+    monkeypatch.setattr(config, "PARSE_FAILURE_DIR", tmp_path / "pf")
+    p1 = "First paragraph: the top blockers form a coherent cluster of upgrade failures (#142585)."
+    p2 = "Second paragraph: after a successful upgrade, #143131 deletes gateway.auth silently."
+    p3 = "Third paragraph: the recommendation stays at the prior verdict; nothing is staged."
+    good = _valid_assessment()
+    good["thesis"] = p1
+    raw = json.dumps(good, ensure_ascii=False, indent=2)
+    assert raw.count(f'"thesis": "{p1}"') == 1
+    raw = raw.replace(f'"thesis": "{p1}"', f'"thesis": "{p1}",\n  "{p2}",\n  "{p3}"')
+    assert raw.count(p2) == 1
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(raw)
+
+    parsed = lib.extract_json(raw)
+    assert parsed["thesis"] == f"{p1}\n\n{p2}\n\n{p3}"
+    result = {"success": True, "parsed": parsed, "model": config.PRIMARY_MODEL,
+              "content": raw, "usage": {}}
+    assert agent._reject_if_invalid(result, config.PRIMARY_MODEL, "analyst") == []
+    assert result["parsed"]["recommendation"] == good["recommendation"]
+    assert not (tmp_path / "pf").exists()
+
+
 def test_blocked_deploy_alerts_instead_of_green_summary(tmp_path, monkeypatch):
     """A run the deploy guard refuses (low confidence here) must reach the channel as a 🛑
     "NOT PUBLISHED" notice — never as the green run summary. 2026-09-08: a blocked run went

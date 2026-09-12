@@ -98,6 +98,64 @@ def test_extract_json_drops_an_inlined_think_block():
 def test_extract_json_still_fails_closed_on_garbage():
     out = lib.extract_json('{"a": "unterminated')
     assert out["error"] == "Failed to parse JSON"
+
+
+# The shape glm-5.3-flash wrote on 2026-09-10 and 09-11 (a complete assessment whose
+# multi-paragraph thesis came out as consecutive bare strings), compressed.
+_SPLIT_THESIS = """{
+  "recommendation": "⏸️",
+  "headline": "Upgrade-path breakage dominates this release",
+  "thesis": "First paragraph, citing #142585 and #142770.",
+  "Second paragraph: after a successful upgrade, #143131 deletes gateway.auth.",
+  "Third paragraph: the recommendation stays at ⏸️.",
+  "confidence": "medium",
+  "evidence": {
+    "for_updating": ["Safer updates mechanism (#138839)"],
+    "against_updating": ["#142585 (critical regression)", "#142770"],
+    "neutral": []
+  },
+  "flip_conditions": ["✅ once #142585 is fixed"]
+}"""
+
+
+def test_extract_json_folds_a_thesis_split_into_bare_strings():
+    # Before the fold the strict parse failed and the brace scan returned the `evidence`
+    # sub-object — a dict with no recommendation/headline/thesis, which the schema check
+    # then rejected → the fallback model wrote the run.
+    out = lib.extract_json(_SPLIT_THESIS)
+    assert out["recommendation"] == "⏸️"
+    assert out["thesis"] == (
+        "First paragraph, citing #142585 and #142770.\n\n"
+        "Second paragraph: after a successful upgrade, #143131 deletes gateway.auth.\n\n"
+        "Third paragraph: the recommendation stays at ⏸️."
+    )
+    assert out["confidence"] == "medium"
+    assert out["evidence"]["against_updating"] == ["#142585 (critical regression)", "#142770"]
+    assert out["flip_conditions"] == ["✅ once #142585 is fixed"]
+    # A bare string as the LAST member, and one behind a reasoning preamble (strategy 2).
+    assert lib.extract_json('{"a": "one", "two"}') == {"a": "one\n\ntwo"}
+    assert lib.extract_json('thinking… {"a": "one", "two", "b": 1} done') == {"a": "one\n\ntwo", "b": 1}
+
+
+def test_extract_json_orphan_fold_is_narrow_and_fails_closed_otherwise():
+    # Array elements are strings followed by `,` or `]` too — they are never folded.
+    arr = '{"a": "x", "arr": ["p", "q", "r"], "b": "y"}'
+    assert lib._fold_orphan_strings(arr) == arr
+    assert lib.extract_json(arr) == {"a": "x", "arr": ["p", "q", "r"], "b": "y"}
+    # A bare string after a number, a nested object or an array has nothing to fold into:
+    # the fold leaves the document alone and the extractor behaves as it did before (fails
+    # closed, or — for the nested-object case — surfaces the sub-object the brace scan finds,
+    # which the schema check downstream rejects).
+    for broken in ('{"n": 3, "orphan"}', '{"a": "x", "o": {"k": "v"}, "orphan"}',
+                   '{"a": "x", "l": ["k"], "orphan"}'):
+        assert lib._fold_orphan_strings(broken) == broken
+    assert lib.extract_json('{"n": 3, "orphan"}')["error"] == "Failed to parse JSON"
+    assert lib.extract_json('{"a": "x", "l": ["k"], "orphan"}')["error"] == "Failed to parse JSON"
+    # A legal document is untouched, and the helper never raises on garbage.
+    legal = '{"k": "v", "k2": {"a": ["s", "t"]}, "k3": 1}'
+    assert lib._fold_orphan_strings(legal) == legal
+    for junk in ('}}}{"a"', '{"a": "x", "unterminated', '', '[1, "a", "b"]', '{"a": 1 "b"}'):
+        assert lib._fold_orphan_strings(junk) == junk
     assert lib.extract_json("there is no json here at all")["error"] == "Failed to parse JSON"
 
 
