@@ -3,8 +3,8 @@
 // reads the reactive state, so a component that calls one inside a $derived re-runs when
 // the payload or the stack changes.
 import { app, stackActive, stackPlatforms, stackComponents } from "./state.svelte.js";
-import { VERDICTS, VERDICT_ORDER, PLAT, PLAT_LABEL, COMP, COMP_LABEL, SEVW, STACK_MATCH, PLAT_KEYS,
-         CONF_DESC, CONF_DESC_FRESH } from "./tables.js";
+import { VERDICTS, VERDICT_WAIT, VERDICT_ORDER, PLAT, PLAT_LABEL, COMP, COMP_LABEL, SEVW, STACK_MATCH,
+         PLAT_KEYS, CONF_DESC, CONF_DESC_FRESH } from "./tables.js";
 import { whenText, listNames } from "./fmt.js";
 
 // Components come pre-derived in DATA (render side); just normalize to known keys.
@@ -137,9 +137,18 @@ export function verdictWord(rec) { return (VERDICTS[rec] || {}).label || String(
 export function statusOf() {
   const rec = app.data.recommendation, base = VERDICTS[rec];
   if (!base) return { key: "unknown", label: String(rec || "Assessed"), tone: "tone-muted", rec, early: null };
-  if (isFresh() && rec !== "⏸️") return { key: "wait", label: "Too new to call", tone: "tone-info", rec, early: base.label };
+  if (isFresh() && rec !== "⏸️") return { key: "wait", label: VERDICT_WAIT.label, tone: VERDICT_WAIT.tone, rec, early: base.label };
   const key = rec === "✅" ? "update" : rec === "⚠️" ? "care" : "skip";
   return { key, label: base.label, tone: base.tone, rec, early: null };
+}
+// What a per-key verdict SHOWS — mirrors verdict.shows_wait (Python). A fresh release never
+// shows a green light: while the answer is "Too new to call", a ✅ is only the absence of
+// bad news so far, so tiles and the setup panel print the wait word, not "Safe to update".
+// A fresh ⚠️ is already a caution and shows as itself. Display only — kv.rec is untouched.
+export function shownVerdict(kv) {
+  if (kv.fresh && kv.rec === "✅") return { ...VERDICT_WAIT, wait: true };
+  const v = VERDICTS[kv.rec] || { label: String(kv.rec || ""), tone: "tone-warn" };
+  return { rec: kv.rec, label: v.label, tone: v.tone, wait: false };
 }
 // Per-platform verdicts — the conservative keyVerdict run for each surface alone.
 export function platformVerdicts() {
@@ -174,9 +183,14 @@ export function answerLine(st, pvs) {
   const bl = gateBlockers(), n = bl.length;
   if (st.key === "wait") {
     const spec = fr.version_specific_issues || 0;
-    return ver + " came out " + whenText(fr.days_since_release) + ". Bug reports are still arriving"
-      + (spec ? " — " + spec + " so far name this release" : "")
-      + ", so this is an early read: " + st.early.toLowerCase() + ". Back up first, and check back in a day or two.";
+    const lead = ver + " came out " + whenText(fr.days_since_release) + ". Bug reports are still arriving"
+      + (spec ? " — " + spec + " so far name this release" : "");
+    // A fresh ✅ is the absence of bad news, not an all-clear — never "safe to update" here.
+    if (st.rec === "✅") {
+      return lead + (n ? "" : (spec ? ", none a credible blocker yet" : ", and no credible blocker has shown up yet"))
+        + ". That's an early read, not an all-clear: back up first if you update now, or check back in a day or two.";
+    }
+    return lead + ", so this is an early read: " + st.early.toLowerCase() + ". Back up first, and check back in a day or two.";
   }
   if (st.key === "update") return "No credible blocking issue is confirmed for this release. Back up as usual, then update.";
   if (st.key === "skip") {

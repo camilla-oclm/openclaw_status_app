@@ -1344,6 +1344,42 @@ def test_build_status_is_wait_for_a_fresh_non_skip_release(tmp_path, monkeypatch
     assert d2["status"]["key"] == "skip"
 
 
+def test_a_fresh_safe_verdict_never_prints_as_a_green_light(tmp_path, monkeypatch):
+    # 2026-09-19, the first fresh ✅: the page said "Too new to call" while the badge, the
+    # feed and the SSR verdict line said "safe to update". A fresh ✅ is the absence of bad
+    # news so far — every surface prints the wait word; the recommendation itself is untouched.
+    _isolate_state(tmp_path, monkeypatch)
+    d = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-01T18:00:00+00:00",
+         "assessment": {"recommendation": "✅", "headline": "Fine to update", "known_issues": []}},
+        _fresh_raw())
+    assert d["recommendation"] == "✅" and d["status"]["early_read"] == "Safe to update"
+    out = tmp_path / "index.html"
+    render._write_badge(d, str(out))
+    svg = (tmp_path / "badge.svg").read_text()
+    assert "too new to call" in svg and "safe to update" not in svg and "#385fbc" in svg
+    d["version_history"] = [
+        {"version": "2026.8.2", "recommendation": "✅", "assessed_at": "2026-09-01T18:00:00+00:00"},
+        {"version": "2026.8.1", "recommendation": "✅", "assessed_at": "2026-08-31T18:00:00+00:00"}]
+    render._write_feed(d, str(out))
+    feed = (tmp_path / "feed.xml").read_text()
+    assert "<title>OpenClaw v2026.8.2: too new to call</title>" in feed
+    assert "<title>OpenClaw v2026.8.1: safe to update</title>" in feed   # a past release keeps its verdict
+    body = render._seo_body(d)
+    assert "<strong>Verdict:</strong> Too new to call — no credible blocker so far, not an all-clear yet" in body
+    assert "Safe to update" not in body
+    assert "- Status: Too new to call — early read: no credible blocker so far, not an all-clear yet." in render._llms_txt(d)
+    assert "- Recommendation: ✅ Safe to update" in render._llms_txt(d)   # the machine verdict stays
+    assert '"text": "Too new to call — no credible blocker so far, not an all-clear yet. Fine to update"' in render._json_ld(d)
+    # A fresh ⚠️ is already a caution: it keeps its own word on these surfaces.
+    w = render._build_assessment_data(
+        {"version": "2026.8.2", "assessed_at": "2026-09-01T18:00:00+00:00",
+         "assessment": {"recommendation": "⚠️", "known_issues": []}}, _fresh_raw())
+    render._write_badge(w, str(out))
+    assert "update with care" in (tmp_path / "badge.svg").read_text()
+    assert "<strong>Verdict:</strong> Update with care" in render._seo_body(w)
+
+
 def test_build_status_after_the_fresh_window(tmp_path, monkeypatch):
     _isolate_state(tmp_path, monkeypatch)
     d = render._build_assessment_data(

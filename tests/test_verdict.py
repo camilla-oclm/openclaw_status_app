@@ -223,6 +223,14 @@ def test_fresh_release_reads_too_new_to_call_except_a_skip():
     assert verdict.status_for("⏸️", fresh=True)["key"] == "skip"   # early evidence already negative
 
 
+def test_a_fresh_release_never_shows_a_green_light():
+    assert verdict.shows_wait(verdict.status_for("✅", fresh=True))
+    assert not verdict.shows_wait(verdict.status_for("⚠️", fresh=True))   # already a caution
+    assert not verdict.shows_wait(verdict.status_for("⏸️", fresh=True))
+    assert not verdict.shows_wait(verdict.status_for("✅"))                # settled: the verdict word
+    assert not verdict.shows_wait(None) and not verdict.shows_wait({})
+
+
 def test_status_normalizes_retired_glyph_and_survives_junk():
     assert verdict.status_for("🔄")["key"] == "skip"
     assert verdict.status_for("")["key"] == "unknown"

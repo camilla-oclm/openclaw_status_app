@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-09-19
+
+### Fixed
+- **A fresh release never shows a green light.** v2026.9.5 was the first release to earn a
+  ✅ while still hours old, and the page contradicted itself: "Too new to call" stood over
+  "so this is an early read: safe to update", an evidence-gate chip reading "Safe to update",
+  eleven green platform ticks, and a setup panel headed "Safe to update" whose own text said
+  the setup could not be cleared yet. The wait state had only ever been seen over a ⚠️, where
+  the same words read as a caution. A fresh ✅ is the absence of bad news so far, so every
+  surface that prints a verdict word now prints the wait word for it: the hero sentence says
+  how many reports name the release and that none is a credible blocker yet — an early read,
+  not an all-clear; the gate chip reads "No credible blocker yet"; the platform tiles, the
+  setup panel and the per-component line show the hourglass in the info tone; the badge and
+  the feed's current item read "too new to call"; the server-rendered verdict line, the
+  structured-data answer and the llms.txt status line say "no credible blocker so far, not
+  an all-clear yet". The rule is one function on each side (`verdict.shows_wait`,
+  `shownVerdict` in the client) and is display-only: the recommendation in `latest.json`,
+  the evidence gate and the per-setup softening rules are untouched, and a fresh ⚠️ or ⏸️
+  keeps its own word everywhere. 507 pytest / 62 page UI checks.
+
 ## [1.3.4] - 2026-09-12
 
 ### Fixed

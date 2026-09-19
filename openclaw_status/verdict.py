@@ -314,3 +314,13 @@ def status_for(recommendation: str, fresh: bool = False) -> dict:
     if fresh and rec != "⏸️":
         return {**STATUS_WAIT, "recommendation": rec, "early_read": base["label"]}
     return {**base, "recommendation": rec, "early_read": None}
+
+
+def shows_wait(status: dict | None) -> bool:
+    """A fresh release never shows a green light. While a ✅ sits in the wait state it is
+    only the absence of bad news so far, so every surface that prints a verdict word (badge,
+    feed, SSR, the page's tiles and setup panel — `shownVerdict` is the client twin) prints
+    "Too new to call" instead of "Safe to update". A fresh ⚠️ is already a caution and keeps
+    its own word; the published `recommendation` is untouched either way."""
+    st = status or {}
+    return st.get("key") == STATUS_WAIT["key"] and st.get("recommendation") == "✅"

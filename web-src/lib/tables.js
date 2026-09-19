@@ -7,8 +7,10 @@ export const VERDICTS = {
   "⚠️": { label: "Update with care", tone: "tone-warn" },
   "⏸️": { label: "Skip this version", tone: "tone-bad" },
 };
+// Mirrors verdict.STATUS_WAIT — what a fresh non-skip release is called while reports arrive.
+export const VERDICT_WAIT = { rec: "⏳", label: "Too new to call", tone: "tone-info" };
 export const VERDICT_ORDER = ["✅", "⚠️", "⏸️"];   // increasing caution
-export const VERDICT_TONE = { "✅": "pv-good", "⚠️": "pv-warn", "⏸️": "pv-bad" };
+export const VERDICT_TONE = { "✅": "pv-good", "⚠️": "pv-warn", "⏸️": "pv-bad", "⏳": "pv-info" };
 // Risk height (%) per verdict for the release-health trend — taller = riskier.
 export const RISK = { "✅": 18, "⚠️": 52, "⏸️": 100 };
 

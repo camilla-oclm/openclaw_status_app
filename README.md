@@ -66,7 +66,9 @@ providers** argue it out before anything ships.
   (`latest.json`), an RSS feed, a status badge, and an agent-readable mirror (`llms.txt`), plus
   server-rendered HTML + JSON-LD so search engines and agents read the answer without running JS.
 - **Honest about fresh releases** — a just-dropped version is flagged as an *early read* (back up;
-  the verdict firms up over the next few runs) until version-specific reports accrue.
+  the verdict firms up over the next few runs) until version-specific reports accrue. A fresh ✅
+  never shows as a green light: the page, the badge and the feed read *Too new to call* until
+  the window closes.
 - **Falsifiable & accountable** — every verdict states the concrete *flip conditions* that would
   change it, a track-record table shows whether past first reads held up run over run, the second
   model's review is inspectable on-page (not just claimed), and a one-click *report a problem*
@@ -386,7 +388,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 505 tests, hermetic (no network)
+python3 -m pytest        # 507 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output

@@ -1019,6 +1019,8 @@ _VERDICT_TEXT = {
     "⚠️": (verdict.STATUS["⚠️"]["label"].lower(), "#a8782a"),
     "⏸️": (verdict.STATUS["⏸️"]["label"].lower(), "#c4404f"),
 }
+# A fresh ✅ prints the wait word instead (verdict.shows_wait) — the page's info tone.
+_WAIT_TEXT = (verdict.STATUS_WAIT["label"].lower(), "#385fbc")
 
 
 # XML 1.0 forbids most C0 control bytes outright — only tab/LF/CR are legal, and the
@@ -1068,6 +1070,8 @@ def _write_feed(data: dict, output_path: str) -> None:
     for e in hist[:20]:
         ver = e.get("version", "")
         label = _VERDICT_TEXT.get(e.get("recommendation", ""), ("assessed", ""))[0]
+        if ver and ver == cur and verdict.shows_wait(data.get("status")):
+            label = _WAIT_TEXT[0]
         # Make every item individually addressable: current → the live homepage; a past
         # version we snapshotted → its archive page; otherwise → its GitHub release tag
         # (better than dumping every old item on the homepage).
@@ -1151,6 +1155,8 @@ def _write_badge(data: dict, output_path: str) -> None:
     ver = data.get("version", "")
     label = f"OpenClaw v{ver}" if ver else "OpenClaw"
     msg, color = _VERDICT_TEXT.get(data.get("recommendation", ""), ("assessed", "#6e7681"))
+    if verdict.shows_wait(data.get("status")):
+        msg, color = _WAIT_TEXT
     _atomic_write_text(dest, _badge_svg(label, msg, color))
 
 
@@ -1177,6 +1183,25 @@ def _status_phrase(data: dict) -> str:
     if st.get("key") == "wait" and st.get("label"):
         return str(st["label"])
     return _verdict_phrase(data.get("recommendation", ""))
+
+
+# What a fresh ✅ is, in words: the absence of bad news so far (verdict.shows_wait).
+_WAIT_EARLY_READ = "no credible blocker so far, not an all-clear yet"
+
+
+def _shown_phrase(data: dict, explain: bool = False) -> str:
+    """The verdict word a surface prints beside the answer: the verdict label, except a
+    fresh ✅, which never reads "Safe to update" under "Too new to call". `explain` adds
+    what the early read actually is, where the surface has room for it."""
+    if verdict.shows_wait(data.get("status")):
+        return verdict.STATUS_WAIT["label"] + (f" — {_WAIT_EARLY_READ}" if explain else "")
+    return _verdict_phrase(data.get("recommendation", ""))
+
+
+def _status_line(st: dict) -> str:
+    """The wait-state line of llms.txt / the markdown mirror."""
+    early = _WAIT_EARLY_READ if verdict.shows_wait(st) else st.get("early_read", "")
+    return f"- Status: {st['label']} — early read: {early}."
 
 
 def _recommended_line(data: dict) -> str:
@@ -1264,7 +1289,7 @@ def _llms_txt(data: dict) -> str:
     ]
     st = data.get("status") or {}
     if st.get("key") == "wait":
-        L.append(f"- Status: {st['label']} — early read: {st.get('early_read', '')}.")
+        L.append(_status_line(st))
     eg = data.get("evidence_gate") or {}
     if eg.get("reason"):
         line = f"- Evidence gate: {eg.get('verdict', '')} — {eg['reason']}"
@@ -1359,7 +1384,7 @@ def _llms_full_md(data: dict) -> str:
           f"- Assessed at: {data.get('assessed_at', '')}"]
     st = data.get("status") or {}
     if st.get("key") == "wait":
-        L.append(f"- Status: {st['label']} — early read: {st.get('early_read', '')}.")
+        L.append(_status_line(st))
     eg = data.get("evidence_gate") or {}
     if eg.get("reason"):
         L.append(f"- Evidence gate: {eg.get('verdict', '')} — {eg['reason']}")
@@ -1465,7 +1490,7 @@ def _seo_description(data: dict) -> str:
 def _json_ld(data: dict) -> str:
     site = config.SITE_URL.rstrip("/")
     ver = data.get("version", "")
-    phrase = _verdict_phrase(data.get("recommendation", ""))
+    phrase = _shown_phrase(data)
     desc = _seo_description(data)
     assessed = data.get("assessed_at", "") or ""
     webpage = {
@@ -1479,7 +1504,7 @@ def _json_ld(data: dict) -> str:
     if assessed:
         webpage["datePublished"] = assessed
         webpage["dateModified"] = assessed
-    answer = f"{phrase}. {desc}"
+    answer = f"{_shown_phrase(data, explain=True)}. {desc}"
     graph = {"@context": "https://schema.org", "@graph": [
         {"@type": "WebSite", "@id": f"{site}/#website", "url": f"{site}/", "name": "ClawStat.us",
          "description": "Automated, evidence-backed verdicts on whether to update each OpenClaw release."},
@@ -1539,12 +1564,11 @@ def _seo_body(data: dict) -> str:
     """Server-rendered crawlable answer placed inside #app; the JS replaces it on load."""
     e = _html_escape
     ver = data.get("version", "")
-    phrase = _verdict_phrase(data.get("recommendation", ""))
     conf = data.get("confidence", "")
     assessed = (data.get("assessed_at", "") or "")[:10]
     h1 = f"Should you update OpenClaw v{ver}? — {_status_phrase(data)}" if ver else "Should you update OpenClaw?"
     out = ['<article class="ssr">', f"<h1>{e(h1)}</h1>"]
-    verdict_line = f"<strong>Verdict:</strong> {e(phrase)}"
+    verdict_line = f"<strong>Verdict:</strong> {e(_shown_phrase(data, explain=True))}"
     if conf:
         verdict_line += f" ({e(conf)} confidence)"
     if assessed:

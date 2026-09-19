@@ -403,6 +403,46 @@ const { puppeteer, CHROME, pageFor, LONG_TITLE, DATA } = require("./fixture.js")
   await page.goto(base + "/", { waitUntil: "networkidle0" });
   t("no chain: Fixes tile scope stays 'in this release'",
     (await fixesTileSub()) === "in this release");
+
+  // A fresh release never shows a green light (2026-09-19, the first fresh ✅: "Too new to
+  // call" sat over a green "Safe to update" in the sentence, the gate chip, every tile and
+  // the setup panel). A fresh ⚠️ is already a caution and keeps its own word.
+  const freshLook = () => page.evaluate(() => ({
+    word: (document.querySelector(".hero .verdict .answer-word") || {}).textContent,
+    line: (document.querySelector(".hero .answer-line") || {}).textContent || "",
+    hero: (document.querySelector(".hero") || {}).textContent || "",
+    gate: (Array.from(document.querySelectorAll(".conf-row .chip")).find((c) => /Evidence gate/.test(c.textContent)) || {}).textContent || "",
+    tiles: Array.from(document.querySelectorAll(".setup .chips:not(.comp-chips) .pick[data-k]"))
+      .map((b) => ({ pv: (b.querySelector(".pv") || {}).textContent, cls: b.className, aria: b.getAttribute("aria-label") || "" })),
+    label: (document.querySelector(".setup .risk .sv-l") || {}).textContent,
+    panelCls: (document.querySelector(".setup .risk") || {}).className || "",
+    head: (document.querySelector(".setup .risk .rh") || {}).textContent || "",
+  }));
+  const keep = { rec: DATA.recommendation, fr: DATA.freshness, ki: DATA.known_issues, eg: DATA.evidence_gate };
+  Object.assign(DATA, { recommendation: "✅", known_issues: [],
+    freshness: { fresh: true, days_since_release: 0, version_specific_issues: 10 },
+    evidence_gate: { verdict: "✅", blockers: [], reason: "No credible blocking issue is confirmed for this version." } });
+  await page.goto(base + "/?stack=windows", { waitUntil: "networkidle0" });
+  const fg = await freshLook();
+  t("fresh ✅: the answer is 'Too new to call' and the sentence is not an all-clear",
+    fg.word === "Too new to call" && /10 so far name this release, none a credible blocker yet/.test(fg.line) &&
+    /not an all-clear/.test(fg.line));
+  t("fresh ✅: 'Safe to update' appears nowhere in the hero", !/safe to update/i.test(fg.hero));
+  t("fresh ✅: the gate chip reads 'No credible blocker yet'", /No credible blocker yet/.test(fg.gate));
+  t("fresh ✅: every tile shows the wait glyph in the info tone",
+    fg.tiles.length === 11 && fg.tiles.every((c) => c.pv === "⏳" && /pv-info/.test(c.cls) && /: Too new to call$/.test(c.aria)));
+  t("fresh ✅: the setup panel reads 'Too new to call', in the info tone, without repeating it",
+    fg.label === "Too new to call" && /tone-info/.test(fg.panelCls) &&
+    /^Nothing blocking is reported for your stack so far/.test(fg.head) && /can't clear your setup yet/.test(fg.head));
+  Object.assign(DATA, { recommendation: "⚠️", evidence_gate: { verdict: "⚠️", blockers: [], reason: "r" } });
+  await page.goto(base + "/?stack=windows", { waitUntil: "networkidle0" });
+  const fw = await freshLook();
+  t("fresh ⚠️ keeps its own word on the tiles and the setup panel",
+    fw.word === "Too new to call" && /early read: update with care/.test(fw.line) &&
+    fw.tiles.every((c) => c.pv === "⚠️" && /pv-warn/.test(c.cls)) &&
+    fw.label === "Update with care" && /^Too new to call for your stack/.test(fw.head));
+  Object.assign(DATA, { recommendation: keep.rec, freshness: keep.fr, known_issues: keep.ki });
+  if (keep.eg === undefined) delete DATA.evidence_gate; else DATA.evidence_gate = keep.eg;
   server.close();
 
   t("no page errors", errs.length === 0);

@@ -3,8 +3,8 @@
   // the component pickers behind a toggle, and the per-setup panel.
   import { flushSync } from "svelte";
   import { app, stackActive, stackComponents, toggleKey, clearStack, shareLink } from "../lib/state.svelte.js";
-  import { VERDICTS, VERDICT_TONE, COMP } from "../lib/tables.js";
-  import { keyVerdict, stripSummary, isFresh, setupVerdict } from "../lib/verdict.js";
+  import { VERDICT_TONE, COMP } from "../lib/tables.js";
+  import { keyVerdict, stripSummary, isFresh, setupVerdict, shownVerdict } from "../lib/verdict.js";
   import { announce } from "../lib/dom.js";
   import Icon from "./Icon.svelte";
   import Mark from "./Mark.svelte";
@@ -28,12 +28,13 @@
     const n = kv.blockers.length;
     return n ? (n + " blocking issue" + (n === 1 ? "" : "s") + " land" + (n === 1 ? "s" : "") + " here")
       : (kv.softened ? "no blocking issue is confirmed here — eases one notch from the global verdict"
-      : (kv.fresh ? "fresh release — too new to soften" : "matches the global verdict"));
+      : (kv.fresh ? (kv.rec === "✅" ? "fresh release — nothing blocking reported here yet" : "fresh release — too new to soften")
+      : "matches the global verdict"));
   }
   function afterStack() {
     if (stackActive()) {
       const svd = setupVerdict();
-      announce("For your setup: " + ((VERDICTS[svd.rec] || {}).label || String(svd.rec)));
+      announce("For your setup: " + shownVerdict(svd).label);
     } else {
       announce("Setup cleared — showing the global verdict.");
     }
@@ -53,7 +54,7 @@
     } catch (e) { fail(); }
   }
 </script>
-{#snippet pickBtn(k, ic, label, kv, idx)}{@const v = VERDICTS[kv.rec] || { label: String(kv.rec || "") }}<button class="pick {VERDICT_TONE[kv.rec] || ''}" type="button" style="--i:{idx}" aria-pressed={app.stack[k] ? "true" : "false"} data-k={k} aria-label="{label}: {v.label}" title="{label}: {v.label} — {why(kv)}. Tap to add it to your setup." onclick={() => pick(k)}><Icon k={ic} size={13} /><span class="pk">{label}</span><span class="pv" aria-hidden="true"><Mark rec={kv.rec} /></span></button>{/snippet}
+{#snippet pickBtn(k, ic, label, kv, idx)}{@const v = shownVerdict(kv)}<button class="pick {VERDICT_TONE[v.rec] || ''}" type="button" style="--i:{idx}" aria-pressed={app.stack[k] ? "true" : "false"} data-k={k} aria-label="{label}: {v.label}" title="{label}: {v.label} — {why(kv)}. Tap to add it to your setup." onclick={() => pick(k)}><Icon k={ic} size={13} /><span class="pk">{label}</span><span class="pv" aria-hidden="true"><Mark rec={v.rec} /></span></button>{/snippet}
 <div class="setup glass" id="setup">
   <div class="sec-head setup-head"><h2 class="sec-title">Your setup</h2><span class="sec-note" id="strip-note">{note}</span></div>
   <div class="setup-intro">Each platform shows its own verdict — tap what you run and the answer below is tuned to your setup (saved on this device).</div>

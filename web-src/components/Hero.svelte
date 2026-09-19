@@ -5,7 +5,7 @@
   import { flushSync } from "svelte";
   import { app } from "../lib/state.svelte.js";
   import { VERDICTS } from "../lib/tables.js";
-  import { statusOf, platformVerdicts, answerLine, confNote, verdictWord } from "../lib/verdict.js";
+  import { statusOf, platformVerdicts, answerLine, confNote, verdictWord, isFresh } from "../lib/verdict.js";
   import { fmtDate, timeAgo, whenText, cap, safeUrl } from "../lib/fmt.js";
   import Mark from "./Mark.svelte";
   import Icon from "./Icon.svelte";
@@ -43,6 +43,8 @@
     : "An independent second model flagged details, but the analyst's re-check pass failed this run — shown is the analyst's original read.");
   const eg = $derived(D.evidence_gate || {});
   const egTip = "Deterministic floor computed from the issue evidence alone (open high/critical issues confirmed for this version with a person or the community behind them). The analyst may only be MORE cautious than it, with a cited reason.";
+  // On a fresh release a ✅ gate is "nothing blocking yet", not the verdict word.
+  const egWord = $derived(isFresh() && eg.verdict === "✅" ? "No credible blocker yet" : verdictWord(eg.verdict));
   const glyph = $derived(st.key === "wait" ? "⏳" : (D.recommendation || "?"));
   const toneOf = (r) => (VERDICTS[r] || {}).tone || "tone-muted";
   let rvOpen = $state(false);
@@ -56,7 +58,7 @@
     <p class="answer-line">{answerLine(st, pvs)}</p>
     {#if String(D.confidence || "").toLowerCase() === "low"}<div class="banner"><span class="bi" aria-hidden="true"><Mark rec="⚠️" /></span><span>This assessment was made with low confidence — the underlying data may be incomplete. Treat the verdict as a weak signal and verify against the linked issues before deciding.</span></div>{/if}
     {#if D.headline}<p class="hero-headline"><span class="hh-k">Analyst</span>{D.headline}</p>{/if}
-    <div class="conf-row"><span class="chip lvl-{conf}" title={confNote(conf)}>Confidence: <b>{cap(conf)}</b></span>{#if pre.tag}{#if preUrl}<a class="chip chip-link" href={preUrl} target="_blank" rel="noopener noreferrer" title="View {pre.tag} on GitHub. {preTip}"><b>Fix staged: {pre.tag}</b> (pre-release)<span class="v-ext" aria-hidden="true">↗</span></a>{:else}<span class="chip" title={preTip}><b>Fix staged: {pre.tag}</b> (pre-release)</span>{/if}{/if}{#if rv.validated}<button class="chip" type="button" title="{rvTip} Click for what it said." aria-expanded={rvOpen ? "true" : "false"} aria-controls="rev-detail" onclick={() => { rvOpen = !rvOpen; flushSync(); }}><Icon k="review" size={13} /><b>{#if revised}Revised <span class="vgw {toneOf(rv.primary_recommendation)}"><Mark rec={rv.primary_recommendation} size={13} /></span> → <span class="vgw {toneOf(D.recommendation)}"><Mark rec={D.recommendation} size={13} /></span> on review{:else}{rvText}{/if}</b><span class="cx" aria-hidden="true">▾</span></button>{:else if rv.unreviewed}<span class="chip" title="The independent validator model was unavailable on this run, so this verdict reflects a single model — confidence is capped and you should sanity-check it against the linked issues."><Icon k="review" size={13} /><b>Single model — validator unavailable</b></span>{/if}{#if eg.verdict}<span class="chip" title="{egTip} {eg.reason || ''}">Evidence gate: <b class={toneOf(eg.verdict)}><Mark rec={eg.verdict} size={13} /> {verdictWord(eg.verdict)}</b></span>{/if}</div>
+    <div class="conf-row"><span class="chip lvl-{conf}" title={confNote(conf)}>Confidence: <b>{cap(conf)}</b></span>{#if pre.tag}{#if preUrl}<a class="chip chip-link" href={preUrl} target="_blank" rel="noopener noreferrer" title="View {pre.tag} on GitHub. {preTip}"><b>Fix staged: {pre.tag}</b> (pre-release)<span class="v-ext" aria-hidden="true">↗</span></a>{:else}<span class="chip" title={preTip}><b>Fix staged: {pre.tag}</b> (pre-release)</span>{/if}{/if}{#if rv.validated}<button class="chip" type="button" title="{rvTip} Click for what it said." aria-expanded={rvOpen ? "true" : "false"} aria-controls="rev-detail" onclick={() => { rvOpen = !rvOpen; flushSync(); }}><Icon k="review" size={13} /><b>{#if revised}Revised <span class="vgw {toneOf(rv.primary_recommendation)}"><Mark rec={rv.primary_recommendation} size={13} /></span> → <span class="vgw {toneOf(D.recommendation)}"><Mark rec={D.recommendation} size={13} /></span> on review{:else}{rvText}{/if}</b><span class="cx" aria-hidden="true">▾</span></button>{:else if rv.unreviewed}<span class="chip" title="The independent validator model was unavailable on this run, so this verdict reflects a single model — confidence is capped and you should sanity-check it against the linked issues."><Icon k="review" size={13} /><b>Single model — validator unavailable</b></span>{/if}{#if eg.verdict}<span class="chip" title="{egTip} {eg.reason || ''}">Evidence gate: <b class={toneOf(eg.verdict)}><Mark rec={eg.verdict} size={13} /> {egWord}</b></span>{/if}</div>
     {#if rv.validated}<ReviewDetail {rv} hidden={!rvOpen} />{/if}
   </div>
   <Setup {pvs} />
