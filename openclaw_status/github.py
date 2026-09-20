@@ -361,7 +361,11 @@ _BUG_KEYWORDS = ("regression", "crash", "data-loss", "data loss", "dataloss")
 # inclusion search in the scout so a severe-but-unpopular issue can't fall outside the broad
 # recency cut (audit H2: P0 — the most-severe priority — and the serious-impact labels were
 # missing as guaranteed searches while the LESS-severe P1 was guaranteed in).
-_GUARANTEED_LABELS = ("regression", "bug:crash", "P0", "P1") + _SERIOUS_IMPACT
+# The first four assert a DEFECT (or a top priority) and therefore override a feature
+# marker in `is_feature`. The serious impact labels do NOT: they name a harm AREA, and the
+# triage bot puts them on feature requests that merely touch that area.
+_DEFECT_LABELS = ("regression", "bug:crash", "P0", "P1")
+_GUARANTEED_LABELS = _DEFECT_LABELS + _SERIOUS_IMPACT
 
 
 def _label_q(name: str) -> str:
@@ -437,10 +441,12 @@ def extract_closing_refs(body: str) -> set:
 def is_feature(title: str, labels) -> bool:
     """True if the issue is a feature request / proposal rather than a defect."""
     low = [str(l).lower() for l in (labels or [])]
-    # A guaranteed-severity signal (P0/P1/regression/bug:crash/impact:*) means this is a real
-    # defect the scout MUST NOT drop — even if it also carries a feature/proposal label or its
-    # title matches a feature marker. This preserves the guaranteed-inclusion backstop (D07).
-    if any(g.lower() in low for g in _GUARANTEED_LABELS):
+    # A defect signal (P0/P1/regression/bug:crash) means this is a real defect the scout MUST
+    # NOT drop — even if it also carries a feature/proposal label or its title matches a
+    # feature marker. This preserves the guaranteed-inclusion backstop (D07). An `impact:*`
+    # label alone does not count: a "[Feature]:" request tagged impact:auth-provider by the
+    # triage bot was floored to high and sat in the evidence gate as a credible blocker.
+    if any(g.lower() in low for g in _DEFECT_LABELS):
         return False
     if any(f in low for f in _FEATURE_LABELS):
         return True

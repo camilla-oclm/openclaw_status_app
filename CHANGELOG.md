@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2026-09-20
+
+### Fixed
+- **A feature request is no longer counted as a blocker because of an `impact:*` label.**
+  The scout drops feature requests, with one backstop: an issue carrying a
+  guaranteed-severity label was never treated as a feature, so a mis-titled breakage could
+  not be lost. That list included the serious `impact:*` labels — but those name a harm
+  *area*, and the upstream triage bot puts them on feature requests that merely touch the
+  area. On v2026.9.5 a "[Feature]:" request tagged `impact:auth-provider` (P2, no
+  reactions) was floored to high severity and sat in the evidence gate as one of three
+  credible blockers; a second one tagged `impact:security` was on the page at high. With
+  enough 👍 such a request would have met the widespread trigger and held a release at ⏸️.
+  Now only a defect label — `regression`, `bug:crash`, `P0`, `P1` — overrides a feature
+  title or label; every `impact:*` label keeps its guaranteed search. The ledger re-applies
+  the filter to what it already stores, for every version (the best-version pointer counts
+  the older versions' rows), so records admitted under the old rule leave on the next run
+  instead of staying forever — nothing else revisits them once the scout stops returning
+  them. Replayed on the live payload: 50 issues → 48, gate ⚠️ on two blockers instead of
+  three. 509 pytest.
+
 ## [1.3.5] - 2026-09-19
 
 ### Fixed

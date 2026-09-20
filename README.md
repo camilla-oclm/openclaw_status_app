@@ -166,7 +166,10 @@ search artifact. Community engagement (👍 + comments) breaks ties *within* a w
 can never lift a loud issue across a severity/version tier. The documented invariants hold:
 an issue confirmed in the assessed version outranks a critical about some *other* version,
 but a trivial version mention can't outrank a real critical. Feature requests and
-proposals are dropped — a wished-for feature is no reason to skip an update. Finally, an
+proposals are dropped — a wished-for feature is no reason to skip an update. A defect label
+(`regression`, `bug:crash`, `P0`, `P1`) overrides a feature title, so a mis-titled breakage is
+kept; an `impact:*` label alone does not, because it names a harm *area* and the triage bot puts
+it on feature requests that merely touch that area. Finally, an
 issue is marked **fixed** only if the release/pre-release body explicitly closes it
 (`fixes/closes/resolves #N`), not for any bare `#N` (usually a PR number).
 
@@ -388,7 +391,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 507 tests, hermetic (no network)
+python3 -m pytest        # 509 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output

@@ -255,6 +255,27 @@ def test_closed_issue_handling(led):
     assert two["state"] == "open" and two["weight"] == three["weight"]
 
 
+def test_a_stored_feature_request_is_purged_from_every_version(led):
+    # A record admitted under an older, looser feature rule: the scout no longer returns it
+    # and the by-number refresh skips it, so the merge itself must re-apply the filter — for
+    # the older versions too, whose rows the best-version pointer counts as blockers.
+    feature = {"title": "[Feature]: Support Luna Reserve", "labels": ["P2", "impact:auth-provider"]}
+    seeded = {v: {"first_seen": "2026-01-01T00:00:00Z", "last_seen": f"2026-01-0{n}T00:00:00Z",
+                  "closures": {"7": "completed"},
+                  "issues": {"7": dict(_issue(7), **feature),
+                             "8": dict(_issue(8), title="[Bug]: auth loop", labels=["impact:auth-provider"]),
+                             "9": dict(_issue(9), title="[Feature]: but it crashes", labels=["bug:crash"])}}
+              for n, v in enumerate(("1.0", "1.1"), start=1)}
+    config.ISSUE_LEDGER_FILE.write_text(json.dumps(seeded))
+
+    out = ledger.merge_version_issues("1.1", [_issue(1)])
+    assert {i["number"] for i in out} == {1, 8, 9}
+    stored = json.loads(config.ISSUE_LEDGER_FILE.read_text())
+    for v in ("1.0", "1.1"):
+        assert "7" not in stored[v]["issues"] and "7" not in stored[v]["closures"]
+        assert {"8", "9"} <= set(stored[v]["issues"])   # defects and defect-labeled features stay
+
+
 def test_closure_memory_and_stats(led):
     # Completed and noise closures are remembered; reopen clears the memory.
     ledger.merge_version_issues(

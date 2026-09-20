@@ -160,12 +160,26 @@ def test_is_feature_by_title():
 
 
 def test_is_feature_never_drops_a_guaranteed_severity_issue():
-    # D07: an issue carrying a guaranteed severity signal (P0/P1/regression/bug:crash/impact:*)
-    # is a real defect the scout must NOT drop — even if its title matches a feature marker or it
-    # also bears a feature/proposal label — or the guaranteed-inclusion backstop is defeated.
+    # D07: an issue carrying a DEFECT signal (P0/P1/regression/bug:crash) is a real defect the
+    # scout must NOT drop — even if its title matches a feature marker or it also bears a
+    # feature/proposal label — or the guaranteed-inclusion backstop is defeated.
     assert github.is_feature("proposal: gateway P0 crash on boot", ["P0"]) is False
     assert github.is_feature("Crash on the feature request button", ["bug:crash", "P1"]) is False
     assert github.is_feature("data-loss on sync", ["P0", "proposal"]) is False
+    assert github.is_feature("[Feature]: but it regressed", ["regression", "impact:security"]) is False
+
+
+def test_an_impact_label_alone_does_not_rescue_a_feature_request():
+    # The triage bot puts impact:* on feature requests that touch a harm AREA. One such
+    # "[Feature]:" (P2 + impact:auth-provider, 0 👍) was floored to high and counted as a
+    # credible blocker by the evidence gate; a popular one could have tripped the ⏸️ trigger.
+    labels = ["P2", "clawsweeper:no-new-fix-pr", "impact:auth-provider"]
+    assert github.is_feature("[Feature]: Support Luna Reserve in Codex harness", labels) is True
+    assert github.is_feature("[Feature]: Expose toolPolicy for Talk sessions", ["impact:security"]) is True
+    assert github.is_feature("anything", ["enhancement", "impact:data-loss"]) is True
+    # …while the same labels on a defect keep it, and every impact label still gets its search.
+    assert github.is_feature("[Bug]: provider auth loop after update", labels) is False
+    assert set(github._SERIOUS_IMPACT) <= set(github._GUARANTEED_LABELS)
 
 
 def test_is_feature_title_markers_are_prefix_anchored():

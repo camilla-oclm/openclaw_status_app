@@ -138,6 +138,20 @@ def _rederive_stored(store: dict, release_date: str, version: str = "") -> None:
             del store[key]   # irrelevant to this release, or upstream-closed as not-a-defect
 
 
+def _drop_features(entry: dict) -> None:
+    """Re-apply the scout's feature filter to one version's stored entry.
+
+    Features never reach storage — but a record admitted under an older, looser rule
+    would otherwise stay forever: the scout no longer returns it and the by-number
+    refresh skips it, so nothing revisits it, while the evidence gate and the
+    best-version pointer keep counting it as a blocker."""
+    store = entry.get("issues") or {}
+    for key in [k for k, rec in store.items()
+                if github.is_feature(rec.get("title", ""), rec.get("labels") or [])]:
+        del store[key]
+        (entry.get("closures") or {}).pop(key, None)
+
+
 def merge_version_issues(version: str, scouted: list, now: str | None = None,
                          release_date: str = "") -> list:
     """Upsert the version-relevant scouted issues into the ledger for `version` and
@@ -188,6 +202,8 @@ def merge_version_issues(version: str, scouted: list, now: str | None = None,
 
     entry["last_seen"] = now
     _rederive_stored(store, release_date, version)   # self-correct the whole accumulated set
+    for stored in ledger.values():   # every version: the best-version pointer reads the older ones
+        _drop_features(stored)
 
     # Cap per version (keep the highest-ranked) so the ledger / prompt can't grow without
     # bound, then prune to the most-recently-seen versions.
