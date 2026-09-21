@@ -685,6 +685,24 @@ def test_build_review_unreviewed_validator_not_marked_validated():
     rv = render._build_assessment_data(assessment_raw, {"sources": {}})["review"]
     assert rv["validated"] is False         # the chip's gate — no false "2nd model agreed"
     assert rv["unreviewed"] is True
+    assert rv["validator_fallback"] is False
+
+
+def test_build_review_carries_the_validator_fallback_flag():
+    """A review done by a fallback validator seat is still a real second-model review
+    (`validated`), and latest.json says which kind it was — the only off-box tell."""
+    assessment_raw = {
+        "assessment": {"recommendation": "⏸️", "known_issues": []},
+        "version": "2.0", "validator_model": "qwen/x", "validator_agrees": True,
+        "validator_unreviewed": False, "validator_fallback": True,
+    }
+    rv = render._build_assessment_data(assessment_raw, {"sources": {}})["review"]
+    assert rv["validated"] is True and rv["unreviewed"] is False
+    assert rv["validator_fallback"] is True
+    # records written before the field existed
+    del assessment_raw["validator_fallback"]
+    rv = render._build_assessment_data(assessment_raw, {"sources": {}})["review"]
+    assert rv["validator_fallback"] is False
 
 
 def test_build_detects_workaround_signal():

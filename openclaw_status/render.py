@@ -868,6 +868,9 @@ def _build_assessment_data(assessment_raw: dict, raw: dict) -> dict:
             "validated": bool(assessment_raw.get("validator_model"))
                          and not assessment_raw.get("validator_unreviewed"),
             "unreviewed": bool(assessment_raw.get("validator_unreviewed")),
+            # The review came from a config.VALIDATOR_FALLBACK_MODELS seat (the validator's
+            # own call failed). Not shown on the page; an ops signal readable off-box.
+            "validator_fallback": bool(assessment_raw.get("validator_fallback")),
             "agreed": bool(assessment_raw.get("validator_agrees", True)),
             "refined": bool(assessment_raw.get("refined", False)),
             "primary_recommendation": _norm_rec(

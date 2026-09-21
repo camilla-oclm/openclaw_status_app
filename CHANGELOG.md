@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.9] - 2026-09-21
+
+### Changed
+- **The validator seat moves to `deepseek/deepseek-v4.1-flash`, and it finally has a
+  fallback.** Three of the last four runs published without a second-model review: the
+  validator (`upstage/solar-pro4`) returned an empty reply once, then hit the 600 s
+  wall-clock cap on two runs in a row while its endpoint was listed at 99.5% uptime — and
+  with no second reviewer behind it, one bad call was enough to ship the analyst's read
+  unreviewed. Replayed against that day's real collect, solar burned its entire 32k output
+  budget reasoning and returned no content once, and needed 121–508 s when it did answer. In
+  the same seeded-defect A/B (ten planted errors, a clean pass and a corrected sample),
+  deepseek-v4.1-flash caught 10/10, raised no material flag on the corrected sample and
+  finished 16 of 16 calls in 16–59 s, at about half a cent a call. Its calls carry a provider
+  allowlist (`config.VALIDATOR_PROVIDER`: first-party, then two probed hosts, OpenRouter's
+  pool fallback off) because the model fans out over 22 hosts, the same long tail that served
+  the analyst's trickling and empty replies two weeks ago.
+- **A validator call that fails, or a reply that can't be parsed, now hands the review to
+  `config.VALIDATOR_FALLBACK_MODELS`** (`qwen/qwen3.7-plus`, the seat's previous holder and a
+  fourth distinct provider, 10/10 in the same A/B). Only when every seat fails does the run
+  publish flagged as unreviewed, exactly as before. A seat that was billed for an unusable
+  reply is logged as discarded spend; a call that never completed is not counted.
+  `assessment.json` names the model that actually reviewed, and `latest.json` gains
+  `review.validator_fallback` so a fallback review is visible from outside the box.
+  532 pytest.
+
 ## [1.3.8] - 2026-09-21
 
 ### Fixed

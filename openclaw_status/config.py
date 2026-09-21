@@ -18,7 +18,7 @@ WEB_DIR = ROOT / "web"
 # openclaw_status.__version__ (a test pins them equal); surfaced additively in
 # latest.json (`app_version`) and the page footer. Bump on release, then cut the
 # matching annotated git tag (e.g. `v1.0.0`) from this value.
-APP_VERSION = "1.3.8"
+APP_VERSION = "1.3.9"
 
 # ── .env ────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env")
@@ -117,22 +117,46 @@ PRIMARY_REASONING = _REASONING_HIGH
 # probed live 2026-09-10) and every analyst call lands on the fallback seat — so
 # re-check that listing when editing; a run cost settling at ~2× the usual is the tell.
 # Rollback = None (default routing).
-# Deliberately NOT applied to the validator/fallback seats: different pools.
+# Not shared with the other seats — different pools; the validator carries its own
+# allowlist (VALIDATOR_PROVIDER), the two fallback seats use default routing.
 PRIMARY_PROVIDER = {"order": ["z-ai", "nextbit", "novita"], "allow_fallbacks": False}
 # Independent reviewer — deliberately a *different* model from the analyst, so it
 # catches the primary's blind spots instead of rubber-stamping its own reasoning.
-# 2026-09-02: qwen/qwen3.7-plus → upstage/solar-pro4 after a 3-seed-set A/B over every
-# OpenRouter model released since May inside qwen's price band: equal 15/15 catch-rate,
-# more thorough on real defects (16/0 true/false flags vs 11), agrees on a correct
-# assessment, ~1/8 the cost ($0.0010 vs $0.0083 per call), same latency (~45 s),
-# Upstage first-party at 99.9% uptime. solar-pro4 reasons, so the validator call gets the
-# wide token budget too (see _step_validator) or its JSON would truncate like the
-# analyst's did. Rollback = the previous line: "qwen/qwen3.7-plus".
-VALIDATOR_MODEL = "upstage/solar-pro4"
+# Seat history: qwen/qwen3.7-plus → upstage/solar-pro4 (2026-09-02, equal catch-rate at
+# ~1/8 the cost) → deepseek/deepseek-v4.1-flash (2026-09-21). solar stopped finishing on
+# the v2026.9.5 payload: three of four runs on 09-20/21 published
+# UNREVIEWED (an empty reply, then the 600 s wall-clock cap twice in a row, with the
+# endpoint listed at 99.5% uptime). Replayed on that day's real collect it burned the whole
+# 32k output budget reasoning and returned no content once, and needed 121–508 s otherwise.
+# Same seeded-defect A/B, same payload: deepseek-v4.1-flash caught 10/10 planted defects,
+# raised no material flag on a corrected sample, and finished 16/16 calls in 16–59 s
+# (median 36 s) at ~$0.005/call. It reasons, so the validator call gets the wide token
+# budget too (see _step_validator) or its JSON would truncate like the analyst's did.
+# Rollback = "qwen/qwen3.7-plus" with VALIDATOR_PROVIDER = None.
+VALIDATOR_MODEL = "deepseek/deepseek-v4.1-flash"
 VALIDATOR_REASONING = _REASONING_HIGH
+# Provider allowlist for the validator's own call, same shape and reasoning as
+# PRIMARY_PROVIDER: this model fans out over 22 hosts, among them the long-tail hosts
+# behind the analyst's 09-08/09 trickling and empty replies (Phala, StreamLake, Wafer), and
+# its predecessor deepseek-v4-flash was rejected for this seat twice on 09-02 for
+# wall-clock runaways under default routing. First-party served every A/B call; the other
+# two slugs were probed live. With OpenRouter's pool fallback off, a call these hosts can't
+# serve fails fast and VALIDATOR_FALLBACK_MODELS takes the review. None = default routing.
+VALIDATOR_PROVIDER = {"order": ["deepseek", "fireworks", "novita"], "allow_fallbacks": False}
+# Second reviewer, tried in order when the validator's call fails or its reply is unusable.
+# Until 2026-09-21 the seat had no fallback, so one bad validator call published the
+# analyst's read UNREVIEWED. qwen3.7-plus held the seat in production until 09-02 and went
+# 4/4 in the 09-21 A/B (10/10 planted defects, 39–47 s) — and it is a fourth distinct
+# provider (not z-ai, deepseek or minimax), so the review stays independent of whichever
+# model wrote the analysis. It runs only when the validator failed, on default routing, with
+# whatever the run's wall-clock budget has left: after a typical analyst call plus a full
+# 600 s validator timeout that is ~7 min, against its ~45 s norm. [] = no second reviewer.
+VALIDATOR_FALLBACK_MODELS = [
+    {"model": "qwen/qwen3.7-plus", "reasoning": _REASONING_HIGH},
+]
 
 # Fallback (used if the primary fails). minimax-m3 is a third distinct provider —
-# different from both the analyst (z-ai) and the upstage validator — so a primary
+# different from both the analyst (z-ai) and the deepseek validator — so a primary
 # outage neither sinks the run nor collapses analyst+validator onto the same model.
 # IDs are real OpenRouter slugs (provider/model) — a wrong slug returns HTTP 400
 # and burns a retry, so keep them in sync with https://openrouter.ai/api/v1/models.
@@ -165,7 +189,7 @@ MONTHLY_COST_LIMIT = 10.0    # USD
 # generous ceiling rather than a tight one: eval runs used 3.7k-7.7k tokens_out
 # (18-24% of the cap), so there's no starvation risk to size against. Still far
 # under every seat's output ceiling (glm-5.3-flash 131k, minimax 512k,
-# solar-pro4 131k) and worth < $0.03/call at every seat's current prices.
+# deepseek-v4.1-flash 384k) and worth < $0.03/call at every seat's current prices.
 # Time is the real cost of a bigger cap — see PIPELINE_BUDGET_S, sized with it
 # (that sizing, too, is now a ceiling with headroom, not a requirement). The
 # validator reasons too, so _step_validator passes it this same budget (its

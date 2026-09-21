@@ -502,6 +502,19 @@ def test_fallbacks_do_not_repeat_primary():
     assert config.PRIMARY_MODEL not in {fb["model"] for fb in config.FALLBACK_MODELS}
 
 
+def test_validator_fallbacks_are_distinct_seats():
+    # A second reviewer has to differ from the validator that just failed AND from every
+    # model that can write the analysis — otherwise the "independent review" is the failed
+    # seat retried, or the analyst grading itself.
+    slugs = [fb["model"] for fb in config.VALIDATOR_FALLBACK_MODELS]
+    for fb in config.VALIDATOR_FALLBACK_MODELS:
+        assert set(fb) >= {"model", "reasoning"}
+        assert fb["model"].count("/") == 1, f"bad slug: {fb['model']}"
+    assert len(slugs) == len(set(slugs))
+    writers = {config.PRIMARY_MODEL, *(fb["model"] for fb in config.FALLBACK_MODELS)}
+    assert not set(slugs) & (writers | {config.VALIDATOR_MODEL})
+
+
 def test_assessment_max_tokens_exceeds_default():
     # The whole point is to clear the 4k openrouter_call default that truncated JSON.
     assert config.ASSESSMENT_MAX_TOKENS > 4000
@@ -1209,6 +1222,144 @@ def test_pipeline_persists_validator_review(tmp_path, monkeypatch):
     assert saved["validator_review"]["missed_issues"] == ["#77"]
 
 
+_TIMEOUT = "call exceeded wall-clock budget (600s)"
+_USAGE = {"tokens_in": 1, "tokens_out": 1, "latency_ms": 1}
+
+
+def _pipeline_files(tmp_path, monkeypatch):
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    monkeypatch.setattr(config, "PARSE_FAILURE_DIR", tmp_path / "pf")
+
+
+def test_validator_timeout_hands_the_review_to_the_fallback_seat(tmp_path, monkeypatch, capsys):
+    """The 2026-09-21 07:19Z and 09:17Z runs: solar-pro4 hit the 600 s wall-clock cap and the
+    analyst's read published UNREVIEWED both times. Now the next validator seat reviews it:
+    the run is validated, the record names the model that actually reviewed, and the
+    timed-out call (never billed) is not counted as an API call."""
+    _pipeline_files(tmp_path, monkeypatch)
+    fallback = config.VALIDATOR_FALLBACK_MODELS[0]["model"]
+    review = {"agrees": True, "critique": "sound", "missed_issues": ["#77"]}
+    validators = []
+
+    def fake_call(model, system, user, **kw):
+        if "VALIDATOR" in system:
+            validators.append(model)
+            if model == config.VALIDATOR_MODEL:
+                return {"success": False, "parsed": {}, "model": model, "usage": {},
+                        "error": _TIMEOUT}
+            return {"success": True, "parsed": review, "model": model,
+                    "usage": {**_USAGE, "cost_usd": 0.008}}
+        return {"success": True, "parsed": _valid_assessment(), "model": model,
+                "usage": {**_USAGE, "cost_usd": 0.005}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    result = agent.run_assessment_pipeline(raw=_raw_sources())
+    assert result["success"] is True
+    assert validators == [config.VALIDATOR_MODEL, fallback]
+    assert result["usage"]["api_calls"] == 2             # analyst + the review that happened
+
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["validator_unreviewed"] is False
+    assert saved["validator_fallback"] is True
+    assert saved["validator_model"] == fallback
+    assert saved["validator_review"]["missed_issues"] == ["#77"]
+    assert [s["model"] for s in saved["pipeline_steps"]] == [config.PRIMARY_MODEL, fallback]
+    out = capsys.readouterr().out
+    assert f"Validator failed: {_TIMEOUT}" in out        # the journal line ops greps for
+    assert f"Fallback validator {fallback} reviewed" in out
+    assert "UNREVIEWED" not in out
+
+
+def test_validator_unparseable_reply_is_billed_then_the_fallback_seat_reviews(tmp_path, monkeypatch):
+    """The 2026-09-20 17:39Z shape: solar answered in 5 s with nothing parseable. That reply
+    was billed, so its spend is logged as a discarded attempt; the fallback seat's
+    disagreement then drives the refine exactly as the validator's own would have."""
+    _pipeline_files(tmp_path, monkeypatch)
+    review = {"agrees": False, "critique": "thin", "suggested_recommendation": "⏸️"}
+
+    def fake_call(model, system, user, **kw):
+        if "VALIDATOR" in system:
+            if model == config.VALIDATOR_MODEL:
+                return {"success": True, "parsed": {"error": "Failed to parse JSON"},
+                        "model": model, "usage": {**_USAGE, "cost_usd": 0.0004}}
+            return {"success": True, "parsed": review, "model": model,
+                    "usage": {**_USAGE, "cost_usd": 0.008}}
+        if "previously produced an assessment" in system:
+            return {"success": True, "parsed": _valid_assessment(headline="refined"),
+                    "model": model, "usage": {**_USAGE, "cost_usd": 0.006}}
+        return {"success": True, "parsed": _valid_assessment(), "model": model,
+                "usage": {**_USAGE, "cost_usd": 0.005}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    result = agent.run_assessment_pipeline(raw=_raw_sources())
+    assert result["usage"]["api_calls"] == 4             # analyst + solar (junk) + qwen + refine
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["refined"] is True and saved["validator_fallback"] is True
+    assert saved["assessment"]["headline"] == "refined"
+    log = json.loads(config.USAGE_LOG_FILE.read_text())
+    junk = [e for e in log if e["cost_usd"] == 0.0004]
+    assert len(junk) == 1 and junk[0]["success"] is False
+    assert junk[0]["model"] == config.VALIDATOR_MODEL
+
+
+def test_every_validator_seat_failing_still_publishes_unreviewed(tmp_path, monkeypatch, capsys):
+    """The fail-hard contract survives the fallback: when no seat produces a review the
+    analyst's read ships flagged UNREVIEWED, never as an agreement — and the record does not
+    credit a fallback reviewer that reviewed nothing."""
+    _pipeline_files(tmp_path, monkeypatch)
+    validators = []
+
+    def fake_call(model, system, user, **kw):
+        if "VALIDATOR" in system:
+            validators.append(model)
+            return {"success": False, "parsed": {}, "model": model, "usage": {},
+                    "error": _TIMEOUT}
+        return {"success": True, "parsed": _valid_assessment(), "model": model,
+                "usage": {**_USAGE, "cost_usd": 0.005}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    result = agent.run_assessment_pipeline(raw=_raw_sources())
+    assert result["success"] is True
+    assert validators == [config.VALIDATOR_MODEL,
+                          *(fb["model"] for fb in config.VALIDATOR_FALLBACK_MODELS)]
+    assert result["usage"]["api_calls"] == 1
+    saved = json.loads(config.ASSESSMENT_FILE.read_text())
+    assert saved["validator_unreviewed"] is True
+    assert saved["validator_fallback"] is False
+    assert saved["validator_model"] == config.VALIDATOR_MODEL
+    assert saved["refined"] is False
+    assert "Marking as UNREVIEWED" in capsys.readouterr().out
+
+
+def test_healthy_validator_never_wakes_the_fallback_seat(monkeypatch):
+    """The fallback costs ~8× the validator — it must run only when the validator failed.
+    And an empty VALIDATOR_FALLBACK_MODELS is the old single-seat behaviour."""
+    calls = []
+
+    def fake_call(model, system, user, **kw):
+        calls.append(model)
+        if fail:
+            return {"success": False, "parsed": {}, "model": model, "usage": {}, "error": "boom"}
+        return {"success": True, "parsed": {"agrees": True, "critique": ""}, "model": model,
+                "usage": {**_USAGE, "cost_usd": 0.001}}
+    monkeypatch.setattr(agent, "openrouter_call", fake_call)
+
+    fail = False
+    res = agent._step_validator("ctx", _valid_assessment())
+    assert calls == [config.VALIDATOR_MODEL]
+    assert [a["model"] for a in res["attempts"]] == calls
+    assert res["parsed"]["agrees"] is True and "unreviewed" not in res["parsed"]
+
+    calls.clear()
+    fail = True
+    monkeypatch.setattr(config, "VALIDATOR_FALLBACK_MODELS", [])
+    res = agent._step_validator("ctx", _valid_assessment())
+    assert calls == [config.VALIDATOR_MODEL]
+    assert res["success"] is False and res["parsed"]["unreviewed"] is True
+    assert res["parsed"]["fail_reason"] == "boom"
+
+
 def test_pipeline_validator_review_none_in_single_call(tmp_path, monkeypatch):
     for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
         monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
@@ -1417,11 +1568,24 @@ def test_primary_provider_is_an_allowlist_without_pool_fallback():
     assert all(s == s.lower() and "/" not in s and " " not in s for s in pin["order"]), "slugs, not display names"
 
 
+def test_validator_provider_is_an_allowlist_without_pool_fallback():
+    """2026-09-21: deepseek-v4.1-flash fans out over 22 hosts — the same long tail (Phala,
+    StreamLake, Wafer) — and its predecessor was rejected for this seat twice for wall-clock
+    runaways under default routing. Same contract as the analyst's pin: first-party first,
+    pool fallback OFF, the fallback validator SEAT is the safety net."""
+    pin = config.VALIDATOR_PROVIDER
+    assert pin["allow_fallbacks"] is False
+    assert pin["order"][0] == config.VALIDATOR_MODEL.split("/")[0] == "deepseek"
+    assert all(s == s.lower() and "/" not in s and " " not in s for s in pin["order"]), "slugs, not display names"
+    assert config.VALIDATOR_FALLBACK_MODELS, "a fail-fast pin needs a seat to fail over to"
+
+
 def test_provider_prefs_ride_primary_seats_only(monkeypatch):
     """config.PRIMARY_PROVIDER (the OpenRouter provider-routing pin — an allowlist since
     2026-09-09, see the config comment) must ride ONLY the two PRIMARY_MODEL
-    call sites: analyst and refine. The minimax fallback and the validator keep default
-    routing regardless — their provider pools are different entirely."""
+    call sites: analyst and refine. The validator carries its OWN allowlist
+    (config.VALIDATOR_PROVIDER, 2026-09-21); both fallback seats keep default routing —
+    every seat's provider pool is different, so a pin never leaks across seats."""
     calls = []
     valid = _valid_assessment()
 
@@ -1443,8 +1607,13 @@ def test_provider_prefs_ride_primary_seats_only(monkeypatch):
 
     calls.clear()
     agent._step_validator("ctx", valid)
-    assert calls[0][0] == config.VALIDATOR_MODEL
-    assert calls[0][1] is None                       # validator: default routing
+    assert calls == [(config.VALIDATOR_MODEL, config.VALIDATOR_PROVIDER)]   # its own allowlist
+
+    calls.clear()
+    with monkeypatch.context() as m:
+        m.setattr(config, "VALIDATOR_MODEL", config.PRIMARY_MODEL)           # a seat fake_call fails
+        agent._step_validator("ctx", valid)
+    assert calls[1] == (config.VALIDATOR_FALLBACK_MODELS[0]["model"], None)  # default routing
 
     calls.clear()
     agent._step_refinement("ctx", valid, {"agrees": False})

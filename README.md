@@ -50,7 +50,7 @@ providers** argue it out before anything ships.
   reason, and the pipeline enforces the floor so a published verdict is never less cautious than
   the evidence.
 - **Independent multi-model review** — the analyst and validator are *different* providers
-  (Z.ai + Upstage, with MiniMax as fallback), so no model rubber-stamps its own reasoning and a
+  (Z.ai + DeepSeek, with MiniMax and Qwen as fallbacks), so no model rubber-stamps its own reasoning and a
   single-vendor outage can't sink a run.
 - **Evidence-ranked scouting** — issues are scored from the repo's real `P0…P4` / breakage / harm
   labels and ranked by severity *blended with whether the bug affects the assessed version*, so a
@@ -201,7 +201,7 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
    gate) and records the gate + any departure in `assessment.json`. The output
    budget is widened (`config.ASSESSMENT_MAX_TOKENS`) so the JSON doesn't truncate on
    busy releases.
-2. **Validator** (`upstage/solar-pro4`) — a *different* provider from the analyst, so it's
+2. **Validator** (`deepseek/deepseek-v4.1-flash`) — a *different* provider from the analyst, so it's
    an independent second opinion, not the model checking its own work. It re-derives each
    top issue's severity / category (regression vs post-release) / platform from the raw data
    rather than trusting the analyst's labels, and flags missed issues, **mis-categorizations**,
@@ -220,7 +220,9 @@ A multi-step LLM pipeline over [OpenRouter](https://openrouter.ai):
 If the analyst call fails — an HTTP error, the wall-clock cap, or a reply that isn't an
 assessment (unparseable JSON, or JSON with no verdict in it) — it falls back to
 `minimax/minimax-m3`, a third distinct provider, so a single-vendor outage doesn't sink the run
-(and the analyst and validator stay on different models). A refinement reply that fails the same
+(and the analyst and validator stay on different models). If the validator's call fails or its
+reply can't be parsed, the review goes to `qwen/qwen3.7-plus` — a fourth provider — and only when
+both fail does the run publish flagged as unreviewed. A refinement reply that fails the same
 check keeps the validated first pass instead. Rejected replies are kept in `data/parse-failures/`
 for diagnosis. All models are served via OpenRouter; the analyst/refine calls carry a
 provider-routing allowlist (`config.PRIMARY_PROVIDER`): the seated model's pool had grown to

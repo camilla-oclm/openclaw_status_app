@@ -941,9 +941,10 @@ def _compact_validator_review(review: dict) -> dict | None:
 
 def _step_validator(context: str, primary_assessment: dict, deadline: float | None = None) -> dict:
     """Step 2: an independent validator (config.VALIDATOR_MODEL — a different
-    provider from the analyst) reviews the primary's work.
+    provider from the analyst) reviews the primary's work. A seat whose call fails or whose
+    reply is unparseable hands over to the next one in config.VALIDATOR_FALLBACK_MODELS.
 
-    If the validator fails (API error, parse error), we return a FAIL-HARD signal
+    If every seat fails (API error, parse error), we return a FAIL-HARD signal
     instead of silently agreeing. This way the pipeline knows the review didn't happen.
     """
     print(f"\n{'─'*60}")
@@ -957,19 +958,38 @@ def _step_validator(context: str, primary_assessment: dict, deadline: float | No
         f"Review this assessment and check for errors, missed issues, or flawed reasoning."
     )
 
-    result = openrouter_call(
-        config.VALIDATOR_MODEL, VALIDATOR_PROMPT, user_content,
-        max_tokens=config.ASSESSMENT_MAX_TOKENS,
-        reasoning=config.VALIDATOR_REASONING,
-        deadline=deadline,
-    )
+    # Every call this step makes, so the caller can account for a seat that was billed for
+    # a reply nobody could use before the next seat took over (same contract as
+    # _step_primary's attempts; the last entry is the one `result` describes).
+    attempts = []
+    seats = [{"model": config.VALIDATOR_MODEL, "reasoning": config.VALIDATOR_REASONING,
+              "provider": config.VALIDATOR_PROVIDER},
+             *config.VALIDATOR_FALLBACK_MODELS]
+    for n, seat in enumerate(seats):
+        if n:
+            print(f"   ↻ Trying fallback validator: {seat['model']}...")
+        result = openrouter_call(
+            seat["model"], VALIDATOR_PROMPT, user_content,
+            max_tokens=config.ASSESSMENT_MAX_TOKENS,
+            reasoning=seat.get("reasoning"),
+            deadline=deadline,
+            provider=seat.get("provider"),
+        )
+        attempts.append({"model": seat["model"], "usage": result.get("usage") or {}})
+        if result["success"] and "error" not in result["parsed"]:
+            if n:
+                print(f"   ✓ Fallback validator {seat['model']} reviewed")
+            break
+        if result["success"]:
+            print(f"   ⚠️ Validator returned unparseable JSON ({seat['model']})")
+        else:
+            print(f"   ❌ Validator failed: {result['error'][:200]}")
 
     if result["success"]:
-        vu = result.get("usage", {})
         review = result["parsed"]
         if "error" in review:
-            # Validator returned unparseable output — FAIL HARD
-            print("   ⚠️ Validator returned unparseable JSON — marking as UNREVIEWED")
+            # The last seat returned unparseable output too — FAIL HARD
+            print("   Marking as UNREVIEWED — primary result will be used but flagged")
             review = {
                 "agrees": True,
                 "critique": "",
@@ -991,8 +1011,7 @@ def _step_validator(context: str, primary_assessment: dict, deadline: float | No
                 print(f"   Errors: {', '.join(errors_list[:3])}")
         result["parsed"] = review
     else:
-        # Validator API call failed — FAIL HARD, don't silently agree
-        print(f"   ❌ Validator failed: {result['error'][:200]}")
+        # The last seat's API call failed too — FAIL HARD, don't silently agree
         print("   Marking as UNREVIEWED — primary result will be used but flagged")
         result = {
             # The API call did NOT succeed — report it as a failed step so the pipeline
@@ -1009,6 +1028,7 @@ def _step_validator(context: str, primary_assessment: dict, deadline: float | No
             "usage": {},
         }
 
+    result["attempts"] = attempts
     return result
 
 
@@ -1264,7 +1284,8 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     print(f"OpenClaw Status — LLM Assessment Pipeline")
     print(f"Primary: {config.PRIMARY_MODEL} (reasoning: high)")
     if not single_call:
-        print(f"Validator: {config.VALIDATOR_MODEL}")
+        v_fallbacks = ", ".join(fb["model"] for fb in config.VALIDATOR_FALLBACK_MODELS)
+        print(f"Validator: {config.VALIDATOR_MODEL}" + (f" (fallback: {v_fallbacks})" if v_fallbacks else ""))
     print(f"Version: {version}")
     print(f"Context size: {len(context):,} chars")
     print(f"{'='*60}\n")
@@ -1340,6 +1361,8 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         validator_critique = ""
         validator_unreviewed = False
         validator_detail = None
+        validator_model = None
+        validator_fallback = False
         print(f"\n{'─'*60}")
         print("Single-call mode — skipping validator")
         print(f"{'─'*60}")
@@ -1347,12 +1370,27 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         # ── Step 2: Validator ──
         validator_result = _step_validator(context, primary_assessment, deadline=deadline)
 
+        # A validator seat that was billed for an unusable reply before the next seat took
+        # over: real spend, counted like the primary's discarded attempts. A call that never
+        # completed (wall-clock kill / HTTP error) carries no usage and stays uncounted — no
+        # phantom API calls, as before.
+        v_attempts = validator_result.get("attempts") or [
+            {"model": config.VALIDATOR_MODEL, "usage": validator_result.get("usage") or {}}]
+        for att in v_attempts[:-1]:
+            u = att.get("usage") or {}
+            if u:
+                for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):
+                    total_usage[k] += u.get(k, 0)
+                total_usage["api_calls"] += 1
+                log_usage(att["model"], u, False)
+        last_validator_seat = v_attempts[-1]["model"]
+
         if validator_result["success"]:
             vu = validator_result.get("usage", {})
             for k in ("tokens_in", "tokens_out", "cost_usd", "latency_ms"):
                 total_usage[k] += vu.get(k, 0)
             total_usage["api_calls"] += 1
-            pipeline_steps.append({"step": "validator", "model": config.VALIDATOR_MODEL, "usage": vu})
+            pipeline_steps.append({"step": "validator", "model": last_validator_seat, "usage": vu})
 
         validator_review = validator_result.get("parsed", {"agrees": True, "critique": ""})
         # The ranked ledger list (same ordering build_context tiered) gates materiality:
@@ -1364,6 +1402,12 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         # An unavailable validator (failed call) is recorded so the page can show a
         # "single-model" state and the thin-evidence floor can cap confidence.
         validator_unreviewed = bool(validator_review.get("unreviewed", False))
+        # The review came from a fallback seat, not config.VALIDATOR_MODEL. Published as
+        # review.validator_fallback: latest.json is the only view of a run from outside the
+        # box, and api_calls alone can't tell this apart from a healthy run.
+        validator_fallback = (not validator_unreviewed
+                              and last_validator_seat != config.VALIDATOR_MODEL)
+        validator_model = last_validator_seat if validator_fallback else config.VALIDATOR_MODEL
         # Compact publishable subset of the review — the page's ⚖︎-chip expander.
         validator_detail = _compact_validator_review(validator_review)
 
@@ -1516,7 +1560,9 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
         "assessed_at": assessed_at,
         "pipeline": "validated",
         "primary_model": config.PRIMARY_MODEL,
-        "validator_model": config.VALIDATOR_MODEL if not single_call else None,
+        # The seat whose review this run used (a fallback seat when validator_fallback).
+        "validator_model": validator_model,
+        "validator_fallback": validator_fallback,
         "version": version,
         "assessment": final_assessment,
         "usage": total_usage,
