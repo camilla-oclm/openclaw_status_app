@@ -225,6 +225,25 @@ def test_derive_severity_breakage_label_bumps_to_critical():
     assert github.derive_severity(["P1", "impact:data-loss"], 0, 0) == "critical"
 
 
+def test_a_bot_only_impact_label_cannot_hand_back_the_bot_notch():
+    # The triage bot applies the P label AND the impact:* labels in one pass. Its P0 is worth
+    # one level less — and "crash" / "data-loss" inside impact:crash-loop / impact:data-loss
+    # used to bump it straight back to critical, which the evidence gate always counts.
+    assert github.derive_severity(["P0", "impact:crash-loop"], 0, 0, "bot") == "high"
+    assert github.derive_severity(["P0", "impact:data-loss", "impact:security"], 0, 0, "bot") == "high"
+    # …a real breakage label still bumps, and so does the impact label once a person is behind
+    # the issue (or provenance is unknown — trusted, fail-closed).
+    assert github.derive_severity(["P0", "regression", "impact:crash-loop"], 0, 0, "bot") == "critical"
+    assert github.derive_severity(["P0", "bug:crash"], 0, 0, "bot") == "critical"
+    assert github.derive_severity(["P1", "impact:data-loss"], 0, 0, "bot-corroborated") == "critical"
+    assert github.derive_severity(["P1", "impact:data-loss"], 0, 0, "human") == "critical"
+    assert github.derive_severity(["P1", "impact:data-loss"], 0, 0, "unknown") == "critical"
+    # The label still FLOORS at high, like every other serious harm area under a bot P label
+    # (it used to read medium here: the bump branch pre-empted the floor).
+    assert github.derive_severity(["P2", "impact:crash-loop"], 0, 0, "bot") == "high"
+    assert github.derive_severity(["P2", "impact:auth-provider"], 0, 0, "bot") == "high"
+
+
 def test_derive_severity_serious_impact_floors_at_high_not_critical():
     # serious harm area alone shouldn't push a P1 to critical
     assert github.derive_severity(["P1", "impact:auth-provider"], 0, 0) == "high"

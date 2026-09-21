@@ -5,7 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.7] - 2026-09-21
+
+### Fixed
+- **A bot-only `impact:*` label can no longer hand back the bot's priority discount.** A P
+  label the upstream triage bot applied with no human behind it counts one level lower. But
+  the same triage pass also applies `impact:crash-loop` / `impact:data-loss`, and the words
+  "crash" / "data-loss" inside those names matched the breakage keywords: a bot P0 dropped
+  to high and was bumped straight back to critical — and the evidence gate counts every
+  critical as a credible blocker, whoever stands behind it. On v2026.9.5 all 60 listed
+  issues carried bot-only priorities, no issue had more than one 👍, and most of the gate's
+  "credible" blockers were credible only through that pair of bot labels — the opposite of
+  what the gate promises. Beside a bot-only priority an `impact:*` label now only floors at
+  high. A `regression` / `bug:crash` label still bumps; so does the impact label when a
+  person applied or took on the issue, or when provenance is unknown (trusted, fail-closed).
+  Side effect, intended: a bot P2 with `impact:crash-loop` / `impact:data-loss` now reads
+  high like every other serious harm area, instead of medium — the bump branch used to
+  pre-empt the floor, so adding a crash-loop label could *lower* an issue. Replayed on one
+  fixed scout of v2026.9.5 (170 issues, 151 bot-only): criticals in the top 60 go 9 → 3 and
+  the gate from ⚠️ on 10 blockers to ⚠️ on 4 (two `regression`s, one `bug:crash`, one with
+  real comment traffic); the six that leave are single-reporter reports with 1–3 comments,
+  still listed at high. 510 pytest.
 
 ### Changed
 - **README: gate update automation on `.status.key`, not `.recommendation`.** The recipe told

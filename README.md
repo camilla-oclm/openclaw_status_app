@@ -142,7 +142,11 @@ Each issue is then scored from the repo's real labels:
   `session-state` / `auth-provider`). Because the repo's triage bot now hands out P labels
   at scale, a **bot-applied** priority counts one level lower unless a human stands behind
   it (tracked as `priority_provenance`) — and never below what community engagement alone
-  would justify.
+  would justify. The same bot applies the `impact:*` labels in the same pass, so beside a
+  bot-only priority an `impact:crash-loop` / `impact:data-loss` label only floors at *high*:
+  it does not earn the breakage bump, or the bot's second label would hand back the level
+  its first one lost. A `regression` / `bug:crash` label still bumps, and so does the impact
+  label once a person is behind the issue.
   *(The `issue-rating: 🦞 diamond lobster` label is a quality rating — it appears on feature
   requests too — so it is **not** treated as a severity.)*
 - **Impact** = a bucket from 👍 reactions + comment volume.
@@ -397,7 +401,7 @@ To preview the page, open `web/index.html` in a browser.
 ### Tests
 
 ```bash
-python3 -m pytest        # 509 tests, hermetic (no network)
+python3 -m pytest        # 510 tests, hermetic (no network)
 ```
 
 The suite covers the scouting/scoring logic, input sanitization, the assessment-output

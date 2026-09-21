@@ -662,7 +662,13 @@ def derive_severity(labels, thumbs_up: int = 0, comments: int = 0,
     # Breakage labels (regression/crash/data-loss) bump one level toward critical.
     # A serious harm area (security/data/message-loss/…) only floors at "high"
     # — it shouldn't, on its own, turn every high-priority bug into critical.
-    if any(k in l for l in low for k in _BUG_KEYWORDS):
+    # Under bot-only provenance an `impact:*` label loses its keyword bump
+    # (impact:crash-loop / impact:data-loss ride "crash" / "data-loss"): the same triage
+    # pass that applied the P label applied it too, so it corroborates nothing and would
+    # hand back exactly the level the notch above just took away. It still floors below.
+    bot_only = p_provenance == "bot"
+    if any(k in l for l in low for k in _BUG_KEYWORDS
+           if not (bot_only and l.startswith("impact:"))):
         base = min(base + 1, 3)
     elif any(any(s in l for s in _SERIOUS_IMPACT) for l in low):
         base = max(base, 2)
