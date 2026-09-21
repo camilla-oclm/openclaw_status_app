@@ -576,7 +576,26 @@ def _detect_conflicts(issues: list, cs: dict) -> list[dict]:
 # / changes) uses only the unambiguous `<script` / `javascript:` markers — the
 # `on*=` event-handler pattern is prone to false positives on ordinary prose
 # (e.g. "version one = ...") and a false positive would needlessly block deploy.
-_XSS_PRIMARY = re.compile(r"<script|javascript:|on\w+\s*=", re.IGNORECASE)
+#
+# The handler screen names REAL DOM event handlers and requires the attribute to start a
+# word. It used to be a bare `on\w+\s*=`: no word boundary, no notion of what a handler is.
+# That matched "ONS=" inside OPENCLAW_ALLOW_OLDER_BINARY_DESTRUCTIVE_ACTIONS=1 — an env var
+# in a top-ranked issue's title — and threw away every reply that quoted it: analyst,
+# fallback and refinement alike, four scheduled runs in a row, one of them a failed run
+# with a page left stale for 16 h. The same shape hides in config=, connection=, context=
+# and reasoning=. A false positive costs a run; a false negative costs nothing (see above),
+# so precision wins.
+_EVENT_NAMES = (
+    r"abort|afterprint|animation\w+|auxclick|before\w+|blur|cancel|canplay\w*|change|click|"
+    r"close|contextmenu|copy|cuechange|cut|dblclick|drag\w*|drop|durationchange|emptied|ended|"
+    r"error|focus\w*|formdata|gotpointercapture|hashchange|input|invalid|key\w+|languagechange|"
+    r"load\w*|lostpointercapture|message\w*|mouse\w+|offline|online|page\w+|paste|pause|"
+    r"play\w*|pointer\w+|popstate|progress|ratechange|reset|resize|scroll\w*|search|seek\w+|"
+    r"select\w*|show|stalled|storage|submit|suspend|timeupdate|toggle|touch\w+|transition\w+|"
+    r"unload|volumechange|waiting|wheel"
+)
+_XSS_PRIMARY = re.compile(
+    r"<script|javascript:|(?<![\w-])on(?:%s)\s*=" % _EVENT_NAMES, re.IGNORECASE)
 _XSS_NESTED = re.compile(r"<script|javascript:", re.IGNORECASE)
 
 

@@ -101,6 +101,40 @@ def test_validate_detects_onclick_handler():
     assert any("XSS" in e for e in errors)
 
 
+@pytest.mark.parametrize("payload", [
+    "cool onerror=alert(1) stuff",                      # bare handler
+    "<img src=x onerror=alert(1)>",                     # inside a tag
+    'x" onmouseover="alert(1)',                         # attribute breakout, spaced
+    'x"onfocus=alert(1) autofocus',                     # attribute breakout, unspaced
+    "ONCLICK = 'steal()'",                              # case + spaces around =
+    "<svg onload=alert(1)>", "onpointerdown=x", "onanimationend=x", "onbeforeunload=x",
+])
+def test_validate_still_detects_real_event_handlers(payload):
+    body = "A thesis long enough to pass the length floor, which is one hundred characters of text. "
+    errors = agent.validate_assessment(_valid_assessment(thesis=body + payload))
+    assert any("XSS pattern detected in thesis" in e for e in errors), payload
+
+
+@pytest.mark.parametrize("prose", [
+    # The one that broke production: "ONS=" inside an env var from a top-ranked issue's title.
+    # Every reply quoting it was rejected — analyst, fallback and refinement, four scheduled
+    # runs in a row (2026-09-20/21), one of them a failed run.
+    "the documented escape hatch OPENCLAW_ALLOW_OLDER_BINARY_DESTRUCTIVE_ACTIONS=1 does not work (#152791)",
+    # …and the same shape sitting in that week's issue bodies, waiting to be quoted.
+    "handshake never finishes. conn=ad442a",
+    "the 'gpt-5.6-sol[context=272k,reasoning=medium]' selector",
+    "start it with --config=/etc/openclaw.json or OPENCLAW_CONFIG=/tmp/c.json",
+    "set connection=keep-alive and session=abc; version one = the old default",
+    # words that merely START with "on" are not handlers either
+    "the wizard at ?onboarding=1, the --only=prod flag, ONBOARDING=1, once=true, ongoing=2",
+])
+def test_validate_does_not_mistake_ordinary_assignments_for_event_handlers(prose):
+    body = "A thesis long enough to pass the length floor, which is one hundred characters of text. "
+    for field in ("thesis", "headline", "sentiment_summary", "gate_departure_reason"):
+        a = _valid_assessment(**{field: (body + prose) if field == "thesis" else prose})
+        assert agent.validate_assessment(a) == [], (field, prose)
+
+
 def test_validate_detects_xss_in_nested_known_issues():
     a = _valid_assessment(known_issues=[{"number": 1, "title": "<script>alert(1)</script>"}])
     errors = agent.validate_assessment(a)

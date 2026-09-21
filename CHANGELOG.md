@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.8] - 2026-09-21
+
+### Fixed
+- **An environment variable in an issue title can no longer get every model reply thrown
+  away as "XSS".** The assessment validator screens free text for inline event handlers, and
+  that screen was a bare `on\w+\s*=` — no word boundary, no notion of what a handler is. It
+  matched `ONS=` inside `OPENCLAW_ALLOW_OLDER_BINARY_DESTRUCTIVE_ACTIONS=1`, the variable
+  named in the title of one of v2026.9.5's top-ranked issues, so any reply that quoted it was
+  rejected as schema-invalid: the analyst's, the fallback model's and the refinement alike.
+  Four scheduled runs in a row were hit — two published without the validator's corrections,
+  one was written by the fallback model, and one failed outright when both models quoted the
+  variable, leaving the page stale for sixteen hours. The same shape sits in `config=`,
+  `connection=`, `context=` and `reasoning=`. The page is XSS-safe by construction (every
+  field enters the DOM as text and the server-rendered fields are fully escaped), so this
+  screen is a backstop where a false negative costs nothing and a false positive costs a
+  run. It now needs `on` to start a word and to be followed by a real DOM event name; a bare
+  `onerror=`, a handler inside a tag and a quoted attribute breakout are all still caught,
+  as are `<script` and `javascript:`. All five rejected replies, kept by the forensics added
+  in 1.1.1, validate clean. 525 pytest.
+
 ## [1.3.7] - 2026-09-21
 
 ### Fixed
