@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **README: gate update automation on `.status.key`, not `.recommendation`.** The recipe told
+  scripts to update when `.recommendation` is ✅ — but inside the early-read window that field
+  already carries the early read, and a day-0 ✅ only means nothing has been filed yet. Both
+  times a release's first read was ✅ it lasted one run and the release ended at ⏸️, so the
+  "strict" recipe would have installed both. `.status.key` is `wait` inside that window and
+  `update` only for a ✅ past it; the permissive variant allow-lists `update` and `care`.
+  Docs only — the API is unchanged.
+
 ## [1.3.6] - 2026-09-20
 
 ### Fixed

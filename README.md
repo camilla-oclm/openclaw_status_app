@@ -313,25 +313,31 @@ Caddy):
 the cron job or script that updates OpenClaw:
 
 ```bash
-verdict=$(curl -fsS https://clawstat.us/latest.json | jq -r '.recommendation')
-if [ "$verdict" = "✅" ]; then
+status=$(curl -fsS https://clawstat.us/latest.json | jq -r '.status.key')
+if [ "$status" = "update" ]; then
   your-openclaw-update-command
 else
-  echo "clawstat.us says $verdict — holding this update"
+  echo "clawstat.us says '$status' — holding this update"
 fi
 ```
 
-That's the strict form (update only on a clean ✅), and it fails **closed**: if clawstat.us is
-unreachable or returns nothing, `$verdict` is the empty string, `[ "" = "✅" ]` is false, and it
-holds. A permissive variant that also proceeds on ⚠️ must be written as an explicit allow-list so
-it *stays* fail-closed — do **not** use `[ "$verdict" != "⏸️" ]`, which proceeds when the value is
-empty (i.e. exactly when the status page is down):
+Gate on **`.status.key`**, not on `.recommendation`. Inside a release's early-read window the key
+is `wait` ("Too new to call") while `.recommendation` already carries the early read — and a
+day-0 ✅ only means nothing has been filed *yet*. Both times this tool's first read of a release
+was ✅, it lasted a single run and the release ended at ⏸️; a script keyed to `.recommendation`
+would have installed both. `update` means ✅ on a release that is past that window.
+
+That's the strict form, and it fails **closed**: if clawstat.us is unreachable or returns
+nothing, `$status` is the empty string (or `null` for a missing field), the comparison is false,
+and it holds. A permissive variant that also proceeds on ⚠️ (`care`) must be written as an
+explicit allow-list so it *stays* fail-closed — do **not** use `[ "$status" != "skip" ]`, which
+proceeds when the value is empty (i.e. exactly when the status page is down) and on `wait`:
 
 ```bash
-if [ "$verdict" = "✅" ] || [ "$verdict" = "⚠️" ]; then
+if [ "$status" = "update" ] || [ "$status" = "care" ]; then
   your-openclaw-update-command
 else
-  echo "clawstat.us says '$verdict' — holding this update"
+  echo "clawstat.us says '$status' — holding this update"
 fi
 ```
 
