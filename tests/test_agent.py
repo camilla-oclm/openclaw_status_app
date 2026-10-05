@@ -1,5 +1,6 @@
 """Tests for openclaw_status.agent — schema validation, conflict detection, diffing."""
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -592,12 +593,18 @@ def test_append_timeline_prunes_to_keep(tmp_path, monkeypatch):
 
 # ── shared assessed_at (one run stamp across output / history / timeline) ──────
 
+def _recent_stamp():
+    # A day old, not a fixed date: append_history/append_timeline drop entries past
+    # their 90-day window, so a hard-coded stamp starts failing once it ages out.
+    return (datetime.now(timezone.utc) - timedelta(days=1)).replace(microsecond=0).isoformat()
+
+
 def test_append_history_uses_passed_assessed_at(tmp_path, monkeypatch):
     # The pipeline threads its single assessed_at so the history entry, the timeline
     # point, and assessment.json all carry the SAME instant (no 3-way now() drift).
     hist = tmp_path / "history.json"
     monkeypatch.setattr(config, "HISTORY_FILE", hist)
-    stamp = "2026-06-30T12:00:00+00:00"
+    stamp = _recent_stamp()
     agent.append_history("1.0", _valid_assessment(), {"cost_usd": 0.0}, assessed_at=stamp)
     assert json.loads(hist.read_text())[0]["assessed_at"] == stamp
 
@@ -605,7 +612,7 @@ def test_append_history_uses_passed_assessed_at(tmp_path, monkeypatch):
 def test_append_timeline_uses_passed_assessed_at(tmp_path, monkeypatch):
     tl = tmp_path / "timeline.json"
     monkeypatch.setattr(config, "TIMELINE_FILE", tl)
-    stamp = "2026-06-30T12:00:00+00:00"
+    stamp = _recent_stamp()
     agent.append_timeline("1.0", _valid_assessment(), {"cost_usd": 0.0, "latency_ms": 0},
                           assessed_at=stamp)
     assert json.loads(tl.read_text())[0]["t"] == stamp
