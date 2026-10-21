@@ -63,6 +63,23 @@ chmod 600 "$APP_DIR/.env"
 # git's "dubious ownership" guard. --system whitelists the repo for every user.
 git config --system --add safe.directory "$APP_DIR"
 
+# --- small-instance hardening ----------------------------------------------
+# The small Lightsail plans have no swap. fwupd (firmware updates, nothing to
+# update on a VM) needs ~170 MB on its hourly metadata refresh and was
+# OOM-killed 150+ times; one run thrashed the box for 20 min, stalling Caddy
+# and knocking systemd-networkd off the NIC. Mask it, timer included, so a
+# package upgrade can't bring it back.
+systemctl disable --now fwupd-refresh.timer 2>/dev/null || true
+systemctl mask fwupd.service fwupd-refresh.service fwupd-refresh.timer
+# A hung `apt-get update` once kept apt-daily.service "activating" for 46 days,
+# which also blocks apt-daily-upgrade (unattended security updates). That job
+# only downloads, so killing a stuck run is safe.
+mkdir -p /etc/systemd/system/apt-daily.service.d
+cat > /etc/systemd/system/apt-daily.service.d/50-timeout.conf <<'UNIT'
+[Service]
+TimeoutStartSec=1h
+UNIT
+
 # --- systemd timer ---------------------------------------------------------
 install -m644 "$APP_DIR/deploy/openclaw-status.service"         /etc/systemd/system/
 install -m644 "$APP_DIR/deploy/openclaw-status-failure.service" /etc/systemd/system/
