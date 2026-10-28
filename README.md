@@ -7,8 +7,6 @@
 **Should you update to the latest OpenClaw release?** This tool answers that, live at
 **<https://clawstat.us>**.
 
-[![OpenClaw release status](https://clawstat.us/badge.svg)](https://clawstat.us)
-
 <p align="center">
   <img src="docs/hero-dark.png" alt="The OpenClaw Status decision page: a plain-language answer for the latest OpenClaw release, a verdict per platform, and the best version to run today" width="820">
 </p>
