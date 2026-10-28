@@ -1068,6 +1068,52 @@ def test_run_summary_message_singular_issue():
     assert "(1 known issue)" in agent._run_summary_message("1.0", "✅", 0.0, 0.0, 0.0, 1)
 
 
+def test_run_summary_message_names_its_reason():
+    msg = agent._run_summary_message("1.1", "⚠️", 0.01, 0.02, 0.3, 2, reason="verdict ✅ → ⚠️")
+    assert msg.startswith("✅ OpenClaw Status — v1.1 ⚠️ — verdict ✅ → ⚠️ (2 known issues) · ")
+
+
+def test_summary_reason_only_for_a_new_version_or_a_changed_verdict():
+    assert agent._summary_reason(None, "⚠️") == "new version"
+    assert agent._summary_reason({"version": "1.0"}, "⚠️") == "new version"   # no verdict on record
+    assert agent._summary_reason({"recommendation": "⚠️"}, "⚠️") is None
+    assert agent._summary_reason({"recommendation": "⚠️"}, "✅") == "verdict ⚠️ → ✅"
+    assert agent._summary_reason({"recommendation": "🔄"}, "⏸️") is None      # retired 🔄 reads as ⏸️
+
+
+def test_pipeline_sends_summary_only_on_new_version_or_verdict_change(tmp_path, monkeypatch):
+    """2026-10-28: a green summary per re-assessment came to ~37 in two weeks of near-daily
+    releases. A published run now speaks up only when the page's answer moves; problems
+    (blocked, failed, cost, slow, continuity) still alert on every run."""
+    for name in ("ASSESSMENT_FILE", "HISTORY_FILE", "TIMELINE_FILE", "USAGE_LOG_FILE"):
+        monkeypatch.setattr(config, name, tmp_path / f"{name.lower()}.json")
+    sent = []
+    monkeypatch.setattr(agent, "notify", lambda text: sent.append(text) or True)
+    verdict = {"now": "✅"}
+    monkeypatch.setattr(agent, "openrouter_call", lambda model, *a, **kw: {
+        "success": True, "parsed": _valid_assessment(recommendation=verdict["now"]), "model": model,
+        "usage": {"tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1}})
+
+    def raw(version):
+        return {"target_version": version, "sources": {
+            "latest_release": {"tag": f"v{version}", "published_at": "2026-01-01T00:00:00Z"},
+            "latest_prerelease": None, "github_issues": [], "clawsweeper": {}, "release_history": [],
+        }}
+
+    def summaries():
+        return [m for m in sent if m.startswith("✅ OpenClaw Status —")]
+
+    assert agent.run_assessment_pipeline(raw=raw("1.0"), single_call=True)["success"] is True
+    assert len(summaries()) == 1 and "v1.0 ✅ — new version" in summaries()[-1]
+    assert agent.run_assessment_pipeline(raw=raw("1.0"), single_call=True)["success"] is True
+    assert len(summaries()) == 1                       # same version, same verdict: quiet
+    verdict["now"] = "⚠️"
+    assert agent.run_assessment_pipeline(raw=raw("1.0"), single_call=True)["success"] is True
+    assert len(summaries()) == 2 and "v1.0 ⚠️ — verdict ✅ → ⚠️" in summaries()[-1]
+    assert agent.run_assessment_pipeline(raw=raw("1.1"), single_call=True)["success"] is True
+    assert len(summaries()) == 3 and "v1.1 ⚠️ — new version" in summaries()[-1]
+
+
 def test_validator_disagrees_triggers_refine():
     # explicit disagreement → refine
     assert agent._validator_disagrees({"agrees": False}) is True

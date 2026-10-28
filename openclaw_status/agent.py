@@ -1081,14 +1081,32 @@ def _step_refinement(context: str, primary_assessment: dict, validator_review: d
 #  Main pipeline entry point
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _run_summary_message(version, recommendation, run_cost, daily_total, monthly_total, n_issues):
-    """Compact one-line run-completion notice for the alert webhook: the verdict
-    plus this run's cost and the running daily/monthly totals (which include this run)."""
+def _run_summary_message(version, recommendation, run_cost, daily_total, monthly_total, n_issues,
+                         reason=""):
+    """Compact one-line run-completion notice for the alert webhook: the verdict, why it's
+    being sent (see _summary_reason), this run's cost and the running daily/monthly totals
+    (which include this run)."""
+    why = f"— {reason} " if reason else ""
     return (
-        f"✅ OpenClaw Status — v{version} {recommendation} "
+        f"✅ OpenClaw Status — v{version} {recommendation} {why}"
         f"({n_issues} known issue{'' if n_issues == 1 else 's'}) · "
         f"this run ${run_cost:.4f} · today ${daily_total:.2f} · month ${monthly_total:.2f}"
     )
+
+
+def _summary_reason(prev_verdict: dict | None, recommendation: str) -> str | None:
+    """Why a published run earns the green summary, or None to stay quiet.
+
+    The summary goes out only when the page's answer moves: the first published run of a
+    version, or a verdict that differs from this version's last published one. Re-assessing
+    an unchanged verdict (every 8-48 h, so 2-3 times a day on a fresh release) stays off the
+    channel; the owner asked for this on 2026-10-28, when daily releases meant ~37 summaries
+    in two weeks. Problems never wait on this: blocked, failed, cost, slow and continuity
+    notices still go out on every run."""
+    if not prev_verdict or not prev_verdict.get("recommendation"):
+        return "new version"
+    before, after = _norm_rec(str(prev_verdict["recommendation"])), _norm_rec(str(recommendation))
+    return f"verdict {before} → {after}" if before != after else None
 
 
 def _blocked_run_message(version, reasons, run_cost, daily_total, monthly_total):
@@ -1650,15 +1668,22 @@ def run_assessment_pipeline(raw: dict = None, single_call: bool = False) -> dict
     # Run-completion notice (no-op unless ALERT_WEBHOOK_URL is set; daily/monthly already
     # include this run). A run the deploy guard refuses gets the 🛑 notice, never the green
     # summary: on 2026-09-08 such a run went out as "✅ … ?" and nothing else, and the last
-    # good page stood for 12 h with no one told.
+    # good page stood for 12 h with no one told. A published run sends the green summary
+    # only for a new version or a changed verdict (_summary_reason); prev_verdict was read
+    # before this run's history entry was appended.
     if deployable:
-        notify(_run_summary_message(
-            version,
-            final_assessment.get("recommendation", "?"),
-            total_usage.get("cost_usd", 0.0),
-            daily, monthly,
-            len(final_assessment.get("known_issues", [])),
-        ))
+        reason = _summary_reason(prev_verdict, final_assessment.get("recommendation", "?"))
+        if reason:
+            notify(_run_summary_message(
+                version,
+                final_assessment.get("recommendation", "?"),
+                total_usage.get("cost_usd", 0.0),
+                daily, monthly,
+                len(final_assessment.get("known_issues", [])),
+                reason=reason,
+            ))
+        else:
+            print("   🔕 Same verdict as this version's last published run — no summary sent")
     else:
         notify(_blocked_run_message(
             version, block_reasons, total_usage.get("cost_usd", 0.0), daily, monthly))

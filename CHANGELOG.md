@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **The green run summary reaches the alert channel only when the page's answer moves:** the
+  first published run of a version, or a verdict that differs from that version's last
+  published one. The summary now says which ("— new version", "— verdict ✅ → ⚠️").
+  Re-assessing an unchanged verdict every 8–48 h had come to about 37 summaries in two weeks
+  of near-daily releases. Problems are unaffected: blocked, failed, cost, slow-call and
+  continuity notices still go out on every run, and a quiet run notes "🔕" in the journal.
+
 ## [1.3.9] - 2026-09-21
 
 ### Changed

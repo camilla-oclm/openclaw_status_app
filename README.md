@@ -377,8 +377,9 @@ cp .env.example .env      # then fill in the two keys
   *Metadata: Read-only* + *Contents: Read-only* (Contents gates the Releases API — without it
   release/changelog fetches 403). Or a classic token with **no scopes**. See `.env.example`.
 - **`ALERT_WEBHOOK_URL`** *(optional)* — a Slack or Discord incoming webhook. When set,
-  cost/budget/failure alerts and a run-completion summary are POSTed there (the payload key is
-  auto-selected: Discord gets `content`, everything else `text`). Leave blank for stdout-only
+  cost/budget/failure alerts go there on every run, and a run-completion summary when the page's
+  answer moves (a new version's first published run, or a changed verdict). The payload key is
+  auto-selected: Discord gets `content`, everything else `text`. Leave blank for stdout-only
   alerts. **It's a secret** (the URL embeds a token) — keep it in `.env`, never in git.
 
 > Note: GitHub's UI only exposes the per-permission tab once you pick a repository scope, so
