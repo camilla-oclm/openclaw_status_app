@@ -14,6 +14,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   Re-assessing an unchanged verdict every 8–48 h had come to about 37 summaries in two weeks
   of near-daily releases. Problems are unaffected: blocked, failed, cost, slow-call and
   continuity notices still go out on every run, and a quiet run notes "🔕" in the journal.
+- **The icon wears the Plum Comet Labs look.** Same claw and status dot as before, now on the
+  studio's dark rounded tile with its gradient rim: the claw in the blue-plum-pink gradient,
+  the dot glowing gold like the comet's head. `web/logo.svg` (now a 64-unit tile) is still
+  the one source; the favicon set, the full-bleed touch icon and the share card
+  (`web/og.png`, 256 colours via libimagequant so the small logo keeps its colours) are
+  re-rendered from it. The header shows the tile itself instead of a white claw in a teal
+  circle. The page's teal accent and the badge's plain claw are unchanged.
 
 ## [1.3.9] - 2026-09-21
 
