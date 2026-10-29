@@ -196,12 +196,7 @@ body[data-tone="muted"]{--pglow:var(--gray)}
   border-radius:var(--r-pill);
 }
 .brand{display:flex; align-items:center; gap:.55rem; font-weight:800; font-size:var(--fs-md); letter-spacing:-.02em; text-decoration:none; color:inherit}
-.brand .logo{
-  width:32px; height:32px; display:grid; place-items:center; color:var(--on-accent);
-  border-radius:50%; background:linear-gradient(140deg,var(--accent),color-mix(in srgb,var(--accent) 55%,var(--accent2)));
-  box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 70%,transparent);
-}
-html[data-theme="light"] .brand .logo{color:#fff}
+.brand .logo{width:32px; height:32px; flex:none; filter:drop-shadow(0 5px 8px rgba(192,107,255,.3))}
 .brand .logo svg{display:block}
 .brand .wm{font-family:var(--display)}
 .brand .wm .dot{color:var(--accent)}
@@ -904,7 +899,7 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
 <div id="live" class="vh" aria-live="polite"></div>
 
 <header class="topbar glass tone-muted">
-  <a class="brand" href="#app"><span class="logo"><svg viewBox="0 0 100 100" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M69 25 A31 31 0 0 0 21 50" stroke-width="19"/><path d="M21 50 A31 31 0 0 0 66 76" stroke-width="12"/><circle cx="21" cy="50" r="9.5" fill="currentColor" stroke="none"/><circle cx="60" cy="51" r="8" fill="currentColor" stroke="none"/></svg></span> <span class="wm">ClawStat<span class="dot">.</span>us</span></a>
+  <a class="brand" href="#app"><span class="logo"><svg viewBox="0 0 64 64" width="32" height="32" aria-hidden="true"><defs><linearGradient id="lg-claw" x1="10" y1="54" x2="54" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7aa7ff"/><stop offset=".5" stop-color="#c06bff"/><stop offset="1" stop-color="#ff7eb3"/></linearGradient><radialGradient id="lg-dot" cx="38.2" cy="32.62" r="4.96" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff6ea"/><stop offset=".6" stop-color="#ffd29a"/><stop offset="1" stop-color="#ffb48a"/></radialGradient><linearGradient id="lg-edge" x1="0" y1="64" x2="64" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7aa7ff" stop-opacity=".5"/><stop offset="1" stop-color="#ff7eb3" stop-opacity=".6"/></linearGradient></defs><rect x="1" y="1" width="62" height="62" rx="15" fill="#0d0a16" stroke="url(#lg-edge)" stroke-width="1.5"/><g fill="none" stroke="url(#lg-claw)" stroke-linecap="round" stroke-linejoin="round"><path d="M43.78 16.5 A19.22 19.22 0 0 0 14.02 32" stroke-width="11.78"/><path d="M14.02 32 A19.22 19.22 0 0 0 41.92 48.12" stroke-width="7.44"/><circle cx="14.02" cy="32" r="5.89" fill="url(#lg-claw)" stroke="none"/><circle cx="38.2" cy="32.62" r="4.96" fill="url(#lg-dot)" stroke="none"/></g></svg></span> <span class="wm">ClawStat<span class="dot">.</span>us</span></a>
   <nav class="topnav" aria-label="Page sections">
     <a href="#app" data-nav="app">Answer</a>
     <a href="#best-version" data-nav="best-version">Best version</a>

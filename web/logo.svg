@@ -1,13 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="ClawStat.us logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ClawStat.us logo">
   <!-- The ClawStat mark: a lobster claw drawn as an open C — a thick upper jaw, a thinner
-       lower jaw, a hinge at the wrist — holding the status dot. One source for the header
-       mark, the favicon set, the touch icon, the badge and the share card; the tile keeps
-       it legible on any tab strip. Mark geometry lives in the <g id="mark"> below. -->
-  <rect width="100" height="100" rx="24" fill="#0c1017"/>
-  <g id="mark" fill="none" stroke="#3fe0d5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M69 25 A31 31 0 0 0 21 50" stroke-width="19"/>
-    <path d="M21 50 A31 31 0 0 0 66 76" stroke-width="12"/>
-    <circle cx="21" cy="50" r="9.5" fill="#3fe0d5" stroke="none"/>
-    <circle cx="60" cy="51" r="8" fill="#3fe0d5" stroke="none"/>
+       lower jaw, a hinge at the wrist — holding the status dot. Since 2026-10-29 it wears the
+       Plum Comet Labs look: the studio's dark rounded tile with its gradient rim, the claw in the
+       blue-plum-pink gradient and the dot glowing gold like the comet's head. Same claw geometry
+       as before (the old 100-unit mark scaled into this 64-unit tile). One source for the header
+       mark, the favicon set, the touch icon and the share card; the badge keeps the plain claw. -->
+  <defs>
+    <linearGradient id="claw" x1="10" y1="54" x2="54" y2="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7aa7ff"/>
+      <stop offset="0.5" stop-color="#c06bff"/>
+      <stop offset="1" stop-color="#ff7eb3"/>
+    </linearGradient>
+    <radialGradient id="dot" cx="38.2" cy="32.62" r="4.96" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff6ea"/>
+      <stop offset="0.6" stop-color="#ffd29a"/>
+      <stop offset="1" stop-color="#ffb48a"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" y1="64" x2="64" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7aa7ff" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#ff7eb3" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="#0d0a16" stroke="url(#edge)" stroke-width="1.5"/>
+  <g id="mark" fill="none" stroke="url(#claw)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M43.78 16.5 A19.22 19.22 0 0 0 14.02 32" stroke-width="11.78"/>
+    <path d="M14.02 32 A19.22 19.22 0 0 0 41.92 48.12" stroke-width="7.44"/>
+    <circle cx="14.02" cy="32" r="5.89" fill="url(#claw)" stroke="none"/>
+    <circle cx="38.2" cy="32.62" r="4.96" fill="url(#dot)" stroke="none"/>
   </g>
 </svg>
