@@ -21,6 +21,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   (`web/og.png`, 256 colours via libimagequant so the small logo keeps its colours) are
   re-rendered from it. The header shows the tile itself instead of a white claw in a teal
   circle. The page's teal accent and the badge's plain claw are unchanged.
+- **The page wears the Plum Comet Labs look ("Comet"), like plumcometlabs.com.** Deep space
+  with the studio's starfield and its comet, which follows the pointer over the top of the
+  page (one still frame with reduced motion; a click on empty sky makes sparks, a click on a
+  control never does); the studio's fonts (Unbounded for headings and the status word, Space
+  Grotesk for text, both self-hosted); glass cards, pink and plum accents, a gold focus ring.
+  The answer is one column: the status word, much bigger, in its verdict's own gradient,
+  then the meta line as pills and two buttons ("See why", "Pick your setup"); the setup card
+  moves below it. Sections carry the studio's numbered labels, the header turns to glass on
+  scroll and links to the studio, and the footer ends with the studio's row (About, Source,
+  Discord). The verdict colours, every class and id the scripts use, and the page's order
+  are unchanged.
+- **One dark theme.** The light theme and its toggle are gone, as on the studio's site.
 
 ## [1.3.9] - 2026-09-21
 

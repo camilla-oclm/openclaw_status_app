@@ -1,4 +1,4 @@
-// Boot: the header's section nav (static HTML, plain DOM), the visitor's stack, then the
+// Boot: the header's scroll state and section nav (static HTML, plain DOM), the visitor's stack, then the
 // Svelte app mounted into #app, the deep-link hash, the runtime refresh from latest.json,
 // and the read-only test hook for the browser suites.
 import { mount } from "svelte";
@@ -14,6 +14,13 @@ import { registry } from "./lib/dom.js";
 function parseInline() {
   try { return JSON.parse(document.getElementById("assessment-data").textContent); }
   catch (e) { return null; }
+}
+
+// The header turns to glass once the page scrolls, as on plumcometlabs.com.
+function initHeader() {
+  const set = () => document.documentElement.classList.toggle("scrolled", window.scrollY > 24);
+  window.addEventListener("scroll", set, { passive: true });
+  set();
 }
 
 // Header section nav: mark the section currently under the header. Scroll-driven
@@ -52,6 +59,7 @@ function scrollToHash() {
   t.classList.add("tgt"); setTimeout(() => { t.classList.remove("tgt"); }, 1800);
 }
 
+initHeader();
 initNav();
 bootStack();
 app.data = parseInline();

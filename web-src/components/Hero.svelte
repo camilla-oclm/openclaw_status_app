@@ -1,7 +1,7 @@
 <script>
   // The answer: eyebrow, version, the status word with its mark, one plain sentence, the
-  // analyst's headline, and the meta line (confidence · fix staged · second-model review ·
-  // evidence gate) — with the setup card in the second column.
+  // analyst's headline, the meta line (confidence · fix staged · second-model review ·
+  // evidence gate) and two buttons (why · your setup) — with the setup card below it.
   import { flushSync } from "svelte";
   import { app } from "../lib/state.svelte.js";
   import { VERDICTS } from "../lib/tables.js";
@@ -60,6 +60,7 @@
     {#if D.headline}<p class="hero-headline"><span class="hh-k">Analyst</span>{D.headline}</p>{/if}
     <div class="conf-row"><span class="chip lvl-{conf}" title={confNote(conf)}>Confidence: <b>{cap(conf)}</b></span>{#if pre.tag}{#if preUrl}<a class="chip chip-link" href={preUrl} target="_blank" rel="noopener noreferrer" title="View {pre.tag} on GitHub. {preTip}"><b>Fix staged: {pre.tag}</b> (pre-release)<span class="v-ext" aria-hidden="true">↗</span></a>{:else}<span class="chip" title={preTip}><b>Fix staged: {pre.tag}</b> (pre-release)</span>{/if}{/if}{#if rv.validated}<button class="chip" type="button" title="{rvTip} Click for what it said." aria-expanded={rvOpen ? "true" : "false"} aria-controls="rev-detail" onclick={() => { rvOpen = !rvOpen; flushSync(); }}><Icon k="review" size={13} /><b>{#if revised}Revised <span class="vgw {toneOf(rv.primary_recommendation)}"><Mark rec={rv.primary_recommendation} size={13} /></span> → <span class="vgw {toneOf(D.recommendation)}"><Mark rec={D.recommendation} size={13} /></span> on review{:else}{rvText}{/if}</b><span class="cx" aria-hidden="true">▾</span></button>{:else if rv.unreviewed}<span class="chip" title="The independent validator model was unavailable on this run, so this verdict reflects a single model — confidence is capped and you should sanity-check it against the linked issues."><Icon k="review" size={13} /><b>Single model — validator unavailable</b></span>{/if}{#if eg.verdict}<span class="chip" title="{egTip} {eg.reason || ''}">Evidence gate: <b class={toneOf(eg.verdict)}><Mark rec={eg.verdict} size={13} /> {egWord}</b></span>{/if}</div>
     {#if rv.validated}<ReviewDetail {rv} hidden={!rvOpen} />{/if}
+    <div class="hero-cta"><a class="btn btn-glow" href="#why">See why <span aria-hidden="true">↓</span></a><a class="btn btn-ghost" href="#setup">Pick your setup</a></div>
   </div>
   <Setup {pvs} />
 </div>
