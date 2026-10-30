@@ -113,9 +113,7 @@ export const ICONS = {
   gem: "M6 3h12l4 6-10 12L2 9l4-6z M2 9h20 M9.5 3L8 9l4 12 M14.5 3L16 9l-4 12",
   active: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z",
   doc: "M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M14 2v6h6",
-  sun: "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4",
   review: "M12 3v18 M6 21h12 M3 7h18 M6 7l-3.5 7.5a3.5 3.5 0 0 0 7 0L6 7z M18 7l-3.5 7.5a3.5 3.5 0 0 0 7 0L18 7z",
-  moon: "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z",
 };
 
 // Verdict glyphs — the page's own marks for the four verdict keys, drawn in the icon set's

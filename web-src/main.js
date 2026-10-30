@@ -1,12 +1,11 @@
-// Boot: the header's theme toggle and section nav (static HTML, plain DOM), the visitor's
-// stack, then the Svelte app mounted into #app, the deep-link hash, the runtime refresh from
-// latest.json, and the read-only test hook for the browser suites.
+// Boot: the header's section nav (static HTML, plain DOM), the visitor's stack, then the
+// Svelte app mounted into #app, the deep-link hash, the runtime refresh from latest.json,
+// and the read-only test hook for the browser suites.
 import { mount } from "svelte";
 import App from "./App.svelte";
 import { app, bootStack, setStack } from "./lib/state.svelte.js";
 import { setupVerdict, setupBlockers, keyVerdict } from "./lib/verdict.js";
 import { registry } from "./lib/dom.js";
-import { ICONS } from "./lib/tables.js";
 
 // DATA comes from the inlined assessment-data JSON block (the build-time copy, always present)
 // and, when reachable, a runtime fetch('latest.json'): the page renders from the inline copy
@@ -15,41 +14,6 @@ import { ICONS } from "./lib/tables.js";
 function parseInline() {
   try { return JSON.parse(document.getElementById("assessment-data").textContent); }
   catch (e) { return null; }
-}
-
-// A stroke icon as a DOM node, for the one element outside the app: the theme button.
-function iconEl(key, size) {
-  const NS = "http://www.w3.org/2000/svg";
-  const s = document.createElementNS(NS, "svg");
-  const attrs = { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor",
-                  "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round",
-                  class: "ic-svg", "aria-hidden": "true", focusable: "false" };
-  for (const k in attrs) s.setAttribute(k, attrs[k]);
-  const p = document.createElementNS(NS, "path");
-  p.setAttribute("d", ICONS[key] || ICONS.doc);
-  s.appendChild(p);
-  return s;
-}
-
-function initTheme() {
-  const btn = document.getElementById("theme-toggle");
-  let saved = null;
-  try { saved = localStorage.getItem("oc-theme"); } catch (e) {}
-  const prefersLight = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
-  function apply(t) {
-    document.documentElement.setAttribute("data-theme", t);
-    btn.textContent = "";
-    btn.appendChild(iconEl(t === "light" ? "moon" : "sun", 16));
-    // keep the browser-chrome color in step with the manual toggle
-    const mc = document.querySelector('meta[name="theme-color"]');
-    if (mc) mc.setAttribute("content", t === "light" ? "#f3f5f9" : "#070a0f");
-  }
-  apply(saved || (prefersLight ? "light" : "dark"));
-  btn.addEventListener("click", () => {
-    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
-    apply(next);
-    try { localStorage.setItem("oc-theme", next); } catch (e) {}
-  });
 }
 
 // Header section nav: mark the section currently under the header. Scroll-driven
@@ -88,7 +52,6 @@ function scrollToHash() {
   t.classList.add("tgt"); setTimeout(() => { t.classList.remove("tgt"); }, 1800);
 }
 
-initTheme();
 initNav();
 bootStack();
 app.data = parseInline();

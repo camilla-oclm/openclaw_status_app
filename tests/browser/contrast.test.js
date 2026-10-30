@@ -1,4 +1,4 @@
-// Contrast audit — samples every visible text run on the rendered page, in BOTH themes,
+// Contrast audit — samples every visible text run on the rendered page (one dark theme),
 // and asserts WCAG AA: ≥ 4.5:1, or ≥ 3:1 for large text (≥ 24 px, or ≥ 18.66 px bold).
 // Drives the REAL template with the shared fixture. NOT part of the hermetic pytest suite
 // (the deploy box has no Node) — run on demand:  node tests/browser/contrast.test.js
@@ -103,13 +103,11 @@ function auditInPage() {
   const tmp = path.join(os.tmpdir(), "contrast_test.html");
   fs.writeFileSync(tmp, pageFor(DATA));
   let bad = 0;
-  for (const theme of ["dark", "light"]) {
+  for (const theme of ["dark"]) {   // the page has one theme since the Comet redesign
     const page = await browser.newPage();
     const errs = [];
     page.on("pageerror", (e) => errs.push(String(e)));
-    await page.evaluateOnNewDocument((t) => { try { localStorage.setItem("oc-theme", t); } catch {} }, theme);
-    await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: theme },
-                                     { name: "prefers-reduced-motion", value: "reduce" }]);
+    await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
     await page.setViewport({ width: 1280, height: 900 });
     await page.goto("file://" + tmp, { waitUntil: "networkidle0" });
     await page.addStyleTag({ content: FLATTEN });
@@ -140,5 +138,5 @@ function auditInPage() {
   }
   await browser.close();
   if (bad) { console.log(`\n${bad} FAILED`); process.exit(1); }
-  console.log("\nContrast audit passed in both themes");
+  console.log("\nContrast audit passed");
 })().catch((e) => { console.error(e); process.exit(1); });
