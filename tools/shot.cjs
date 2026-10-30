@@ -2,9 +2,9 @@
 // Screenshot a page — a local file or a URL — with puppeteer-core and a system Chromium.
 // Dev tool for the design loop; pairs with tools/preview.py. Not part of any test suite.
 //
-//   node tools/shot.cjs web/proto/preview.html shots/desktop-dark.png
-//   node tools/shot.cjs "web/proto/preview.html?stack=linux,discord,gateway" shots/picked.png --theme light
-//   node tools/shot.cjs web/proto/preview.html shots/mobile-dark.png --size 390x844 --dpr 2 --full
+//   node tools/shot.cjs web/proto/preview.html shots/desktop.png
+//   node tools/shot.cjs "web/proto/preview.html?stack=linux,discord,gateway" shots/picked.png
+//   node tools/shot.cjs web/proto/preview.html shots/mobile.png --size 390x844 --dpr 2 --full
 //   node tools/shot.cjs web/proto/preview.html shots/evidence.png --open --scroll "#details-body"
 //   node tools/shot.cjs web/proto/preview.html shots/tab-2.png --open \
 //        --click '.ltabs[role="tablist"] .ltab:nth-child(2)' --scroll '.ltabs[role="tablist"]'
@@ -14,7 +14,6 @@
 // Options
 //   --size WxH          viewport in CSS px (default 1440x900)
 //   --dpr N             device pixel ratio (default 1; the README heroes use 2)
-//   --theme dark|light  the page's stored theme + prefers-color-scheme (default dark)
 //   --full              capture the full page (default: the viewport)
 //   --open              open the evidence (clicks .details-toggle when it is collapsed)
 //   --click SEL         click SEL after load — repeatable, applied in order; an in-page
@@ -68,13 +67,12 @@ const CHROME = process.env.CHROME_PATH ||
 
 // ── args ────────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const o = { size: "1440x900", dpr: 1, theme: "dark", full: false, open: false,
+  const o = { size: "1440x900", dpr: 1, full: false, open: false,
               clicks: [], scroll: null, hover: null, wait: 300, motion: false, allowErrors: false, transparent: false, pos: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], next = () => argv[++i];
     if (a === "--size") o.size = next();
     else if (a === "--dpr") o.dpr = Number(next());
-    else if (a === "--theme") o.theme = next();
     else if (a === "--full") o.full = true;
     else if (a === "--open") o.open = true;
     else if (a === "--click") o.clicks.push(next());
@@ -91,7 +89,6 @@ function parseArgs(argv) {
   if (o.pos.length !== 2) { usage(); process.exit(2); }
   const m = /^(\d+)x(\d+)$/.exec(o.size);
   if (!m) { console.error(`--size wants WxH, got ${o.size}`); process.exit(2); }
-  if (!["dark", "light"].includes(o.theme)) { console.error("--theme is dark or light"); process.exit(2); }
   return { ...o, target: o.pos[0], out: o.pos[1], width: Number(m[1]), height: Number(m[2]) };
 }
 function usage() {
@@ -145,11 +142,8 @@ function serve(roots) {
     page.on("pageerror", (e) => errors.push(String(e)));
     page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
     await page.setViewport({ width: opt.width, height: opt.height, deviceScaleFactor: opt.dpr });
-    const features = [{ name: "prefers-color-scheme", value: opt.theme }];
-    if (!opt.motion) features.push({ name: "prefers-reduced-motion", value: "reduce" });
-    await page.emulateMediaFeatures(features);
-    // The page reads its stored theme before the system preference — set both.
-    await page.evaluateOnNewDocument((t) => { try { localStorage.setItem("oc-theme", t); } catch {} }, opt.theme);
+    // The page has one dark theme (since the Comet redesign); nothing to choose.
+    if (!opt.motion) await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
 
     await page.goto(url, { waitUntil: "networkidle0", timeout: 60000 });
     await page.evaluate(() => document.fonts && document.fonts.ready);
@@ -181,7 +175,7 @@ function serve(roots) {
     const docH = await page.evaluate(() => document.documentElement.scrollHeight);
     const kb = (fs.statSync(opt.out).size / 1024).toFixed(0);
     console.log(`wrote ${opt.out} — ${opt.width}x${opt.full ? docH : opt.height} css px @${opt.dpr}x, ` +
-                `${opt.theme}${opt.open ? ", evidence open" : ""}, ${kb} KB; document ${docH} px tall`);
+                `${opt.open ? "evidence open, " : ""}${kb} KB; document ${docH} px tall`);
   } finally {
     await browser.close();
     if (server) server.close();

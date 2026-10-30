@@ -8,46 +8,63 @@
 
   It uses the page's own fonts and mark (served from web/ by the screenshot tool), so the
   card follows the design system instead of drifting from it. Re-run after a brand change.
+  Since 2026-10-30 that is the Plum Comet Labs "Comet" look: deep space, a still comet,
+  Unbounded + Space Grotesk, the studio gradient.
 -->
 <style>
-@font-face{font-family:"Inter";font-style:normal;font-weight:400 800;src:url(fonts/Inter-var.woff2) format("woff2")}
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:200 900;src:url(fonts/Unbounded-var.woff2) format("woff2")}
 @font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;src:url(fonts/SpaceGrotesk-var.woff2) format("woff2")}
 :root{
-  --bg:#070a0f; --card:#10151d; --text:#e7ebf1; --muted:#9aa5b6; --faint:#8a94a4;
-  --accent:#3fe0d5; --accent2:#8f9ff5; --good:#5ad893; --warn:#f0c052; --bad:#f6788c;
+  --bg:#07060d; --text:#f4f1fb; --muted:#a8a0bd; --faint:#958dab;
+  --pink:#ff7eb3; --plum:#c06bff; --good:#5ad893; --warn:#f0c052; --bad:#f6788c;
+  --grad:linear-gradient(100deg,#ffd29a 0%,#ff7eb3 30%,#c06bff 60%,#7aa7ff 80%,#ffd29a 100%);
 }
 *{margin:0; box-sizing:border-box}
 html,body{width:1200px; height:630px; overflow:hidden}
 body{
   position:relative; background:var(--bg); color:var(--text);
-  font-family:Inter,system-ui,sans-serif; font-optical-sizing:auto; -webkit-font-smoothing:antialiased;
+  font-family:"Space Grotesk",system-ui,sans-serif; -webkit-font-smoothing:antialiased;
 }
 body::after{content:""; position:absolute; inset:0; pointer-events:none;
-  background:radial-gradient(48% 60% at 12% -8%, color-mix(in srgb,var(--warn) 22%,transparent), transparent 72%),
-             radial-gradient(40% 48% at 96% 4%, color-mix(in srgb,var(--accent2) 16%,transparent), transparent 72%),
-             radial-gradient(56% 40% at 60% 120%, color-mix(in srgb,var(--accent) 12%,transparent), transparent 72%)}
+  background:radial-gradient(52% 70% at 92% -6%, rgba(192,107,255,.30), transparent 70%),
+             radial-gradient(44% 56% at 4% -10%, rgba(240,192,82,.13), transparent 72%),
+             radial-gradient(50% 50% at 0% 110%, rgba(255,126,179,.10), transparent 72%)}
 body::before{content:""; position:absolute; inset:0; pointer-events:none;
-  background-image:radial-gradient(color-mix(in srgb,var(--text) 9%,transparent) 1px,transparent 1.4px); background-size:26px 26px;
-  -webkit-mask-image:radial-gradient(70% 70% at 50% 0%,#000 10%,transparent 100%); mask-image:radial-gradient(70% 70% at 50% 0%,#000 10%,transparent 100%)}
-.card{position:relative; z-index:1; height:100%; padding:64px 80px 56px; display:flex; flex-direction:column}
+  background:radial-gradient(1.4px 1.4px at 6% 22%, rgba(255,255,255,.8), transparent 70%),
+             radial-gradient(1px 1px at 17% 9%, rgba(255,255,255,.55), transparent 70%),
+             radial-gradient(1.2px 1.2px at 31% 36%, rgba(255,255,255,.6), transparent 70%),
+             radial-gradient(1px 1px at 44% 12%, rgba(255,255,255,.5), transparent 70%),
+             radial-gradient(1.6px 1.6px at 56% 28%, rgba(255,246,234,.85), transparent 70%),
+             radial-gradient(1px 1px at 63% 7%, rgba(255,255,255,.55), transparent 70%),
+             radial-gradient(1.2px 1.2px at 71% 46%, rgba(255,255,255,.6), transparent 70%),
+             radial-gradient(1px 1px at 82% 58%, rgba(255,255,255,.5), transparent 70%),
+             radial-gradient(1.4px 1.4px at 94% 40%, rgba(255,255,255,.7), transparent 70%),
+             radial-gradient(1px 1px at 88% 82%, rgba(255,255,255,.45), transparent 70%),
+             radial-gradient(1px 1px at 12% 70%, rgba(255,255,255,.45), transparent 70%),
+             radial-gradient(1.2px 1.2px at 38% 88%, rgba(255,255,255,.5), transparent 70%)}
+/* the studio's comet, still: a gradient tail and a white-hot head */
+.comet{position:absolute; z-index:1; top:96px; right:92px; width:300px; height:14px; transform:rotate(-32deg); transform-origin:100% 50%}
+.comet::before{content:""; position:absolute; left:0; right:6px; top:6px; height:2px; border-radius:2px; background:linear-gradient(90deg,transparent,rgba(192,107,255,.45) 45%,#ff7eb3 85%,#ffd29a); box-shadow:0 0 12px rgba(255,126,179,.7)}
+.comet::after{content:""; position:absolute; right:0; top:1px; width:12px; height:12px; border-radius:50%; background:#fff6ea; box-shadow:0 0 16px 6px rgba(255,210,154,.8),0 0 46px 16px rgba(255,126,179,.45)}
+.card{position:relative; z-index:2; height:100%; padding:64px 80px 56px; display:flex; flex-direction:column}
 .brand{display:flex; align-items:center; gap:18px}
-.brand img{width:56px; height:56px; display:block; filter:drop-shadow(0 10px 18px rgba(192,107,255,.4))}
-.wm{font-family:"Space Grotesk",sans-serif; font-weight:700; font-size:34px; letter-spacing:-.02em}
-.wm .dot{color:var(--accent)}
-.q{margin-top:auto; font-family:"Space Grotesk",sans-serif; font-weight:700; font-size:98px; line-height:.98; letter-spacing:-.045em; text-wrap:balance; max-width:13.5ch}
-.q .oc{background:linear-gradient(94deg,var(--accent),color-mix(in srgb,#fff 38%,var(--accent))); -webkit-background-clip:text; background-clip:text; color:transparent; padding-bottom:.06em}
-.sub{margin-top:26px; font-size:26px; line-height:1.45; color:var(--muted); max-width:30ch}
+.brand img{width:56px; height:56px; display:block; filter:drop-shadow(0 0 16px rgba(255,126,179,.4))}
+.wm{font-family:"Unbounded",sans-serif; font-weight:600; font-size:30px; letter-spacing:.005em}
+.q{margin-top:auto; font-family:"Unbounded",sans-serif; font-weight:800; font-size:76px; line-height:1.02; letter-spacing:-.04em; text-wrap:balance; max-width:15ch}
+.q .oc{background:var(--grad); background-size:150% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; padding-bottom:.06em}
+.sub{margin-top:24px; font-size:26px; line-height:1.45; color:var(--muted); max-width:32ch}
 .foot{margin-top:auto; display:flex; align-items:center; gap:28px; font-size:19px; color:var(--faint)}
 .words{display:flex; align-items:center; gap:14px}
 .w{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:19px}
 .w svg{width:22px; height:22px; flex:none}
 .w.good{color:var(--good)} .w.warn{color:var(--warn)} .w.bad{color:var(--bad)}
-.foot .url{margin-left:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); font-weight:600; font-size:22px}
+.foot .url{margin-left:auto; font-family:"Unbounded",sans-serif; color:var(--pink); font-weight:600; font-size:22px}
 </style>
+<span class="comet" aria-hidden="true"></span>
 <div class="card">
   <div class="brand">
     <img src="/logo.svg" alt="">
-    <span class="wm">ClawStat<span class="dot">.</span>us</span>
+    <span class="wm">clawstat.us</span>
   </div>
   <h1 class="q">Should you update <span class="oc">OpenClaw</span>?</h1>
   <p class="sub">A live verdict for the latest release: post-release bugs scouted and scored, two independent models argue it out.</p>

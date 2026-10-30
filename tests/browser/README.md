@@ -22,7 +22,7 @@ node tests/browser/contrast.test.js
 ```
 
 - **`contrast.test.js`** — the accessibility floor as a test. It renders the real template with
-  the shared payload in both themes, opens every panel, then samples every visible text run:
+  the shared payload (one dark theme), opens every panel, then samples every visible text run:
   the text colour (with effective opacity folded in) against the background found by
   alpha-compositing the ancestors' background colours, with the few gradient surfaces
   flattened to their base colour first. Every pair must reach WCAG AA — 4.5:1, or 3:1 for
@@ -82,7 +82,7 @@ neither runs at render time, and the deploy box never installs anything for them
   http from its own directory with `web/` as the fallback root, so `fonts/…` and
   `/logo.svg`-style paths resolve as in production (`file://` blocks the font) and the page's
   runtime `latest.json` fetch finds the copy `preview.py` wrote. Flags: `--size WxH`,
-  `--dpr N`, `--theme dark|light`, `--full`, `--open` (the evidence toggle), `--click SEL`
+  `--dpr N`, `--full`, `--open` (the evidence toggle), `--click SEL`
   (repeatable, in-page click), `--scroll SEL`, `--wait MS`, `--motion` (animations are off by
   default through `prefers-reduced-motion`, so every `.reveal` is visible and shots are
   deterministic), `--allow-errors`. It exits 1 on an uncaught page error — the "no page
@@ -95,12 +95,10 @@ is scratch):
 export PATH="$HOME/.local/bin:$PATH"          # if node is only on the login-shell PATH
 .venv/bin/python tools/preview.py
 P=web/proto/preview.html; O=/tmp/shots; S="node tools/shot.cjs"
-for t in dark light; do
-  $S $P $O/desktop-$t.png --theme $t
-  $S $P $O/desktop-$t-evidence.png --theme $t --open --scroll "#details-body"
-  $S "$P?stack=linux,discord,gateway" $O/desktop-$t-picked.png --theme $t
-  $S $P $O/mobile-$t.png --theme $t --size 390x844 --dpr 2 --full
-done
+$S $P $O/desktop.png
+$S $P $O/desktop-evidence.png --open --scroll "#details-body"
+$S "$P?stack=linux,discord,gateway" $O/desktop-picked.png
+$S $P $O/mobile.png --size 390x844 --dpr 2 --full
 for i in 1 2 3 4; do
   $S $P $O/tab-$i.png --open --click ".ltabs[role=tablist] .ltab:nth-child($i)" --scroll ".ltabs[role=tablist]"
 done
@@ -136,8 +134,7 @@ $S web/logo.svg /tmp/icon-48.png --size 48x48 --transparent        # + 16/32 →
 printf '<!doctype html><style>html,body{margin:0;background:#0c1017}img{width:180px;height:180px;display:block}</style><img src="/logo.svg">' > web/proto/touch.html
 $S web/proto/touch.html web/apple-touch-icon.png --size 180x180     # full-bleed: iOS masks its own corners
 $S tools/og-card.html web/og.png --size 1200x630                    # the share card
-$S web/proto/preview.html docs/hero-dark.png  --size 1200x1000 --dpr 2 --theme dark   # README heroes
-$S web/proto/preview.html docs/hero-light.png --size 1200x1000 --dpr 2 --theme light  # (quantize to 256 colours after)
+$S web/proto/preview.html docs/hero-dark.png --size 1200x1000 --dpr 2   # the README hero (quantize to 256 colours after)
 ```
 
 The badge (`render._badge_svg`) carries the same mark geometry inline — keep it in step with

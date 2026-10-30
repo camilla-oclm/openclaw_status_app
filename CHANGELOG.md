@@ -20,7 +20,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   the one source; the favicon set, the full-bleed touch icon and the share card
   (`web/og.png`, 256 colours via libimagequant so the small logo keeps its colours) are
   re-rendered from it. The header shows the tile itself instead of a white claw in a teal
-  circle. The page's teal accent and the badge's plain claw are unchanged.
+  circle. The badge keeps its plain claw.
 - **The page wears the Plum Comet Labs look ("Comet"), like plumcometlabs.com.** Deep space
   with a still starfield and the studio's comet over the top of the page, in CSS only (the
   live, pointer-following comet stays on plumcometlabs.com, so this page stays light); the
