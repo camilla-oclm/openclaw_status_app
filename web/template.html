@@ -874,6 +874,13 @@ details.triage[open] summary .caret{transform:rotate(90deg)}
   .hero .setup{padding:1.15rem 1rem 1rem}
   .reco{padding:1.15rem 1.15rem 1.1rem}
 }
+@media(max-width:380px){
+  /* the narrowest phones: the wordmark and the studio pill shrink so the header fits */
+  .topbar{gap:.5rem}
+  .brand{gap:.45rem}
+  .brand .wm{font-size:13px}
+  .studio-link{padding:0 .7rem; font-size:var(--fs-xs)}
+}
 @media(max-width:600px){
   /* Tab strips + filter chip rows become one horizontally-scrollable row instead of
      wrapping into ragged stacks (orphaned second-row tabs, 5-deep chip walls). */
