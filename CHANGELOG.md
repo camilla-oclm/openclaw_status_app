@@ -7,6 +7,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-11-10
+
 ### Changed
 - **The green run summary reaches the alert channel only when the page's answer moves:** the
   first published run of a version, or a verdict that differs from that version's last
