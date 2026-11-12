@@ -7,6 +7,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Changed
+- **`deploy/provision.sh` can set the site up on a box that serves other sites.** The site's
+  Caddy settings now go in their own file, `/etc/caddy/sites/<domain>.caddy`, and the main
+  `/etc/caddy/Caddyfile` becomes one line that imports that folder. The script replaces the
+  main file only when it is Caddy's sample or this site's own older one, and stops otherwise.
+  It now checks the settings with `caddy validate` before reloading, on their own and with
+  the other sites. Nothing changes for an existing box until the script is rerun.
+
 ## [1.3.10] - 2026-11-10
 
 ### Changed
