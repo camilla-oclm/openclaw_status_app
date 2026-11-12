@@ -88,7 +88,30 @@ systemctl daemon-reload
 systemctl enable --now openclaw-status.timer
 
 # --- Caddy site ------------------------------------------------------------
-sed "s/__DOMAIN__/$DOMAIN/g" "$APP_DIR/deploy/Caddyfile" > /etc/caddy/Caddyfile
+# The box may serve other sites too. Each site keeps its own file in /etc/caddy/sites/, and
+# /etc/caddy/Caddyfile only imports that folder, so this never touches another site's settings.
+SITES=/etc/caddy/sites
+MAIN=/etc/caddy/Caddyfile
+IMPORT="import $SITES/*.caddy"
+# The main Caddyfile becomes the one-line importer. Replace only Caddy's sample or this site's own
+# Caddyfile from before the sites/ folder: anything else may hold another site, so stop before
+# changing anything.
+if [ -f "$MAIN" ] && ! grep -qxF "$IMPORT" "$MAIN" && ! grep -qxF "$DOMAIN {" "$MAIN" \
+    && ! grep -qF 'The Caddyfile is an easy way' "$MAIN"; then
+  echo "!! $MAIN holds settings this script didn't write. Move them to $SITES/<site>.caddy, then rerun." >&2
+  exit 1
+fi
+install -d -m 755 "$SITES"
+# Check the site on its own before it replaces the one in use (the .new name is outside the
+# import pattern), so a typo can't leave Caddy unable to start on its next restart.
+sed "s/__DOMAIN__/$DOMAIN/g" "$APP_DIR/deploy/Caddyfile" > "$SITES/$DOMAIN.new"
+caddy validate --config "$SITES/$DOMAIN.new" --adapter caddyfile || { rm -f "$SITES/$DOMAIN.new"; exit 1; }
+install -m 644 "$SITES/$DOMAIN.new" "$SITES/$DOMAIN.caddy"
+rm -f "$SITES/$DOMAIN.new"
+grep -qxF "$IMPORT" "$MAIN" 2>/dev/null \
+  || printf '# Each site on this box has its own file in %s/.\n%s\n' "$SITES" "$IMPORT" > "$MAIN"
+# Check all the sites together too (two sites can't share a name or a snippet name).
+caddy validate --config "$MAIN" --adapter caddyfile
 systemctl reload caddy || systemctl restart caddy
 
 cat <<EOF

@@ -1,6 +1,7 @@
 # Caddy serves the generated static page and gets/renews HTTPS automatically
 # via Let's Encrypt. provision.sh substitutes __DOMAIN__ for the real domain
-# and installs this at /etc/caddy/Caddyfile.
+# and installs this at /etc/caddy/sites/<domain>.caddy; the main
+# /etc/caddy/Caddyfile only imports that folder, so the box can serve other sites.
 #
 # Prereq: the domain's A-record must already point at this box (ports 80+443
 # open) before Caddy can issue the certificate.

@@ -74,7 +74,8 @@ python3 -m pytest        # tests, no network needed
 - **Alerts (optional):** set `ALERT_WEBHOOK_URL` in `.env` to send problems and verdict changes
   to Slack or Discord.
 - **Hosting:** [`deploy/`](deploy/) sets up an Ubuntu box with Caddy (HTTPS) and an hourly
-  systemd timer: `sudo deploy/provision.sh <your-domain>`. Run
+  systemd timer: `sudo deploy/provision.sh <your-domain>`. The site gets its own file in
+  `/etc/caddy/sites/`, so the box can serve other sites too. Run
   [`deploy/watchdog.py`](deploy/watchdog.py) from a second machine to get an alert if the site
   goes down.
 - **Front end:** the page's client is in `web-src/` (Svelte). After editing it, run `npm ci` and
